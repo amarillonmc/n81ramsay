@@ -1,0 +1,45 @@
+*.cdb文件
+
+.cdb文件是卡片数据库文件，其本质为Sqlite数据库。
+该数据库中有两个表，需要注意的表中字段如下：
+datas表：
+id：卡号
+alias：同名卡
+setcode：以十六进制表示的系列代码，将其转换为0x开头的十六进制数后，可以和/res/cardinfo_chinese.txt中的##setname部分，以及数据文件夹中的strings.conf中的!setname之后的内容相互配对吻合
+如：
+（strings.conf内容）
+!setname 0x344c 虚拟主播
+代表setcode字段的值为0x344c，也即13388的卡属于「虚拟主播」系列。
+type：卡片类别，将其转换为0x开头的十六进制数后，可以和/res/cardinfo_chinese.txt中的##type部分相互配对吻合
+atk：卡片ATK
+def：卡片DEF
+level：卡片星数/连接数，将其转换为0x开头的十六进制数后，可以和/res/cardinfo_chinese.txt中的##level部分相互配对吻合
+race：卡片种族，将其转换为0x开头的十六进制数后，可以和/res/cardinfo_chinese.txt中的##race部分相互配对吻合
+attribute：卡片属性，将其转换为0x开头的十六进制数后，可以和/res/cardinfo_chinese.txt中的##attribute部分相互配对吻合
+texts表：
+id：卡号
+name：卡名
+desc：卡片文本
+
+strings.conf文件
+
+strings.conf文件为字符串文件，本质是纯文本文件。
+用于指示cdb中的setcode十六进制数与实际系列名中的关联。
+该文件中以#起头的字符串为注释，没有实际作用
+以!setname开头的字符串会以!setname [0x开头的十六进制数] [系列名称]的形式标记出系列名称
+以!counter开头的字符串会以!setname [0x开头的十六进制数] [系列名称]的形式标记出指示物名称
+
+lflist.conf文件
+
+lflist.conf文件为禁卡表文件，本质是纯文本文件。
+用于指定卡片在特定环境下可以使用的数量。
+该文件中以#起头的字符串为注释，没有实际作用
+以!起头的字符串表示环境，同样id的卡片在不同的环境中会有不同的投入数量。
+其余字符串的格式如下：
+[id] [数量] --[注释]
+id对应cdb文件中datas表/texts表中的对应值
+数量为0，1或者2，表示在该环境中允许使用该卡副本的数量，0：禁止，1：限制，2：准限制
+注释可以是任何字符串，仅作注释用。
+
+/pics/目录下的图片文件
+以c+卡片id形式的jpg或者png格式文件是对应id卡片的卡图。
