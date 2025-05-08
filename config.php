@@ -1,7 +1,7 @@
 <?php
 /**
  * RAMSAY 配置文件
- * 
+ *
  * 该文件包含系统的所有配置项
  */
 
@@ -11,15 +11,19 @@ define('DEBUG_MODE', true);
 // 数据库配置
 define('DB_PATH', __DIR__ . '/data/ramsay.db');
 
+// 根据DEBUG_MODE判断环境类型
+// DEBUG_MODE为false时为生产环境，否则为测试环境
+$isProduction = !DEBUG_MODE;
+
 // SQLite可执行程序位置
-if (getenv('ENVIRONMENT') === 'production') {
+if ($isProduction) {
     define('SQLITE_PATH', 'C:\\soft\\sqlite');
 } else {
     define('SQLITE_PATH', 'D:\\soft\\sqlite');
 }
 
 // 卡片数据位置
-if (getenv('ENVIRONMENT') === 'production') {
+if ($isProduction) {
     define('CARD_DATA_PATH', __DIR__ . '/expansions');
 } else {
     define('CARD_DATA_PATH', __DIR__ . '/example');
