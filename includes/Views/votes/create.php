@@ -7,7 +7,7 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-4">
-                <img src="<?php echo BASE_URL . $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
             </div>
             <div class="col-md-8">
                 <table class="table">
@@ -32,10 +32,10 @@
                         <td><?php echo nl2br(Utils::escapeHtml($card['desc'])); ?></td>
                     </tr>
                 </table>
-                
-                <form id="create-vote-form" action="<?php echo BASE_URL; ?>vote/create" method="post">
+
+                <form id="create-vote-form" action="<?php echo BASE_URL; ?>?controller=vote&action=create" method="post">
                     <input type="hidden" name="card_id" value="<?php echo $card['id']; ?>">
-                    
+
                     <div class="form-group">
                         <label for="environment_id">选择环境</label>
                         <select id="environment_id" name="environment_id" required>
@@ -45,7 +45,7 @@
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>选择禁限状态</label>
                         <div>
@@ -69,19 +69,19 @@
                             </label>
                         </div>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="reason">理由（可选）</label>
                         <textarea id="reason" name="reason" rows="3"></textarea>
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="initiator_id">您的ID</label>
                         <input type="text" id="initiator_id" name="initiator_id" required>
                     </div>
-                    
+
                     <button type="submit" class="btn">发起投票</button>
-                    <a href="<?php echo BASE_URL; ?>card/detail?id=<?php echo $card['id']; ?>" class="btn btn-secondary">返回卡片详情</a>
+                    <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['id']; ?>" class="btn btn-secondary">返回卡片详情</a>
                 </form>
             </div>
         </div>

@@ -1,0 +1,24 @@
+# 2023-11-15 修复记录（第五次）
+
+## 问题：投票功能链接404错误
+- 点击发起投票按钮时，出现404错误
+- 错误路径为 `http://45.117.101.90:7070/vote/create`
+- 该链接的确不存在于服务器上
+
+## 解决方案
+- 修改了投票控制器中的重定向链接，使用查询参数格式
+- 修改了投票创建表单的提交地址，使用查询参数格式
+- 修改了投票详情页面中的表单提交地址和返回链接
+- 修改了投票列表页面中的链接和分页链接
+- 修复了投票相关页面中的图片路径显示
+
+## 修改文件列表
+1. includes/Controllers/VoteController.php - 修改重定向链接
+2. includes/Views/votes/create.php - 修改表单提交地址、返回链接和图片路径
+3. includes/Views/votes/vote.php - 修改图片路径、表单提交地址和返回链接
+4. includes/Views/votes/index.php - 修改链接、图片路径和分页链接
+
+## 注意事项
+- 所有链接现在都使用查询参数格式，如 `?controller=vote&action=create&card_id=33720001`
+- 投票链接现在使用 `?controller=vote&id=投票链接ID` 格式
+- 图片路径现在直接使用完整路径，不再拼接 BASE_URL

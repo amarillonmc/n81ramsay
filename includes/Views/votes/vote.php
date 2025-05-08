@@ -14,7 +14,7 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-4">
-                <img src="<?php echo BASE_URL . $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
             </div>
             <div class="col-md-8">
                 <table class="table">
@@ -39,14 +39,14 @@
                         <td><?php echo nl2br(Utils::escapeHtml($card['desc'])); ?></td>
                     </tr>
                 </table>
-                
+
                 <?php if (!empty($vote['reason'])): ?>
                     <div class="vote-info">
                         <h4>投票理由</h4>
                         <p><?php echo nl2br(Utils::escapeHtml($vote['reason'])); ?></p>
                     </div>
                 <?php endif; ?>
-                
+
                 <div class="vote-stats">
                     <div class="vote-stat-item">
                         <div class="vote-stat-label">禁止</div>
@@ -65,9 +65,9 @@
                         <div class="vote-stat-count unlimited"><?php echo $stats[3]; ?></div>
                     </div>
                 </div>
-                
+
                 <?php if (!$vote['is_closed']): ?>
-                    <form id="vote-form" action="<?php echo BASE_URL; ?>vote/<?php echo $vote['vote_link']; ?>" method="post">
+                    <form id="vote-form" action="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>" method="post">
                         <div class="form-group">
                             <label>您的投票</label>
                             <div>
@@ -91,24 +91,24 @@
                                 </label>
                             </div>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="user_id">您的ID</label>
                             <input type="text" id="user_id" name="user_id" required>
                         </div>
-                        
+
                         <div class="form-group">
                             <label for="comment">评论（可选）</label>
                             <textarea id="comment" name="comment" rows="3"></textarea>
                         </div>
-                        
+
                         <button type="submit" class="btn">提交投票</button>
                     </form>
                 <?php endif; ?>
-                
+
                 <div class="vote-records">
                     <h4>投票记录 (<?php echo count($records); ?>)</h4>
-                    
+
                     <?php if (empty($records)): ?>
                         <div class="alert alert-info">暂无投票记录</div>
                     <?php else: ?>
@@ -134,6 +134,6 @@
         </div>
     </div>
     <div class="card-footer">
-        <a href="<?php echo BASE_URL; ?>vote" class="btn btn-secondary">返回投票列表</a>
+        <a href="<?php echo BASE_URL; ?>?controller=vote" class="btn btn-secondary">返回投票列表</a>
     </div>
 </div>
