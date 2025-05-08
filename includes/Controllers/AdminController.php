@@ -79,6 +79,7 @@ class AdminController {
             if (!empty($errors)) {
                 include __DIR__ . '/../Views/layout.php';
                 include __DIR__ . '/../Views/admin/login.php';
+                include __DIR__ . '/../Views/footer.php';
                 return;
             }
         }
@@ -86,6 +87,7 @@ class AdminController {
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/admin/login.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 
     /**
@@ -139,6 +141,7 @@ class AdminController {
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/admin/votes.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 
     /**

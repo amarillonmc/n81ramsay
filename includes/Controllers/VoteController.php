@@ -62,6 +62,7 @@ class VoteController {
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/votes/index.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 
     /**
@@ -116,6 +117,7 @@ class VoteController {
 
                 include __DIR__ . '/../Views/layout.php';
                 include __DIR__ . '/../Views/votes/create.php';
+                include __DIR__ . '/../Views/footer.php';
                 return;
             }
         }
@@ -138,6 +140,7 @@ class VoteController {
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/votes/create.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 
     /**
@@ -200,6 +203,7 @@ class VoteController {
             if (!empty($errors)) {
                 include __DIR__ . '/../Views/layout.php';
                 include __DIR__ . '/../Views/votes/vote.php';
+                include __DIR__ . '/../Views/footer.php';
                 return;
             }
         }
@@ -207,5 +211,6 @@ class VoteController {
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/votes/vote.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 }
