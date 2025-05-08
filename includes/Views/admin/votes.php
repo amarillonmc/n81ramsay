@@ -23,7 +23,7 @@
                     <tr>
                         <td><?php echo $vote['card_id']; ?></td>
                         <td>
-                            <a href="<?php echo BASE_URL; ?>card/detail?id=<?php echo $vote['card_id']; ?>">
+                            <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $vote['card_id']; ?>">
                                 <?php echo Utils::escapeHtml($vote['card']['name']); ?>
                             </a>
                         </td>
@@ -37,8 +37,8 @@
                         <td><?php echo Utils::escapeHtml($vote['initiator_id']); ?></td>
                         <td><?php echo Utils::formatDatetime($vote['created_at']); ?></td>
                         <td>
-                            <a href="<?php echo BASE_URL; ?>vote/<?php echo $vote['vote_link']; ?>" class="btn btn-sm">查看</a>
-                            <form action="<?php echo BASE_URL; ?>admin/closeVote" method="post" style="display: inline;">
+                            <a href="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>" class="btn btn-sm">查看</a>
+                            <form action="<?php echo BASE_URL; ?>?controller=admin&action=closeVote" method="post" style="display: inline;">
                                 <input type="hidden" name="vote_id" value="<?php echo $vote['id']; ?>">
                                 <button type="submit" class="btn btn-sm btn-danger close-vote-btn">关闭</button>
                             </form>
@@ -48,12 +48,12 @@
             </tbody>
         </table>
     </div>
-    
+
     <?php if ($totalPages > 1): ?>
         <ul class="pagination">
             <?php for ($i = 1; $i <= $totalPages; $i++): ?>
                 <li class="<?php echo $i == $page ? 'active' : ''; ?>">
-                    <a href="<?php echo BASE_URL; ?>admin/votes?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                    <a href="<?php echo BASE_URL; ?>?controller=admin&action=votes&page=<?php echo $i; ?>"><?php echo $i; ?></a>
                 </li>
             <?php endfor; ?>
         </ul>
