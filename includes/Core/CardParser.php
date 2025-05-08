@@ -521,33 +521,62 @@ class CardParser {
      * @return string 图片路径
      */
     public function getCardImagePath($cardId) {
-        // 首先尝试使用c+卡片ID格式
-        $picPath = 'pics/c' . $cardId . '.jpg';
+        $cardDataPath = CARD_DATA_PATH;
+        $cardDataDirName = basename($cardDataPath); // 获取卡片数据目录的名称（如 'example'）
 
-        if (file_exists(__DIR__ . '/../../' . $picPath)) {
-            return $picPath;
+        // 首先尝试在卡片数据目录下查找
+        // 尝试使用c+卡片ID格式
+        $physicalPath = $cardDataPath . '/pics/c' . $cardId . '.jpg';
+
+        if (file_exists($physicalPath)) {
+            return BASE_URL . $cardDataDirName . '/pics/c' . $cardId . '.jpg';
         }
 
-        $picPath = 'pics/c' . $cardId . '.png';
+        $physicalPath = $cardDataPath . '/pics/c' . $cardId . '.png';
 
-        if (file_exists(__DIR__ . '/../../' . $picPath)) {
-            return $picPath;
+        if (file_exists($physicalPath)) {
+            return BASE_URL . $cardDataDirName . '/pics/c' . $cardId . '.png';
         }
 
         // 然后尝试使用卡片ID格式
-        $picPath = 'pics/' . $cardId . '.jpg';
+        $physicalPath = $cardDataPath . '/pics/' . $cardId . '.jpg';
 
-        if (file_exists(__DIR__ . '/../../' . $picPath)) {
-            return $picPath;
+        if (file_exists($physicalPath)) {
+            return BASE_URL . $cardDataDirName . '/pics/' . $cardId . '.jpg';
         }
 
-        $picPath = 'pics/' . $cardId . '.png';
+        $physicalPath = $cardDataPath . '/pics/' . $cardId . '.png';
 
-        if (file_exists(__DIR__ . '/../../' . $picPath)) {
-            return $picPath;
+        if (file_exists($physicalPath)) {
+            return BASE_URL . $cardDataDirName . '/pics/' . $cardId . '.png';
         }
 
-        return 'assets/images/card_back.jpg';
+        // 如果在卡片数据目录下找不到，尝试在根目录下查找
+        $rootPhysicalPath = __DIR__ . '/../../pics/c' . $cardId . '.jpg';
+
+        if (file_exists($rootPhysicalPath)) {
+            return BASE_URL . 'pics/c' . $cardId . '.jpg';
+        }
+
+        $rootPhysicalPath = __DIR__ . '/../../pics/c' . $cardId . '.png';
+
+        if (file_exists($rootPhysicalPath)) {
+            return BASE_URL . 'pics/c' . $cardId . '.png';
+        }
+
+        $rootPhysicalPath = __DIR__ . '/../../pics/' . $cardId . '.jpg';
+
+        if (file_exists($rootPhysicalPath)) {
+            return BASE_URL . 'pics/' . $cardId . '.jpg';
+        }
+
+        $rootPhysicalPath = __DIR__ . '/../../pics/' . $cardId . '.png';
+
+        if (file_exists($rootPhysicalPath)) {
+            return BASE_URL . 'pics/' . $cardId . '.png';
+        }
+
+        return BASE_URL . 'assets/images/card_back.jpg';
     }
 
     /**

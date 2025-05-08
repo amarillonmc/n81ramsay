@@ -41,7 +41,7 @@
         <?php foreach ($cards as $card): ?>
             <div class="card-item">
                 <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['id']; ?>">
-                    <img src="<?php echo BASE_URL . $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>">
+                    <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>">
                     <div class="card-item-body">
                         <div class="card-item-title"><?php echo Utils::escapeHtml($card['name']); ?></div>
                         <div>ID: <?php echo $card['id']; ?></div>

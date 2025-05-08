@@ -4,7 +4,7 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-4">
-                <img src="<?php echo BASE_URL . $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
             </div>
             <div class="col-md-8">
                 <table class="table">
