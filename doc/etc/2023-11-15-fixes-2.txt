@@ -1,0 +1,22 @@
+# 2023-11-15 修复记录（第二次）
+
+## 问题：链接404错误
+- 远程服务器上的URL路径映射与我们的应用程序不兼容
+- 远程服务器期望在物理路径中找到 `/card/detail` 目录或文件，但这个路径实际上不存在
+
+## 解决方案
+- 完全重写路由系统，使用查询参数而不是路径段来路由请求
+- 修改了入口文件中的路由处理逻辑，使用 `$_GET['controller']` 和 `$_GET['action']` 来确定控制器和方法
+- 修改了所有视图文件中的链接，使用查询参数格式（如 `?controller=card&action=detail&id=33720001`）
+
+## 修改文件列表
+1. index.php - 重写路由系统，使用查询参数
+2. includes/Views/cards/index.php - 修改链接格式
+3. includes/Views/cards/search.php - 修改链接格式
+4. includes/Views/cards/detail.php - 修改链接格式
+5. includes/Views/layout.php - 修改导航链接格式
+
+## 注意事项
+- 这种修改使应用程序可以在没有URL重写支持的服务器上运行
+- 所有链接现在都使用查询参数格式，如 `?controller=card&action=detail&id=33720001`
+- 特殊路由处理也已更新，以适应新的URL格式

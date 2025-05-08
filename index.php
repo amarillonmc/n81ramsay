@@ -26,29 +26,10 @@ spl_autoload_register(function ($className) {
     }
 });
 
-// 获取请求的URI
-$requestUri = $_SERVER['REQUEST_URI'];
-
-// 移除查询字符串
-$requestUri = strtok($requestUri, '?');
-
-// 移除基础URL
-// 检查BASE_URL是否为根目录
-if (BASE_URL === '/') {
-    // 如果是根目录，不需要额外处理
-    $requestUri = $requestUri;
-} else {
-    // 否则移除基础URL部分
-    $requestUri = substr($requestUri, strlen(BASE_URL) - 1);
-}
-
-// 分割URI
-$segments = explode('/', trim($requestUri, '/'));
-
-// 确定控制器和方法
-$controllerName = !empty($segments[0]) ? $segments[0] : 'card';
-$methodName = isset($segments[1]) ? $segments[1] : 'index';
-$params = array_slice($segments, 2);
+// 使用查询参数来确定控制器和方法
+$controllerName = isset($_GET['controller']) ? $_GET['controller'] : 'card';
+$methodName = isset($_GET['action']) ? $_GET['action'] : 'index';
+$params = [];
 
 // 映射控制器名称到类名
 $controllerMap = [
@@ -59,9 +40,9 @@ $controllerMap = [
 ];
 
 // 特殊路由处理
-if ($controllerName === 'vote' && !empty($methodName) && empty($params)) {
+if ($controllerName === 'vote' && isset($_GET['id'])) {
     // 如果是投票链接，则调用vote方法
-    $params = [$methodName];
+    $params = [$_GET['id']];
     $methodName = 'vote';
 }
 

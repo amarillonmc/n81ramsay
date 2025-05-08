@@ -2,7 +2,9 @@
 
 <div class="card">
     <div class="card-body">
-        <form id="search-form" action="<?php echo BASE_URL; ?>card/search" method="get">
+        <form id="search-form" action="<?php echo BASE_URL; ?>" method="get">
+            <input type="hidden" name="controller" value="card">
+            <input type="hidden" name="action" value="search">
             <div class="form-group">
                 <label for="keyword">搜索卡片</label>
                 <input type="text" id="keyword" name="keyword" value="<?php echo isset($_GET['keyword']) ? Utils::escapeHtml($_GET['keyword']) : ''; ?>" placeholder="输入卡片ID或卡名">
@@ -18,7 +20,7 @@
     <div class="card-grid">
         <?php foreach ($cards as $card): ?>
             <div class="card-item">
-                <a href="<?php echo BASE_URL; ?>card/detail?id=<?php echo $card['id']; ?>">
+                <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['id']; ?>">
                     <img src="<?php echo BASE_URL . $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>">
                     <div class="card-item-body">
                         <div class="card-item-title"><?php echo Utils::escapeHtml($card['name']); ?></div>

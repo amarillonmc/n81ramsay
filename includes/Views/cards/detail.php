@@ -61,7 +61,7 @@
                         <td><?php echo Utils::escapeHtml($card['database_file']); ?></td>
                     </tr>
                 </table>
-                
+
                 <h3>禁限状态</h3>
                 <table class="table">
                     <thead>
@@ -81,9 +81,9 @@
                         <?php endforeach; ?>
                     </tbody>
                 </table>
-                
+
                 <div class="mt-3">
-                    <a href="<?php echo BASE_URL; ?>vote/create?card_id=<?php echo $card['id']; ?>" class="btn">发起投票</a>
+                    <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $card['id']; ?>" class="btn">发起投票</a>
                     <a href="<?php echo BASE_URL; ?>" class="btn btn-secondary">返回列表</a>
                 </div>
             </div>
