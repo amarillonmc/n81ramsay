@@ -1,0 +1,279 @@
+# RAMSAY 项目实装计划与程序结构
+
+## 项目概述
+
+RAMSAY是一个PHP程序，运行在WINDOWS的IIS服务器上，旨在管理no81游戏王DIY服务器的各种运营事务。主要功能包括卡片检索、投票禁卡、投票管理和禁卡表整理等。
+
+## 系统架构
+
+### 目录结构
+
+```
+/
+├── index.php               # 入口文件
+├── config.php              # 主配置文件
+├── assets/                 # 静态资源
+│   ├── css/                # 样式文件
+│   ├── js/                 # JavaScript文件
+│   └── images/             # 图片资源
+├── pics/                   # 卡片图片目录
+├── includes/               # 包含文件目录
+│   ├── Core/               # 核心功能
+│   │   ├── Database.php    # 数据库操作类
+│   │   ├── CardParser.php  # 卡片数据解析类
+│   │   ├── Auth.php        # 认证管理类
+│   │   └── Utils.php       # 工具函数类
+│   ├── Models/             # 数据模型
+│   │   ├── Card.php        # 卡片模型
+│   │   ├── Vote.php        # 投票模型
+│   │   └── User.php        # 用户模型
+│   ├── Controllers/        # 控制器
+│   │   ├── CardController.php    # 卡片检索控制器
+│   │   ├── VoteController.php    # 投票控制器
+│   │   ├── AdminController.php   # 管理员控制器
+│   │   └── BanlistController.php # 禁卡表控制器
+│   └── Views/              # 视图模板
+│       ├── layout.php      # 布局模板
+│       ├── cards/          # 卡片相关视图
+│       ├── votes/          # 投票相关视图
+│       └── admin/          # 管理员相关视图
+├── data/                   # 数据存储目录
+│   └── votes/              # 投票数据存储
+└── example/                # 测试环境卡片数据目录
+    ├── *.cdb               # 卡片数据库文件
+    ├── strings.conf        # 字符串配置文件
+    ├── lflist.conf         # 禁卡表文件
+    └── script/             # 卡片脚本目录
+```
+
+### 数据库结构
+
+系统将使用SQLite数据库存储投票和用户数据，同时读取卡片数据库(.cdb)文件。
+
+#### 投票数据表 (votes)
+
+```sql
+CREATE TABLE votes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id INTEGER NOT NULL,          -- 卡片ID
+    environment_id INTEGER NOT NULL,   -- 环境ID
+    status INTEGER NOT NULL,           -- 禁限状态(0:禁止,1:限制,2:准限制)
+    reason TEXT,                       -- 投票理由
+    initiator_id TEXT NOT NULL,        -- 发起人ID
+    vote_cycle INTEGER NOT NULL,       -- 投票周期
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_closed INTEGER DEFAULT 0,       -- 是否关闭(0:未关闭,1:已关闭)
+    vote_link TEXT UNIQUE NOT NULL     -- 投票链接
+);
+```
+
+#### 投票记录表 (vote_records)
+
+```sql
+CREATE TABLE vote_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    vote_id INTEGER NOT NULL,          -- 投票ID
+    user_id TEXT NOT NULL,             -- 用户ID
+    ip_address TEXT NOT NULL,          -- 用户IP
+    status INTEGER NOT NULL,           -- 投票状态(0:禁止,1:限制,2:准限制,3:无限制)
+    comment TEXT,                      -- 评论
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (vote_id) REFERENCES votes(id),
+    UNIQUE (vote_id, ip_address)       -- 同一IP只能对同一投票投一次票
+);
+```
+
+#### 投票周期表 (vote_cycles)
+
+```sql
+CREATE TABLE vote_cycles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    current_cycle INTEGER NOT NULL DEFAULT 1,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## 核心功能模块
+
+### 1. 配置管理模块
+
+负责读取和管理配置文件，提供全局配置访问。
+
+**主要功能**:
+- 读取config.php中的配置项
+- 提供配置项的获取接口
+- 管理环境配置(测试/生产)
+
+### 2. 数据库操作模块
+
+负责与SQLite数据库交互，提供数据库操作接口。
+
+**主要功能**:
+- 连接SQLite数据库
+- 执行SQL查询
+- 提供事务支持
+- 读取.cdb文件中的卡片数据
+
+### 3. 卡片解析模块
+
+负责解析卡片数据，将原始数据转换为可用的卡片信息。
+
+**主要功能**:
+- 解析.cdb文件中的卡片数据
+- 解析strings.conf文件中的系列信息
+- 解析lflist.conf文件中的禁限信息
+- 将十六进制代码转换为可读信息(如setcode、type、race、attribute等)
+
+### 4. 认证管理模块
+
+负责用户认证和权限管理。
+
+**主要功能**:
+- 管理员登录验证
+- 权限检查
+- 会话管理
+
+### 5. 投票管理模块
+
+负责处理投票相关功能。
+
+**主要功能**:
+- 创建新投票
+- 生成投票链接
+- 记录投票结果
+- 统计投票数据
+- 关闭投票
+
+### 6. 禁卡表管理模块
+
+负责生成和管理禁卡表。
+
+**主要功能**:
+- 根据投票结果生成禁卡表文本
+- 更新lflist.conf文件
+- 管理投票周期
+
+## 功能实现详细设计
+
+### 功能0：服务器卡片检索
+
+**控制器**: includes/Controllers/CardController.php
+**视图**: includes/Views/cards/index.php, includes/Views/cards/search.php, includes/Views/cards/detail.php
+
+**实现流程**:
+1. 读取所有.cdb文件，获取卡片列表
+2. 按照cdb文件分类显示卡片
+3. 提供搜索功能，支持按ID或卡名搜索
+4. 显示卡片详细信息，包括id、name、alias、setcode、type、race、attribute、atk、def、level、desc和卡图
+
+### 功能1：投票禁卡
+
+**控制器**: includes/Controllers/VoteController.php
+**视图**: includes/Views/votes/create.php, includes/Views/votes/vote.php
+
+**实现流程**:
+1. 用户搜索并选择卡片
+2. 用户选择环境和禁限状态，输入理由和用户ID
+3. 系统生成唯一投票链接
+4. 其他用户通过链接访问投票页面
+5. 其他用户可以同意或选择其他禁限状态，并留下ID和意见
+6. 系统记录投票结果，同一IP只能投一次票
+
+### 功能2：投票概览
+
+**控制器**: includes/Controllers/VoteController.php
+**视图**: includes/Views/votes/index.php
+
+**实现流程**:
+1. 显示所有有效投票链接
+2. 每个链接显示投票周期、卡片ID、卡片名称和卡图
+3. 点击链接进入投票页面
+4. 已关闭的投票以灰色显示
+
+### 功能3：管理员登录
+
+**控制器**: includes/Controllers/AdminController.php
+**视图**: includes/Views/admin/login.php
+
+**实现流程**:
+1. 显示用户名和密码输入框
+2. 验证用户名和密码
+3. 登录成功后，根据管理员等级显示相应功能
+4. 在页面右上角显示管理员ID、组别和退出登录链接
+
+### 功能4：投票管理
+
+**控制器**: includes/Controllers/AdminController.php
+**视图**: includes/Views/admin/votes.php
+
+**实现流程**:
+1. 显示所有有效投票
+2. 以表格形式显示卡片ID、卡名、各禁限情况与票数、投票发起人ID、投票人ID列表、投票发起时间
+3. 管理员可以同意或拒绝投票
+4. 关闭投票后，相应投票链接变为只读状态
+
+### 功能5：禁卡表整理
+
+**控制器**: includes/Controllers/BanlistController.php
+**视图**: includes/Views/admin/banlist.php
+
+**实现流程**:
+1. 统计所有投票中各禁限状态的票数
+2. 根据票数最高的状态生成禁限文本
+3. 管理员可以将生成的文本加入lflist.conf
+4. 管理员可以重置投票，关闭所有投票并推进投票周期
+
+## 技术实现要点
+
+1. **SQLite操作**:
+   - 使用PHP的PDO扩展操作SQLite数据库
+   - 使用配置文件中指定的SQLite可执行程序路径
+
+2. **卡片数据解析**:
+   - 解析.cdb文件中的卡片数据
+   - 将十六进制代码转换为可读信息
+   - 关联strings.conf和cardinfo_chinese.txt中的信息
+
+3. **投票链接生成**:
+   - 使用卡片ID、环境ID和投票周期生成唯一链接
+   - 确保同一卡片在同一周期内只有一个投票链接
+
+4. **IP限制**:
+   - 记录用户IP地址
+   - 限制同一IP对同一投票只能投一次票
+
+5. **禁卡表生成**:
+   - 根据投票结果生成符合lflist.conf格式的文本
+   - 支持将生成的文本添加到lflist.conf文件
+
+6. **权限管理**:
+   - 根据管理员分组控制功能访问权限
+   - 高组管理员继承低组管理员的权限
+
+## 实施计划
+
+1. **阶段一：基础架构搭建**
+   - 创建目录结构
+   - 实现配置管理模块
+   - 实现数据库操作模块
+   - 实现卡片解析模块
+
+2. **阶段二：核心功能实现**
+   - 实现卡片检索功能
+   - 实现投票功能
+   - 实现投票概览功能
+
+3. **阶段三：管理功能实现**
+   - 实现管理员登录功能
+   - 实现投票管理功能
+   - 实现禁卡表整理功能
+
+4. **阶段四：测试与优化**
+   - 功能测试
+   - 性能优化
+   - 用户界面优化
+
+5. **阶段五：部署与上线**
+   - 测试环境部署
+   - 生产环境部署
+   - 用户培训与文档编写
