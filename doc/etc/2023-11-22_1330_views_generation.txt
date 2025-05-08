@@ -1,0 +1,42 @@
+# 2023-11-22 13:30 - 视图文件生成
+
+根据实装计划，生成了项目的视图文件和静态资源文件。
+
+## 已完成的文件
+
+1. 静态资源文件：
+   - assets/css/style.css：样式文件
+   - assets/js/script.js：JavaScript脚本文件
+
+2. 卡片检索相关视图：
+   - includes/Views/cards/index.php：卡片列表页面
+   - includes/Views/cards/search.php：卡片搜索结果页面
+   - includes/Views/cards/detail.php：卡片详情页面
+
+3. 投票相关视图：
+   - includes/Views/votes/create.php：创建投票页面
+   - includes/Views/votes/vote.php：投票详情页面
+   - includes/Views/votes/index.php：投票列表页面
+
+4. 管理员相关视图：
+   - includes/Views/admin/login.php：管理员登录页面
+   - includes/Views/admin/votes.php：投票管理页面
+   - includes/Views/admin/banlist.php：禁卡表整理页面
+   - includes/Views/admin/generate.php：禁卡表生成页面
+
+## 下一步计划
+
+1. 测试各功能模块：
+   - 卡片检索功能
+   - 投票功能
+   - 管理员功能
+   - 禁卡表整理功能
+
+2. 优化和完善：
+   - 改进用户界面
+   - 增强安全性
+   - 提高性能
+
+3. 部署和上线：
+   - 测试环境部署
+   - 生产环境部署
