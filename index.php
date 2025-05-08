@@ -1,7 +1,7 @@
 <?php
 /**
  * RAMSAY 入口文件
- * 
+ *
  * 处理所有请求并路由到相应的控制器
  */
 
@@ -16,7 +16,7 @@ spl_autoload_register(function ($className) {
         __DIR__ . '/includes/Models/' . $className . '.php',
         __DIR__ . '/includes/Controllers/' . $className . '.php'
     ];
-    
+
     // 尝试加载类文件
     foreach ($paths as $path) {
         if (file_exists($path)) {
@@ -33,7 +33,14 @@ $requestUri = $_SERVER['REQUEST_URI'];
 $requestUri = strtok($requestUri, '?');
 
 // 移除基础URL
-$requestUri = substr($requestUri, strlen(BASE_URL) - 1);
+// 检查BASE_URL是否为根目录
+if (BASE_URL === '/') {
+    // 如果是根目录，不需要额外处理
+    $requestUri = $requestUri;
+} else {
+    // 否则移除基础URL部分
+    $requestUri = substr($requestUri, strlen(BASE_URL) - 1);
+}
 
 // 分割URI
 $segments = explode('/', trim($requestUri, '/'));

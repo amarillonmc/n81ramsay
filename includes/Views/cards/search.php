@@ -14,7 +14,7 @@
 
 <?php if (!empty($cards)): ?>
     <h3>搜索结果 (<?php echo count($cards); ?>)</h3>
-    
+
     <div class="card-grid">
         <?php foreach ($cards as $card): ?>
             <div class="card-item">
@@ -23,7 +23,6 @@
                     <div class="card-item-body">
                         <div class="card-item-title"><?php echo Utils::escapeHtml($card['name']); ?></div>
                         <div>ID: <?php echo $card['id']; ?></div>
-                        <div>类型: <?php echo Utils::escapeHtml($card['type_text']); ?></div>
                     </div>
                 </a>
             </div>
