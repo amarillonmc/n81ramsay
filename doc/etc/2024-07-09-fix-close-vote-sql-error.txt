@@ -1,0 +1,46 @@
+# 2024-07-09 修复关闭投票功能的SQL错误
+
+## 问题描述
+在管理员功能中点击关闭投票按钮时，出现了以下错误信息：
+```
+SQL查询错误: SQLSTATE[HY000]: General error: 25 column index out of range
+SQL: UPDATE votes SET is_closed = :is_closed WHERE id = ?
+```
+
+## 原因分析
+问题出现在 `Vote` 类的 `closeVote` 方法中。该方法调用 `Database` 类的 `update` 方法时，
+使用了不一致的参数格式：SQL查询中使用了命名参数（`:is_closed`），但WHERE条件中使用了
+位置参数（`?`）。
+
+## 修复方案
+将 `Vote` 类的 `closeVote` 方法中的WHERE条件修改为使用命名参数，确保参数格式一致。
+
+## 修改内容
+文件：`includes/Models/Vote.php`
+
+修改前：
+```php
+public function closeVote($voteId) {
+    return $this->db->update(
+        'votes',
+        ['is_closed' => 1],
+        'id = ?',
+        ['id' => $voteId]
+    ) !== false;
+}
+```
+
+修改后：
+```php
+public function closeVote($voteId) {
+    return $this->db->update(
+        'votes',
+        ['is_closed' => 1],
+        'id = :vote_id',
+        ['vote_id' => $voteId]
+    ) !== false;
+}
+```
+
+## 修复结果
+修复后，管理员可以正常关闭投票，不再出现SQL错误。

@@ -168,4 +168,68 @@ class AdminController {
         header('Location: ' . BASE_URL . '?controller=admin&action=votes');
         exit;
     }
+
+    /**
+     * 禁卡表管理
+     *
+     * 重定向到BanlistController的index方法
+     */
+    public function banlist() {
+        // 要求管理员权限
+        $this->userModel->requirePermission(1);
+
+        // 创建BanlistController实例
+        $banlistController = new BanlistController();
+
+        // 调用index方法
+        $banlistController->index();
+    }
+
+    /**
+     * 生成禁卡表
+     *
+     * 重定向到BanlistController的generate方法
+     */
+    public function generate() {
+        // 要求管理员权限
+        $this->userModel->requirePermission(1);
+
+        // 创建BanlistController实例
+        $banlistController = new BanlistController();
+
+        // 调用generate方法
+        $banlistController->generate();
+    }
+
+    /**
+     * 重置投票
+     *
+     * 重定向到BanlistController的reset方法
+     */
+    public function reset() {
+        // 要求管理员权限
+        $this->userModel->requirePermission(2);
+
+        // 创建BanlistController实例
+        $banlistController = new BanlistController();
+
+        // 调用reset方法
+        $banlistController->reset();
+    }
+
+    /**
+     * 更新禁卡表
+     *
+     * 重定向到BanlistController的update方法
+     */
+    public function update() {
+        // 要求管理员权限
+        $this->userModel->requirePermission(2);
+
+        // 创建BanlistController实例
+        $banlistController = new BanlistController();
+
+        // 调用update方法
+        $banlistController->update();
+    }
 }

@@ -1,0 +1,88 @@
+# 2024-07-09 修复禁卡表管理按钮404错误
+
+## 问题描述
+在禁卡表管理页面中，点击"生成禁卡表"按钮时出现404错误。
+错误URL为：`http://ramsay.number81.xyz/?controller=admin&action=generate`
+
+同样，其他相关按钮（如"更新禁卡表"和"重置投票"）也可能会出现类似的404错误。
+
+## 原因分析
+问题出现在路由机制和控制器方法的不匹配：
+
+1. 禁卡表管理页面中的按钮指向 `?controller=admin&action=X`（X可能是generate、update或reset），
+   期望AdminController有相应的方法
+2. 但实际上，AdminController中并没有这些方法
+3. 这些功能是在BanlistController中实现的
+
+系统的路由机制（在index.php中）会尝试调用AdminController的相应方法，但由于这些方法不存在，
+所以返回404错误。
+
+## 修复方案
+在AdminController中添加相应的方法，这些方法会创建BanlistController实例并调用其对应的方法：
+
+1. 添加generate方法，转发到BanlistController的generate方法
+2. 添加update方法，转发到BanlistController的update方法
+3. 添加reset方法，转发到BanlistController的reset方法
+
+## 修改内容
+
+### 1. 添加generate方法
+```php
+/**
+ * 生成禁卡表
+ * 
+ * 重定向到BanlistController的generate方法
+ */
+public function generate() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(1);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用generate方法
+    $banlistController->generate();
+}
+```
+
+### 2. 添加update方法
+```php
+/**
+ * 更新禁卡表
+ * 
+ * 重定向到BanlistController的update方法
+ */
+public function update() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(2);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用update方法
+    $banlistController->update();
+}
+```
+
+### 3. 添加reset方法
+```php
+/**
+ * 重置投票
+ * 
+ * 重定向到BanlistController的reset方法
+ */
+public function reset() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(2);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用reset方法
+    $banlistController->reset();
+}
+```
+
+## 修复结果
+修复后，管理员可以正常点击禁卡表管理页面中的各个按钮，包括"生成禁卡表"、"更新禁卡表"和"重置投票"，
+不再出现404错误。

@@ -1,0 +1,42 @@
+# 2024-07-09 修复禁卡表管理链接404错误
+
+## 问题描述
+在管理员登录后，导航栏中的"禁卡表整理"链接点击后出现404错误。
+错误URL为：`http://ramsay.number81.xyz/?controller=admin&action=banlist`
+
+## 原因分析
+问题出现在路由机制和控制器方法的不匹配：
+
+1. 导航栏中的链接指向 `?controller=admin&action=banlist`，期望AdminController有一个banlist方法
+2. 但实际上，AdminController中并没有banlist方法
+3. 禁卡表管理功能是在BanlistController的index方法中实现的
+
+系统的路由机制（在index.php中）会尝试调用AdminController的banlist方法，但由于该方法不存在，
+所以返回404错误。
+
+## 修复方案
+在AdminController中添加一个banlist方法，该方法会创建BanlistController实例并调用其index方法：
+
+```php
+/**
+ * 禁卡表管理
+ * 
+ * 重定向到BanlistController的index方法
+ */
+public function banlist() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(1);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用index方法
+    $banlistController->index();
+}
+```
+
+这样，当用户点击"禁卡表整理"链接时，系统会调用AdminController的banlist方法，
+然后该方法会创建BanlistController实例并调用其index方法，从而显示禁卡表管理页面。
+
+## 修复结果
+修复后，管理员可以正常点击"禁卡表整理"链接，访问禁卡表管理功能，不再出现404错误。
