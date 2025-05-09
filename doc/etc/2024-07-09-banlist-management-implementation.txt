@@ -1,0 +1,264 @@
+# 2024-07-09 禁卡表管理功能实现与修复
+
+## 概述
+
+本文档记录了禁卡表管理功能的实现过程和相关问题修复。主要包括以下内容：
+
+1. 增强禁卡表管理功能，支持生成可读格式和机器可读格式的禁卡表文本
+2. 修复管理员导航栏显示问题，确保禁卡表管理入口正确显示
+3. 修复禁卡表管理相关链接和按钮的404错误
+4. 修复关闭投票功能的SQL错误
+
+## 一、功能实现：增强禁卡表管理
+
+### 功能需求
+
+禁卡表整理（功能面向：管理员分组1）需要实现以下功能：
+
+1. 统计全部投票的卡片中对应禁限票数最高者，按照以下的范例格式生成可读文本：
+
+```
+狂野禁止：
+加速世代V.2（98942051）				no42的卡片
+禁止：
+多多小妹妹（12847403）				之前为限制卡
+先王之魔导礼（21401215）
+准限制：
+心象风景 倒转（19209556）				之前为限制卡
+无限制：
+匪魔追缉者 禁毒特工（9910179）			之前为限制卡
+追缉队清理门户（9910186）	
+```
+
+2. 同时，按照lflist.conf中的对应格式生成禁限文本：
+
+```
+#230108
+40009398 0 --注释
+```
+
+3. 管理员分组2以上的管理员可以选择将生成的该文本加入lflist.conf的对应部分中。
+
+4. 如果投票的结果为解除限制（3），则在导入lflist.conf时，需要删除对应环境!标头下的对应行。
+
+### 实现内容
+
+#### 1. 修改 Vote 模型类
+
+- 添加了 `generateReadableBanlistText()` 方法，用于生成可读的禁卡表文本
+- 该方法会获取卡片当前的禁限状态，并与投票结果进行比较
+- 只有当新状态与当前状态不同时才会显示在结果中
+- 对于状态发生变化的卡片，会显示之前的状态信息
+- 更新了 `generateLflistText()` 方法，添加日期信息
+
+#### 2. 修改 BanlistController 类
+
+- 更新了 `generate()` 方法，同时生成机器可读和人类可读的禁卡表文本
+- 更新了 `update()` 方法，处理状态变为无限制的卡片，从禁卡表中移除
+- 修复了获取投票周期的代码，使用 Database 实例而不是直接访问 voteModel 的 db 属性
+
+#### 3. 修改视图文件
+
+- 更新了 `generate.php` 视图，添加了可读格式的禁卡表文本显示
+- 使用两个卡片区域分别显示可读格式和 lflist.conf 格式的文本
+
+## 二、问题修复
+
+### 1. 修复关闭投票功能的SQL错误
+
+#### 问题描述
+在管理员功能中点击关闭投票按钮时，出现了以下错误信息：
+```
+SQL查询错误: SQLSTATE[HY000]: General error: 25 column index out of range
+SQL: UPDATE votes SET is_closed = :is_closed WHERE id = ?
+```
+
+#### 原因分析
+问题出现在 `Vote` 类的 `closeVote` 方法中。该方法调用 `Database` 类的 `update` 方法时，
+使用了不一致的参数格式：SQL查询中使用了命名参数（`:is_closed`），但WHERE条件中使用了
+位置参数（`?`）。
+
+#### 修复方案
+将 `Vote` 类的 `closeVote` 方法中的WHERE条件修改为使用命名参数，确保参数格式一致。
+
+```php
+// 修改前
+public function closeVote($voteId) {
+    return $this->db->update(
+        'votes',
+        ['is_closed' => 1],
+        'id = ?',
+        ['id' => $voteId]
+    ) !== false;
+}
+
+// 修改后
+public function closeVote($voteId) {
+    return $this->db->update(
+        'votes',
+        ['is_closed' => 1],
+        'id = :vote_id',
+        ['vote_id' => $voteId]
+    ) !== false;
+}
+```
+
+### 2. 修复管理员导航栏问题
+
+#### 问题描述
+在管理员登录后，导航栏中没有显示禁卡表管理的入口。虽然在layout.php中已经添加了相关代码，
+但由于依赖于控制器传递的userModel变量，导致在某些情况下无法正确显示管理员功能链接。
+
+#### 原因分析
+问题出现在layout.php中对用户登录状态的检查方式，原代码依赖于控制器传递的$userModel变量来检查用户是否登录。
+在某些情况下，$userModel变量可能没有被正确传递或初始化，导致即使用户已登录，管理员功能链接也不会显示。
+
+#### 修复方案
+修改layout.php，直接使用Auth类来检查用户登录状态，而不依赖于控制器传递的变量：
+
+1. 在layout.php的开头直接获取Auth实例并检查登录状态
+2. 重新组织导航栏，使管理员功能链接更加突出
+3. 将管理员登录链接与退出登录链接分开显示，使界面更加清晰
+
+```php
+// 直接获取Auth实例，检查登录状态
+$auth = Auth::getInstance();
+$isLoggedIn = $auth->isLoggedIn();
+
+// 修改导航栏结构
+<?php if ($isLoggedIn): ?>
+    <!-- 管理员功能链接 -->
+    <?php if ($auth->hasPermission(1)): ?>
+        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=votes">投票管理</a></li>
+        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
+    <?php endif; ?>
+    
+    <!-- 用户信息和登出链接 -->
+    <li class="user-info">
+        <span><?php echo $auth->getCurrentUsername(); ?> (<?php 
+            // 用户组名称显示
+        ?>)</span>
+    </li>
+    <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=logout">退出登录</a></li>
+<?php else: ?>
+    <!-- 管理员登录链接 -->
+    <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=login">管理员登录</a></li>
+<?php endif; ?>
+```
+
+### 3. 修复禁卡表管理链接404错误
+
+#### 问题描述
+在管理员登录后，导航栏中的"禁卡表整理"链接点击后出现404错误。
+错误URL为：`http://ramsay.number81.xyz/?controller=admin&action=banlist`
+
+#### 原因分析
+问题出现在路由机制和控制器方法的不匹配：导航栏中的链接指向 `?controller=admin&action=banlist`，
+期望AdminController有一个banlist方法，但实际上，AdminController中并没有banlist方法，
+禁卡表管理功能是在BanlistController的index方法中实现的。
+
+#### 修复方案
+在AdminController中添加一个banlist方法，该方法会创建BanlistController实例并调用其index方法：
+
+```php
+/**
+ * 禁卡表管理
+ * 
+ * 重定向到BanlistController的index方法
+ */
+public function banlist() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(1);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用index方法
+    $banlistController->index();
+}
+```
+
+### 4. 修复禁卡表管理按钮404错误
+
+#### 问题描述
+在禁卡表管理页面中，点击"生成禁卡表"按钮时出现404错误。
+错误URL为：`http://ramsay.number81.xyz/?controller=admin&action=generate`
+
+同样，其他相关按钮（如"更新禁卡表"和"重置投票"）也会出现类似的404错误。
+
+#### 原因分析
+问题出现在路由机制和控制器方法的不匹配：禁卡表管理页面中的按钮指向 `?controller=admin&action=X`
+（X可能是generate、update或reset），期望AdminController有相应的方法，但实际上，
+AdminController中并没有这些方法，这些功能是在BanlistController中实现的。
+
+#### 修复方案
+在AdminController中添加相应的方法，这些方法会创建BanlistController实例并调用其对应的方法：
+
+```php
+/**
+ * 生成禁卡表
+ */
+public function generate() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(1);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用generate方法
+    $banlistController->generate();
+}
+
+/**
+ * 更新禁卡表
+ */
+public function update() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(2);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用update方法
+    $banlistController->update();
+}
+
+/**
+ * 重置投票
+ */
+public function reset() {
+    // 要求管理员权限
+    $this->userModel->requirePermission(2);
+    
+    // 创建BanlistController实例
+    $banlistController = new BanlistController();
+    
+    // 调用reset方法
+    $banlistController->reset();
+}
+```
+
+## 三、技术说明
+
+### 1. 可读格式生成逻辑
+- 获取投票结果
+- 获取卡片当前的禁限状态
+- 比较新旧状态，只显示状态发生变化的卡片
+- 按环境和状态分组显示
+
+### 2. lflist.conf 更新逻辑
+- 读取现有的 lflist.conf 文件
+- 查找对应环境的部分
+- 替换为新生成的文本
+- 对于状态变为无限制的卡片，从禁卡表中移除
+
+### 3. 权限控制
+- 管理员分组1可以生成禁卡表文本
+- 管理员分组2及以上可以更新 lflist.conf 文件
+
+## 四、后续优化方向
+
+1. 添加投票理由显示，将投票中提出的禁卡理由写在 lflist.conf 的注释中
+2. 优化可读格式的排版，使其更加美观
+3. 添加历史记录功能，记录每次禁卡表的变更
+4. 改进路由机制，使其更加灵活，支持多种URL格式
