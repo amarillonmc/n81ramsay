@@ -1,0 +1,33 @@
+# 2023-11-09 strpos() 函数参数类型修复
+
+## 问题描述
+页面上输出了大量类似于以下的警告信息：
+```
+Deprecated: strpos(): Non-string needles will be interpreted as strings in the future. Use an explicit chr() call to preserve the current behavior in C:\n81ramsay\includes\Core\CardParser.php on line 419
+```
+
+这是因为 PHP 未来版本中将不再支持将非字符串参数自动转换为字符串，建议使用 `chr()` 函数或确保参数是字符串类型。
+
+## 修复内容
+
+### 1. 修复 getCardAuthor() 方法中的 strpos() 调用
+- 在 `getCardAuthor()` 方法中，`strpos($cardId, $prefix)` 的第二个参数 `$prefix` 可能不是字符串类型
+- 添加了显式类型转换：`$prefixStr = (string)$prefix`，确保传递给 `strpos()` 的参数是字符串类型
+- 修改后的代码：
+  ```php
+  // 确保 $prefix 是字符串类型
+  $prefixStr = (string)$prefix;
+  if (strpos($cardId, $prefixStr) === 0) {
+      return $authorInfo['name'];
+  }
+  ```
+
+### 2. 检查其他 strpos() 调用
+- 检查了 CardParser.php 文件中的所有 `strpos()` 调用
+- 确认其他调用中的参数都已经是字符串类型，不需要额外的类型转换
+
+## 技术说明
+- PHP 7.4 及以上版本会对使用非字符串参数调用 `strpos()` 函数发出废弃警告
+- 在 PHP 8.0 中，这种用法将导致错误
+- 通过显式类型转换可以确保代码在未来版本的 PHP 中仍然正常工作
+- 这种修复不会改变代码的功能，只是使其更加符合 PHP 的最佳实践

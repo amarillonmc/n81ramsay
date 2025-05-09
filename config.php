@@ -66,6 +66,9 @@ define('SESSION_LIFETIME', 3600); // 1小时
 define('VOTES_PER_PAGE', 20);
 define('VOTE_LINK_PREFIX', BASE_URL . 'vote/');
 
+// 卡片配置
+define('CARDS_PER_PAGE', 20); // 默认每页显示卡片数量
+
 // 错误处理配置
 if (DEBUG_MODE) {
     ini_set('display_errors', 1);

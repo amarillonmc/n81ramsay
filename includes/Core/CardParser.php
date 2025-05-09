@@ -416,7 +416,9 @@ class CardParser {
         // 如果描述中没有作者信息，则根据卡片ID前缀查找
         $cardId = (string)$card['id'];
         foreach ($this->authors as $prefix => $authorInfo) {
-            if (strpos($cardId, $prefix) === 0) {
+            // 确保 $prefix 是字符串类型
+            $prefixStr = (string)$prefix;
+            if (strpos($cardId, $prefixStr) === 0) {
                 return $authorInfo['name'];
             }
         }
@@ -456,35 +458,98 @@ class CardParser {
     }
 
     /**
-     * 获取所有卡片
+     * 获取所有卡片（支持分页）
      *
      * @param string $dbFile 数据库文件路径，如果为null则获取所有数据库的卡片
-     * @return array 卡片列表
+     * @param int $page 页码，从1开始
+     * @param int $perPage 每页显示的卡片数量
+     * @param bool $countOnly 是否只返回卡片总数
+     * @return array 包含卡片列表和分页信息的数组
      */
-    public function getAllCards($dbFile = null) {
+    public function getAllCards($dbFile = null, $page = 1, $perPage = 20, $countOnly = false) {
         $cards = [];
+        $totalCards = 0;
 
         if ($dbFile !== null) {
-            $cards = $this->getCardsFromDatabase($dbFile);
+            if ($countOnly) {
+                $totalCards = $this->countCardsInDatabase($dbFile);
+            } else {
+                $cards = $this->getCardsFromDatabase($dbFile, $page, $perPage);
+                $totalCards = $this->countCardsInDatabase($dbFile);
+            }
         } else {
             $dbFiles = $this->getCardDatabaseFiles();
             foreach ($dbFiles as $file) {
-                $cardsFromDb = $this->getCardsFromDatabase($file);
-                $cards = array_merge($cards, $cardsFromDb);
+                if ($countOnly) {
+                    $totalCards += $this->countCardsInDatabase($file);
+                } else {
+                    // 注意：当获取所有数据库的卡片时，分页逻辑会变得复杂
+                    // 这里简化处理，先获取所有卡片，然后在内存中分页
+                    $cardsFromDb = $this->getCardsFromDatabase($file);
+                    $cards = array_merge($cards, $cardsFromDb);
+                }
+            }
+
+            if (!$countOnly && !empty($cards)) {
+                // 在内存中进行分页
+                $totalCards = count($cards);
+                $offset = ($page - 1) * $perPage;
+                $cards = array_slice($cards, $offset, $perPage);
             }
         }
 
-        return $cards;
+        if ($countOnly) {
+            return $totalCards;
+        }
+
+        return [
+            'cards' => $cards,
+            'total' => $totalCards,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => ceil($totalCards / $perPage)
+        ];
+    }
+
+    /**
+     * 计算数据库中的卡片数量
+     *
+     * @param string $dbFile 数据库文件路径
+     * @return int 卡片数量
+     */
+    private function countCardsInDatabase($dbFile) {
+        $db = $this->getCardDatabase($dbFile);
+
+        $sql = "
+            SELECT
+                COUNT(*) as count
+            FROM
+                datas d
+            JOIN
+                texts t ON d.id = t.id
+        ";
+
+        try {
+            $stmt = $db->query($sql);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            return (int)$result['count'];
+        } catch (PDOException $e) {
+            Utils::debug('计算卡片数量失败', ['错误' => $e->getMessage()]);
+            return 0;
+        }
     }
 
     /**
      * 从数据库获取卡片
      *
      * @param string $dbFile 数据库文件路径
+     * @param int $page 页码，从1开始
+     * @param int $perPage 每页显示的卡片数量
      * @return array 卡片列表
      */
-    private function getCardsFromDatabase($dbFile) {
+    private function getCardsFromDatabase($dbFile, $page = 1, $perPage = 20) {
         $db = $this->getCardDatabase($dbFile);
+        $offset = ($page - 1) * $perPage;
 
         $sql = "
             SELECT
@@ -496,10 +561,14 @@ class CardParser {
                 texts t ON d.id = t.id
             ORDER BY
                 d.id
+            LIMIT :limit OFFSET :offset
         ";
 
         try {
-            $stmt = $db->query($sql);
+            $stmt = $db->prepare($sql);
+            $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
             $cards = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // 处理卡片数据
@@ -516,7 +585,7 @@ class CardParser {
 
             return $cards;
         } catch (PDOException $e) {
-            error_log('获取卡片数据失败: ' . $e->getMessage());
+            Utils::debug('获取卡片数据失败', ['错误' => $e->getMessage()]);
             return [];
         }
     }
