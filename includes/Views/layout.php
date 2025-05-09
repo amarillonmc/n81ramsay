@@ -23,6 +23,10 @@ $isLoggedIn = $auth->isLoggedIn();
                     <li><a href="<?php echo BASE_URL; ?>">卡片检索</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=vote">投票概览</a></li>
 
+                    <?php if (defined('AUTHOR_HALL_OF_FAME_ENABLED') && AUTHOR_HALL_OF_FAME_ENABLED): ?>
+                        <li><a href="<?php echo BASE_URL; ?>?controller=author">作者光荣榜</a></li>
+                    <?php endif; ?>
+
                     <?php if ($isLoggedIn): ?>
                         <!-- 管理员功能链接 -->
                         <?php if ($auth->hasPermission(1)): ?>

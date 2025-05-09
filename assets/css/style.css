@@ -392,6 +392,27 @@ footer {
     width: 100%;
 }
 
+/* 作者光荣榜样式 */
+.table-responsive {
+    overflow-x: auto;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.075);
+}
+
+.table-danger {
+    background-color: #f8d7da;
+}
+
+.table-danger:hover {
+    background-color: #f5c6cb;
+}
+
 /* 响应式样式 */
 @media (max-width: 768px) {
     header nav ul {

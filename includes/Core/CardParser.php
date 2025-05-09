@@ -922,4 +922,31 @@ class CardParser {
     public function getAllEnvironments() {
         return array_keys($this->lflist);
     }
+
+    /**
+     * 获取禁限信息
+     *
+     * @return array 禁限信息
+     */
+    public function getLflist() {
+        return $this->lflist;
+    }
+
+    /**
+     * 获取系列信息
+     *
+     * @return array 系列信息
+     */
+    public function getSetcodes() {
+        return $this->setcodes;
+    }
+
+    /**
+     * 获取作者信息
+     *
+     * @return array 作者信息
+     */
+    public function getAuthors() {
+        return $this->authors;
+    }
 }

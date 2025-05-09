@@ -69,6 +69,10 @@ define('VOTE_LINK_PREFIX', BASE_URL . 'vote/');
 // 卡片配置
 define('CARDS_PER_PAGE', 20); // 默认每页显示卡片数量
 
+// 作者光荣榜配置
+define('AUTHOR_HALL_OF_FAME_ENABLED', true); // 是否启用作者光荣榜功能
+define('AUTHOR_HALL_OF_FAME_HIGHLIGHT_THRESHOLD', 17); // 禁卡比例高亮阈值（百分比）
+
 // 错误处理配置
 if (DEBUG_MODE) {
     ini_set('display_errors', 1);

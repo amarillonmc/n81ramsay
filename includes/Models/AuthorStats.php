@@ -1,0 +1,248 @@
+<?php
+/**
+ * 作者统计模型
+ *
+ * 处理作者统计相关的数据操作
+ */
+class AuthorStats {
+    /**
+     * 卡片解析器
+     * @var CardParser
+     */
+    private $cardParser;
+
+    /**
+     * 构造函数
+     */
+    public function __construct() {
+        $this->cardParser = CardParser::getInstance();
+    }
+
+    /**
+     * 获取作者统计数据
+     *
+     * @return array 作者统计数据
+     */
+    public function getAuthorStats() {
+        // 获取所有卡片数据库文件
+        $dbFiles = $this->cardParser->getCardDatabaseFiles();
+        
+        // 作者统计数据
+        $authorStats = [];
+        
+        // 获取标准环境禁卡列表
+        $standardBanlist = $this->getStandardBanlist();
+        
+        // 获取系列信息
+        $setcodes = $this->getSetcodes();
+        
+        // 处理每个数据库文件
+        foreach ($dbFiles as $dbFile) {
+            $dbName = basename($dbFile);
+            $isNo42 = (strpos($dbName, 'no42') !== false);
+            
+            // 获取数据库中的所有卡片
+            $cards = $this->getAllCardsFromDatabase($dbFile);
+            
+            // 统计每个作者的卡片数量
+            foreach ($cards as $card) {
+                $author = $this->cardParser->getCardAuthor($card);
+                
+                if ($author) {
+                    // 初始化作者统计数据
+                    if (!isset($authorStats[$author])) {
+                        $authorStats[$author] = [
+                            'name' => $author,
+                            'total_cards' => 0,
+                            'banned_cards' => 0,
+                            'banned_series' => 0,
+                            'banned_percentage' => 0,
+                            'cards' => [],
+                            'banned_cards_list' => [],
+                            'banned_series_list' => []
+                        ];
+                    }
+                    
+                    // 增加卡片总数
+                    $authorStats[$author]['total_cards']++;
+                    
+                    // 记录卡片信息
+                    $authorStats[$author]['cards'][] = [
+                        'id' => $card['id'],
+                        'name' => $card['name'],
+                        'setcode' => $card['setcode'],
+                        'is_no42' => $isNo42
+                    ];
+                    
+                    // 检查是否在标准环境被禁止
+                    if (isset($standardBanlist[$card['id']]) && $standardBanlist[$card['id']]['status'] === 0 && !$isNo42) {
+                        $authorStats[$author]['banned_cards']++;
+                        $authorStats[$author]['banned_cards_list'][] = [
+                            'id' => $card['id'],
+                            'name' => $card['name']
+                        ];
+                    }
+                }
+            }
+        }
+        
+        // 计算禁卡比例和被禁系列
+        foreach ($authorStats as $author => &$stats) {
+            // 计算禁卡比例
+            if ($stats['total_cards'] > 0) {
+                $stats['banned_percentage'] = round(($stats['banned_cards'] / $stats['total_cards']) * 100, 2);
+            }
+            
+            // 计算被禁系列
+            $stats['banned_series'] = $this->countBannedSeries($stats['cards'], $standardBanlist, $setcodes);
+        }
+        
+        // 按禁卡比例从高到低排序
+        uasort($authorStats, function($a, $b) {
+            return $b['banned_percentage'] <=> $a['banned_percentage'];
+        });
+        
+        // 添加排名
+        $rank = 1;
+        foreach ($authorStats as &$stats) {
+            $stats['rank'] = $rank++;
+        }
+        
+        return $authorStats;
+    }
+    
+    /**
+     * 获取标准环境禁卡列表
+     *
+     * @return array 禁卡列表
+     */
+    private function getStandardBanlist() {
+        $environments = Utils::getEnvironments();
+        $standardEnvironment = null;
+        
+        // 查找标准环境
+        foreach ($environments as $env) {
+            if ($env['text'] === '标准环境') {
+                $standardEnvironment = $env;
+                break;
+            }
+        }
+        
+        if (!$standardEnvironment) {
+            return [];
+        }
+        
+        // 获取禁卡列表
+        return $this->cardParser->getLflist()[$standardEnvironment['header']] ?? [];
+    }
+    
+    /**
+     * 获取系列信息
+     *
+     * @return array 系列信息
+     */
+    private function getSetcodes() {
+        return $this->cardParser->getSetcodes();
+    }
+    
+    /**
+     * 获取数据库中的所有卡片
+     *
+     * @param string $dbFile 数据库文件路径
+     * @return array 卡片列表
+     */
+    private function getAllCardsFromDatabase($dbFile) {
+        $result = $this->cardParser->getAllCards($dbFile, 1, 10000, false);
+        return $result['cards'] ?? [];
+    }
+    
+    /**
+     * 计算被禁系列数量
+     *
+     * @param array $cards 卡片列表
+     * @param array $banlist 禁卡列表
+     * @param array $setcodes 系列信息
+     * @return int 被禁系列数量
+     */
+    private function countBannedSeries($cards, $banlist, $setcodes) {
+        // 按系列分组卡片
+        $seriesCards = [];
+        $bannedSeries = [];
+        
+        foreach ($cards as $card) {
+            // 跳过no42的卡片
+            if ($card['is_no42']) {
+                continue;
+            }
+            
+            // 获取卡片的系列
+            $cardSetcodes = $this->extractSetcodes($card['setcode']);
+            
+            foreach ($cardSetcodes as $setcode) {
+                if (!isset($seriesCards[$setcode])) {
+                    $seriesCards[$setcode] = [];
+                }
+                
+                $seriesCards[$setcode][] = $card['id'];
+            }
+        }
+        
+        // 检查每个系列是否全部被禁止
+        foreach ($seriesCards as $setcode => $cardIds) {
+            if (count($cardIds) > 1) { // 只考虑有多张卡的系列
+                $allBanned = true;
+                
+                foreach ($cardIds as $cardId) {
+                    if (!isset($banlist[$cardId]) || $banlist[$cardId]['status'] !== 0) {
+                        $allBanned = false;
+                        break;
+                    }
+                }
+                
+                if ($allBanned) {
+                    $bannedSeries[] = $setcode;
+                }
+            }
+        }
+        
+        return count($bannedSeries);
+    }
+    
+    /**
+     * 提取卡片的系列代码
+     *
+     * @param int $setcode 系列代码
+     * @return array 系列代码列表
+     */
+    private function extractSetcodes($setcode) {
+        $result = [];
+        
+        // 系列代码是一个32位整数，每8位代表一个系列
+        for ($i = 0; $i < 4; $i++) {
+            $code = ($setcode >> ($i * 16)) & 0xFFFF;
+            if ($code > 0) {
+                $result[] = '0x' . dechex($code);
+            }
+        }
+        
+        return $result;
+    }
+    
+    /**
+     * 更新作者光荣榜
+     *
+     * @return bool 是否成功
+     */
+    public function updateAuthorHallOfFame() {
+        // 获取作者统计数据
+        $authorStats = $this->getAuthorStats();
+        
+        // 生成更新时间
+        $updateTime = date('Y-m-d H:i:s');
+        
+        // 保存到数据库或文件
+        // 这里可以根据需要实现保存逻辑
+        
+        return true;
+    }
+}
