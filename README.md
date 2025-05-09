@@ -1,5 +1,6 @@
 # RAMSAY - no81游戏王DIY服务器管理系统
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/amarillonmc/n81ramsay)
 RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自动化和简化服务器的各种运营事务。该系统提供卡片检索、投票禁卡、禁卡表整理、作者光荣榜等功能，帮助服务器管理员和玩家更高效地管理游戏环境。
 
 ## 主要功能
