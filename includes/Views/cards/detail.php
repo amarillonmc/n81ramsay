@@ -56,6 +56,12 @@
                         <th>卡片描述</th>
                         <td><?php echo nl2br(Utils::escapeHtml($card['desc'])); ?></td>
                     </tr>
+                    <?php if (!empty($card['author'])): ?>
+                    <tr>
+                        <th>卡片作者</th>
+                        <td><?php echo Utils::escapeHtml($card['author']); ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <tr>
                         <th>数据库文件</th>
                         <td><?php echo Utils::escapeHtml($card['database_file']); ?></td>

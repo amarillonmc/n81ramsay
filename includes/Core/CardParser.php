@@ -54,6 +54,12 @@ class CardParser {
     private $lflist = [];
 
     /**
+     * 作者信息
+     * @var array
+     */
+    private $authors = [];
+
+    /**
      * 构造函数
      */
     private function __construct() {
@@ -65,6 +71,9 @@ class CardParser {
 
         // 加载禁限信息
         $this->loadLflist();
+
+        // 加载作者信息
+        $this->loadAuthors();
     }
 
     /**
@@ -90,10 +99,21 @@ class CardParser {
             die('卡片信息文件不存在: ' . $cardInfoFile);
         }
 
+        // 直接硬编码类型、种族和属性映射
+        // 这是一个临时解决方案，确保卡片详情能够正确显示
+        $this->hardcodeCardInfoMappings();
+
+        // 尝试从文件加载
         $content = file_get_contents($cardInfoFile);
+
+        // 确保使用统一的行结束符
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
         $lines = explode("\n", $content);
 
         $currentSection = '';
+
+        // 调试信息
+        Utils::debug('开始加载卡片信息映射', ['文件路径' => $cardInfoFile]);
 
         foreach ($lines as $line) {
             $line = trim($line);
@@ -109,11 +129,31 @@ class CardParser {
                 continue;
             }
 
-            // 解析数据行
+            // 尝试多种分隔符解析数据行
+            // 首先尝试使用制表符分隔
             $parts = explode("\t", $line);
-            if (count($parts) >= 2) {
+
+            // 如果没有成功分隔（只有一个元素），尝试使用空格分隔
+            if (count($parts) < 2) {
+                // 使用正则表达式匹配第一个十六进制数
+                if (preg_match('/^(0x[0-9a-fA-F]+|-\d+)\s*(.*)$/', $line, $matches)) {
+                    $parts = [$matches[1], $matches[2]];
+                }
+            }
+
+            // 如果仍然没有成功分隔，但是是一个有效的十六进制数，则将其作为代码，名称设为空字符串
+            if (count($parts) < 2 && preg_match('/^(0x[0-9a-fA-F]+|-\d+)$/', $line)) {
+                $parts = [$line, ''];
+            }
+
+            if (count($parts) >= 1) {
                 $code = trim($parts[0]);
-                $name = trim($parts[1]);
+                $name = count($parts) >= 2 ? trim($parts[1]) : '';
+
+                // 跳过link marker和category节，它们不是我们需要的
+                if ($currentSection == 'link marker' || $currentSection == 'category') {
+                    continue;
+                }
 
                 switch ($currentSection) {
                     case 'type':
@@ -134,6 +174,88 @@ class CardParser {
                 }
             }
         }
+
+        // 调试信息
+        Utils::debug('加载完成', [
+            '类型数量' => count($this->types),
+            '种族数量' => count($this->races),
+            '属性数量' => count($this->attributes)
+        ]);
+    }
+
+    /**
+     * 硬编码卡片信息映射
+     * 这是一个临时解决方案，确保卡片详情能够正确显示
+     */
+    private function hardcodeCardInfoMappings() {
+        // 类型映射
+        $this->types = [
+            '0x1' => '怪兽',
+            '0x2' => '魔法',
+            '0x4' => '陷阱',
+            '0x10' => '通常',
+            '0x20' => '效果',
+            '0x40' => '融合',
+            '0x80' => '仪式',
+            '0x200' => '灵魂',
+            '0x400' => '同盟',
+            '0x800' => '二重',
+            '0x1000' => '调整',
+            '0x2000' => '同调',
+            '0x4000' => '衍生',
+            '0x10000' => '速攻',
+            '0x20000' => '永续',
+            '0x40000' => '装备',
+            '0x80000' => '场地',
+            '0x100000' => '反击',
+            '0x200000' => '反转',
+            '0x400000' => '卡通',
+            '0x800000' => '超量',
+            '0x1000000' => '灵摆',
+            '0x2000000' => '特召',
+            '0x4000000' => '连接'
+        ];
+
+        // 种族映射
+        $this->races = [
+            '0x1' => '战士',
+            '0x2' => '魔法师',
+            '0x4' => '天使',
+            '0x8' => '恶魔',
+            '0x10' => '不死',
+            '0x20' => '机械',
+            '0x40' => '水',
+            '0x80' => '炎',
+            '0x100' => '岩石',
+            '0x200' => '鸟兽',
+            '0x400' => '植物',
+            '0x800' => '昆虫',
+            '0x1000' => '雷',
+            '0x2000' => '龙',
+            '0x4000' => '兽',
+            '0x8000' => '兽战士',
+            '0x10000' => '恐龙',
+            '0x20000' => '鱼',
+            '0x40000' => '海龙',
+            '0x80000' => '爬虫类',
+            '0x100000' => '念动力',
+            '0x200000' => '幻神兽',
+            '0x400000' => '创造神',
+            '0x800000' => '幻龙',
+            '0x1000000' => '电子界',
+            '0x2000000' => '幻想魔族'
+        ];
+
+        // 属性映射
+        $this->attributes = [
+            '0x1' => '地',
+            '0x2' => '水',
+            '0x4' => '炎',
+            '0x8' => '风',
+            '0x10' => '光',
+            '0x20' => '暗',
+            '0x40' => '神'
+        ];
     }
 
     /**
@@ -212,6 +334,94 @@ class CardParser {
                 }
             }
         }
+    }
+
+    /**
+     * 加载作者信息
+     */
+    private function loadAuthors() {
+        $cardDataPath = CARD_DATA_PATH;
+        $stringsFile = $cardDataPath . '/strings.conf';
+
+        if (file_exists($stringsFile)) {
+            $content = file_get_contents($stringsFile);
+            $lines = explode("\n", $content);
+
+            foreach ($lines as $line) {
+                $line = trim($line);
+
+                // 只处理注释行中的作者信息
+                if (strpos($line, '#') === 0) {
+                    // 尝试匹配作者信息格式
+                    if (preg_match('/#([^\s]+)\s+(\d+)\s+(0x[0-9a-fA-F]+-0x[0-9a-fA-F]+)/', $line, $matches)) {
+                        $authorName = $matches[1];
+                        $cardPrefix = $matches[2];
+                        $setcodeRange = $matches[3];
+
+                        // 解析系列区间
+                        $setcodeRanges = [];
+                        $rangeParts = explode(' ', $setcodeRange);
+                        foreach ($rangeParts as $rangePart) {
+                            if (strpos($rangePart, '-') !== false) {
+                                list($start, $end) = explode('-', $rangePart);
+                                $setcodeRanges[] = [
+                                    'start' => $start,
+                                    'end' => $end
+                                ];
+                            }
+                        }
+
+                        // 存储作者信息
+                        $this->authors[$cardPrefix] = [
+                            'name' => $authorName,
+                            'card_prefix' => $cardPrefix,
+                            'setcode_ranges' => $setcodeRanges
+                        ];
+
+                        // 如果有多个卡片区间，也添加到映射中
+                        if (preg_match_all('/\s(\d+)\s/', $line, $prefixMatches)) {
+                            foreach ($prefixMatches[1] as $additionalPrefix) {
+                                if ($additionalPrefix != $cardPrefix) {
+                                    $this->authors[$additionalPrefix] = [
+                                        'name' => $authorName,
+                                        'card_prefix' => $additionalPrefix,
+                                        'setcode_ranges' => $setcodeRanges
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 获取卡片作者
+     *
+     * @param array $card 卡片信息
+     * @return string|null 作者名称
+     */
+    public function getCardAuthor($card) {
+        // 首先检查卡片描述中是否有作者签名
+        $desc = $card['desc'];
+        if (preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/i', $desc, $matches)) {
+            // 清理作者名称，移除可能的额外分隔符
+            $authorName = trim($matches[1]);
+            // 移除开头可能存在的分隔符
+            $authorName = preg_replace('/^[-—_:：\s]+/', '', $authorName);
+            return trim($authorName);
+        }
+
+        // 如果描述中没有作者信息，则根据卡片ID前缀查找
+        $cardId = (string)$card['id'];
+        foreach ($this->authors as $prefix => $authorInfo) {
+            if (strpos($cardId, $prefix) === 0) {
+                return $authorInfo['name'];
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -301,6 +511,7 @@ class CardParser {
                 $card['level_text'] = $this->getLevelText($card['level']);
                 $card['image_path'] = $this->getCardImagePath($card['id']);
                 $card['database_file'] = basename($dbFile);
+                $card['author'] = $this->getCardAuthor($card);
             }
 
             return $cards;
@@ -347,6 +558,7 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id']);
                     $card['database_file'] = basename($dbFile);
+                    $card['author'] = $this->getCardAuthor($card);
 
                     return $card;
                 }
@@ -414,6 +626,7 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id']);
                     $card['database_file'] = basename($dbFile);
+                    $card['author'] = $this->getCardAuthor($card);
                 }
 
                 $cards = array_merge($cards, $results);
@@ -453,17 +666,43 @@ class CardParser {
      * @return string 类型文本
      */
     public function getTypeText($type) {
-        $hexType = '0x' . dechex($type);
         $typeTexts = [];
 
+        // 按位检查每个类型
         foreach ($this->types as $code => $name) {
+            // 将十六进制字符串转换为整数
             $hexCode = hexdec($code);
+
+            // 检查该位是否设置
             if (($type & $hexCode) == $hexCode && $hexCode != 0) {
+                // 跳过标记为N/A的类型
+                if ($name == 'N/A') {
+                    continue;
+                }
                 $typeTexts[] = $name;
             }
         }
 
-        return implode('/', $typeTexts);
+        if (empty($typeTexts)) {
+            return '未知类别 (0x' . dechex($type) . ')';
+        }
+
+        // 对类型进行排序，确保主要类型（怪兽/魔法/陷阱）在前面
+        $mainTypes = [];
+        $subTypes = [];
+
+        foreach ($typeTexts as $typeText) {
+            if (in_array($typeText, ['怪兽', '魔法', '陷阱'])) {
+                $mainTypes[] = $typeText;
+            } else {
+                $subTypes[] = $typeText;
+            }
+        }
+
+        // 合并主要类型和子类型
+        $sortedTypes = array_merge($mainTypes, $subTypes);
+
+        return implode('·', $sortedTypes);
     }
 
     /**
@@ -475,8 +714,14 @@ class CardParser {
     public function getRaceText($race) {
         $hexRace = '0x' . dechex($race);
 
-        if (isset($this->races[$hexRace])) {
-            return $this->races[$hexRace];
+        // 直接查找完全匹配的种族代码
+        foreach ($this->races as $code => $name) {
+            // 将十六进制字符串转换为整数
+            $decCode = hexdec($code);
+
+            if ($decCode == $race) {
+                return $name;
+            }
         }
 
         return '未知种族 (' . $hexRace . ')';
@@ -491,8 +736,14 @@ class CardParser {
     public function getAttributeText($attribute) {
         $hexAttribute = '0x' . dechex($attribute);
 
-        if (isset($this->attributes[$hexAttribute])) {
-            return $this->attributes[$hexAttribute];
+        // 直接查找完全匹配的属性代码
+        foreach ($this->attributes as $code => $name) {
+            // 将十六进制字符串转换为整数
+            $decCode = hexdec($code);
+
+            if ($decCode == $attribute) {
+                return $name;
+            }
         }
 
         return '未知属性 (' . $hexAttribute . ')';
@@ -600,12 +851,6 @@ class CardParser {
      * @return array 环境列表
      */
     public function getAllEnvironments() {
-        $environments = [];
-
-        foreach ($this->lflist as $env => $cards) {
-            $environments[] = $env;
-        }
-
-        return $environments;
+        return array_keys($this->lflist);
     }
 }
