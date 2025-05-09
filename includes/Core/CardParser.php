@@ -353,6 +353,7 @@ class CardParser {
                 // 只处理注释行中的作者信息
                 if (strpos($line, '#') === 0) {
                     // 尝试匹配作者信息格式
+                    // 格式1: #作者名 卡片前缀 系列区间
                     if (preg_match('/#([^\s]+)\s+(\d+)\s+(0x[0-9a-fA-F]+-0x[0-9a-fA-F]+)/', $line, $matches)) {
                         $authorName = $matches[1];
                         $cardPrefix = $matches[2];
@@ -391,8 +392,35 @@ class CardParser {
                             }
                         }
                     }
+                    // 格式2: #作者名 卡片前缀
+                    else if (preg_match('/#([^\s]+)\s+(\d+)(?:\s|$)/', $line, $matches)) {
+                        $authorName = $matches[1];
+                        $cardPrefix = $matches[2];
+
+                        // 存储作者信息
+                        $this->authors[$cardPrefix] = [
+                            'name' => $authorName,
+                            'card_prefix' => $cardPrefix,
+                            'setcode_ranges' => []
+                        ];
+                    }
+                    // 格式3: #作者名:卡片前缀
+                    else if (preg_match('/#([^:]+):(\d+)/', $line, $matches)) {
+                        $authorName = trim($matches[1]);
+                        $cardPrefix = $matches[2];
+
+                        // 存储作者信息
+                        $this->authors[$cardPrefix] = [
+                            'name' => $authorName,
+                            'card_prefix' => $cardPrefix,
+                            'setcode_ranges' => []
+                        ];
+                    }
                 }
             }
+
+            // 调试信息
+            Utils::debug('加载作者信息完成', ['作者数量' => count($this->authors)]);
         }
     }
 
@@ -400,7 +428,7 @@ class CardParser {
      * 获取卡片作者
      *
      * @param array $card 卡片信息
-     * @return string|null 作者名称
+     * @return string 作者名称
      */
     public function getCardAuthor($card) {
         // 首先检查卡片描述中是否有作者签名
@@ -410,20 +438,94 @@ class CardParser {
             $authorName = trim($matches[1]);
             // 移除开头可能存在的分隔符
             $authorName = preg_replace('/^[-—_:：\s]+/', '', $authorName);
-            return trim($authorName);
+            // 提取作者名，去除后面可能的系列名或其他文本（如"图侵删歉"）
+            $authorName = $this->normalizeAuthorName($authorName);
+            return $authorName;
         }
 
         // 如果描述中没有作者信息，则根据卡片ID前缀查找
         $cardId = (string)$card['id'];
+
+        // 首先尝试完全匹配
         foreach ($this->authors as $prefix => $authorInfo) {
             // 确保 $prefix 是字符串类型
             $prefixStr = (string)$prefix;
             if (strpos($cardId, $prefixStr) === 0) {
-                return $authorInfo['name'];
+                // 规范化作者名称
+                return $this->normalizeAuthorName($authorInfo['name']);
             }
         }
 
-        return null;
+        // 如果完全匹配失败，尝试使用卡片ID的前三位数字进行匹配
+        if (strlen($cardId) >= 3) {
+            $cardPrefix = substr($cardId, 0, 3);
+
+            // 遍历所有作者信息，查找前三位匹配的作者
+            foreach ($this->authors as $prefix => $authorInfo) {
+                $prefixStr = (string)$prefix;
+                // 如果前缀长度至少为3位，且与卡片ID的前三位匹配
+                if (strlen($prefixStr) >= 3 && substr($prefixStr, 0, 3) === $cardPrefix) {
+                    return $this->normalizeAuthorName($authorInfo['name']);
+                }
+            }
+        }
+
+        // 如果无法确定作者，返回"未知作者"
+        return "未知作者";
+    }
+
+    /**
+     * 规范化作者名称
+     *
+     * @param string $authorName 原始作者名称
+     * @return string 规范化后的作者名称
+     */
+    private function normalizeAuthorName($authorName) {
+        // 去除两端空白
+        $authorName = trim($authorName);
+
+        // 如果作者名为空，返回"未知作者"
+        if (empty($authorName)) {
+            return "未知作者";
+        }
+
+        // 移除"图侵删歉"等常见附加文本
+        $commonSuffixes = ['图侵删歉', '图侵删', '侵删', '图源网络', '图源', '图片来源网络'];
+        foreach ($commonSuffixes as $suffix) {
+            if (mb_strpos($authorName, $suffix) !== false) {
+                $authorName = trim(mb_substr($authorName, 0, mb_strpos($authorName, $suffix)));
+            }
+        }
+
+        // 提取方括号、尖括号或引号前的作者名
+        if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)/', $authorName, $matches)) {
+            $authorName = trim($matches[1]);
+        }
+
+        // 如果有空格，只取第一个单词（针对英文名+系列名的情况，如"Justfish Shadow Fiend"）
+        // 但要注意中文名可能有空格，所以只对包含英文字母的名称进行处理
+        if (preg_match('/[a-zA-Z]/', $authorName)) {
+            // 检查是否有方括号等标记，如果有，则在这些标记前截断
+            if (preg_match('/^(\S+)(?:\s+[\[「『\(（<《])/', $authorName, $matches)) {
+                $authorName = $matches[1];
+            }
+            // 否则，检查是否是"名字 系列名"的格式
+            else if (preg_match('/^(\S+)(?:\s+.+)/', $authorName, $matches)) {
+                // 只有当第一个单词看起来像一个完整的名字时才截断
+                // 例如，"Justfish Shadow"应该截断为"Justfish"
+                // 但"Lin Yanjun"不应该截断
+                if (!preg_match('/^[A-Z][a-z]+\s+[A-Z][a-z]+$/', $authorName)) {
+                    $authorName = $matches[1];
+                }
+            }
+        }
+
+        // 如果规范化后的作者名为空，返回"未知作者"
+        if (empty(trim($authorName))) {
+            return "未知作者";
+        }
+
+        return $authorName;
     }
 
     /**

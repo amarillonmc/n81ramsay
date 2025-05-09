@@ -1,23 +1,23 @@
 <div class="container">
     <h2>作者光荣榜</h2>
-    
+
     <?php if (isset($_GET['message'])): ?>
         <div class="alert alert-success">
             <?php echo Utils::escapeHtml($_GET['message']); ?>
         </div>
     <?php endif; ?>
-    
+
     <div class="card">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
                 <span>作者光荣榜 - 生成时间：<?php echo $generatedTime; ?></span>
-                
+
                 <?php if ($this->userModel->hasPermission(1)): ?>
                     <a href="<?php echo BASE_URL; ?>?controller=author&action=update" class="btn btn-primary">更新榜单</a>
                 <?php endif; ?>
             </div>
         </div>
-        
+
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-striped table-hover">
@@ -38,7 +38,16 @@
                             </tr>
                         <?php else: ?>
                             <?php foreach ($authorStats as $author => $stats): ?>
-                                <tr<?php echo ($stats['banned_percentage'] > $highlightThreshold) ? ' class="table-danger"' : ''; ?>>
+                                <?php
+                                // 根据作者类型设置不同的样式
+                                $rowClass = '';
+                                if ($stats['is_unknown']) {
+                                    $rowClass = 'table-secondary';
+                                } else if ($stats['banned_percentage'] > $highlightThreshold) {
+                                    $rowClass = 'table-danger';
+                                }
+                                ?>
+                                <tr<?php echo !empty($rowClass) ? ' class="' . $rowClass . '"' : ''; ?>>
                                     <td><?php echo $stats['rank']; ?></td>
                                     <td><?php echo Utils::escapeHtml($author); ?></td>
                                     <td><?php echo $stats['total_cards']; ?></td>
@@ -47,6 +56,7 @@
                                     <td><?php echo $stats['banned_series']; ?></td>
                                 </tr>
                             <?php endforeach; ?>
+
                         <?php endif; ?>
                     </tbody>
                 </table>
