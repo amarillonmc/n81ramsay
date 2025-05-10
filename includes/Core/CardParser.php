@@ -449,7 +449,21 @@ class CardParser {
 
         // 其次检查卡片描述中是否有作者签名
         $desc = $card['desc'];
-        if (preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/i', $desc, $matches)) {
+
+        // 匹配多种格式的作者签名
+        // 1. DoItYourself/DIY 后跟分隔符或by，然后是作者名
+        // 2. 分隔符后跟DoItYourself/DIY，然后是空格，然后是作者名
+        // 3. DoItYourself/DIY 后直接跟作者名（无分隔符）
+        if (
+            // 格式1: DoItYourself/DIY 后跟分隔符或by，然后是作者名
+            preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/i', $desc, $matches) ||
+
+            // 格式2: 分隔符后跟DoItYourself/DIY，然后是空格，然后是作者名
+            preg_match('/[-—_:：]+\s*(?:DoItYourself|DIY)\s+([^\n\r]+)/i', $desc, $matches) ||
+
+            // 格式3: DoItYourself/DIY 后直接跟作者名（无分隔符）
+            preg_match('/(?:DoItYourself|DIY)\s+([^\n\r]+)/i', $desc, $matches)
+        ) {
             // 清理作者名称，移除可能的额外分隔符
             $authorName = trim($matches[1]);
             // 移除开头可能存在的分隔符
@@ -525,9 +539,20 @@ class CardParser {
             $authorName = trim($matches[1]);
         }
 
-        // 如果有空格，只取第一个单词（针对英文名+系列名的情况，如"Justfish Shadow Fiend"）
-        // 但要注意中文名可能有空格，所以只对包含英文字母的名称进行处理
-        if (preg_match('/[a-zA-Z]/', $authorName)) {
+        // 处理作者名中的空格
+        // 1. 如果作者名中包含特殊字符（如日文假名、全角符号等），不进行截断
+        // 2. 如果作者名是纯英文，且看起来像"名字 系列名"的格式，则截断为第一个单词
+
+        // 检查作者名是否包含特殊字符（非英文字母、数字和基本标点）
+        if (preg_match('/[^\x00-\x7F]/', $authorName)) {
+            // 包含特殊字符（如中文、日文等），不进行截断
+            // 但仍然需要处理可能的方括号等标记
+            if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)(?:\s+[\[「『\(（<《])/', $authorName, $matches)) {
+                $authorName = trim($matches[1]);
+            }
+        }
+        // 只对纯英文名称进行处理
+        else if (preg_match('/^[a-zA-Z0-9\s\.\-_]+$/', $authorName)) {
             // 检查是否有方括号等标记，如果有，则在这些标记前截断
             if (preg_match('/^(\S+)(?:\s+[\[「『\(（<《])/', $authorName, $matches)) {
                 $authorName = $matches[1];
