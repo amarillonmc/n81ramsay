@@ -1,0 +1,110 @@
+# 2023-12-01 作者管理功能实现
+
+## 功能概述
+
+实现了作者管理功能，允许管理员（等级2以上）管理卡片作者信息。主要功能包括：
+
+1. 自动识别作者：管理员可以通过按下"识别作者"按钮，预先通过已有的作者识别方法填充卡片ID区间和对应作者。
+2. 手动添加作者：管理员可以手动添加卡片ID区间及对应作者，包括作者别名、联系方式和备注等详细信息。
+3. 编辑作者信息：管理员可以编辑已有的作者信息，包括作者名称、别名、联系方式和备注。
+4. 删除作者映射：管理员可以删除不需要的作者映射。
+5. 作者识别优先级调整：在识别作者时，优先使用数据库中的作者映射，其次是卡片描述中的作者信息，最后是通过strings.conf识别的信息。
+
+## 实现内容
+
+### 1. 数据库表
+
+创建了`author_mappings`表，用于存储作者映射信息：
+
+```sql
+CREATE TABLE IF NOT EXISTS author_mappings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_prefix TEXT NOT NULL,
+    author_name TEXT NOT NULL,
+    alias TEXT,
+    contact TEXT,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (card_prefix)
+)
+```
+
+### 2. 模型类
+
+创建了`AuthorMapping`模型类，提供以下方法：
+
+- `getAllAuthorMappings()`: 获取所有作者映射
+- `getAuthorMappingByPrefix($cardPrefix)`: 根据卡片前缀获取作者映射
+- `addAuthorMapping($cardPrefix, $authorName, $alias, $contact, $notes)`: 添加作者映射
+- `updateAuthorMapping($cardPrefix, $authorName, $alias, $contact, $notes)`: 更新作者映射
+- `deleteAuthorMapping($cardPrefix)`: 删除作者映射
+- `importAuthorMappings($mappings)`: 批量导入作者映射
+- `identifyAuthorsFromStringsConf()`: 从strings.conf文件中识别作者并导入
+
+### 3. 控制器方法
+
+在`AdminController`中添加了以下方法：
+
+- `authors()`: 作者管理页面
+- `identifyAuthors()`: 识别作者
+- `addAuthor()`: 添加作者映射
+- `editAuthor()`: 编辑作者映射
+- `deleteAuthor()`: 删除作者映射
+
+### 4. 视图文件
+
+创建了以下视图文件：
+
+1. `includes/Views/admin/authors.php`：作者管理主页面，包含以下内容：
+   - 识别作者按钮
+   - 添加作者表单
+   - 作者列表表格（包含编辑和删除按钮）
+
+2. `includes/Views/admin/edit_author.php`：编辑作者页面，包含以下内容：
+   - 编辑作者表单
+   - 保存和返回按钮
+
+### 5. 导航菜单
+
+在`includes/Views/layout.php`中添加了作者管理的导航链接，仅对管理员等级2以上的用户显示。
+
+### 6. 作者识别逻辑修改
+
+修改了`CardParser::getCardAuthor()`方法，调整了作者识别的优先级：
+
+1. 首先检查数据库中的作者映射
+2. 其次检查卡片描述中的作者签名
+3. 最后根据strings.conf中的作者信息查找
+
+## 使用说明
+
+### 识别作者
+
+1. 登录管理员账号（等级2以上）
+2. 点击导航栏中的"作者管理"链接
+3. 在"识别作者"卡片中点击"识别作者"按钮
+4. 系统将自动从strings.conf文件中识别作者信息并导入
+
+### 添加作者
+
+1. 在"添加作者"卡片中填写表单
+   - 卡片前缀：输入卡片ID的前缀，通常是前3位数字
+   - 作者名称：输入作者的名称
+   - 作者别名：可选，输入作者的其他名称
+   - 联系方式：可选，输入作者的联系方式
+   - 备注：可选，输入其他相关信息
+2. 点击"添加作者"按钮
+
+### 编辑作者
+
+1. 在作者列表中找到要编辑的作者
+2. 点击对应行的"编辑"按钮
+3. 在编辑页面修改作者信息
+4. 点击"保存修改"按钮保存更改，或点击"返回"按钮取消编辑
+
+### 删除作者
+
+1. 在作者列表中找到要删除的作者
+2. 点击对应行的"删除"按钮
+3. 确认删除操作

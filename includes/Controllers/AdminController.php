@@ -24,12 +24,19 @@ class AdminController {
     private $cardModel;
 
     /**
+     * 作者映射模型
+     * @var AuthorMapping
+     */
+    private $authorMappingModel;
+
+    /**
      * 构造函数
      */
     public function __construct() {
         $this->userModel = new User();
         $this->voteModel = new Vote();
         $this->cardModel = new Card();
+        $this->authorMappingModel = new AuthorMapping();
     }
 
     /**
@@ -231,5 +238,231 @@ class AdminController {
 
         // 调用update方法
         $banlistController->update();
+    }
+
+    /**
+     * 作者管理页面
+     */
+    public function authors() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 获取所有作者映射
+        $authorMappings = $this->authorMappingModel->getAllAuthorMappings();
+
+        // 获取消息
+        $message = isset($_GET['message']) ? $_GET['message'] : '';
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/authors.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 识别作者
+     */
+    public function identifyAuthors() {
+        // 要求管理员权限（等级255以上）
+        $this->userModel->requirePermission(255);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 从strings.conf文件中识别作者并导入
+            $count = $this->authorMappingModel->identifyAuthorsFromStringsConf();
+
+            // 设置消息
+            $message = '成功识别并导入' . $count . '个作者';
+
+            // 重定向到作者管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到作者管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors');
+        exit;
+    }
+
+    /**
+     * 添加作者映射
+     */
+    public function addAuthor() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $cardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
+            $authorName = isset($_POST['author_name']) ? trim($_POST['author_name']) : '';
+            $alias = isset($_POST['alias']) ? trim($_POST['alias']) : null;
+            $contact = isset($_POST['contact']) ? trim($_POST['contact']) : null;
+            $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
+
+            // 验证数据
+            $errors = [];
+
+            if (empty($cardPrefix)) {
+                $errors[] = '请输入卡片前缀';
+            }
+
+            if (empty($authorName)) {
+                $errors[] = '请输入作者名称';
+            }
+
+            // 如果没有错误，则添加作者映射
+            if (empty($errors)) {
+                $this->authorMappingModel->addAuthorMapping($cardPrefix, $authorName, $alias, $contact, $notes);
+
+                // 设置消息
+                $message = '成功添加作者映射';
+
+                // 重定向到作者管理页面
+                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+                exit;
+            }
+
+            // 如果有错误，则显示错误信息
+            if (!empty($errors)) {
+                // 获取所有作者映射
+                $authorMappings = $this->authorMappingModel->getAllAuthorMappings();
+
+                // 渲染视图
+                include __DIR__ . '/../Views/layout.php';
+                include __DIR__ . '/../Views/admin/authors.php';
+                include __DIR__ . '/../Views/footer.php';
+                return;
+            }
+        }
+
+        // 如果不是POST请求，则重定向到作者管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors');
+        exit;
+    }
+
+    /**
+     * 删除作者映射
+     */
+    public function deleteAuthor() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $cardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
+
+            // 删除作者映射
+            $this->authorMappingModel->deleteAuthorMapping($cardPrefix);
+
+            // 设置消息
+            $message = '成功删除作者映射';
+
+            // 重定向到作者管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到作者管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors');
+        exit;
+    }
+
+    /**
+     * 编辑作者映射页面
+     */
+    public function editAuthor() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 获取卡片前缀
+        $cardPrefix = isset($_GET['card_prefix']) ? trim($_GET['card_prefix']) : '';
+
+        if (empty($cardPrefix)) {
+            // 如果没有提供卡片前缀，则重定向到作者管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors');
+            exit;
+        }
+
+        // 获取作者映射信息
+        $authorMapping = $this->authorMappingModel->getAuthorMappingByPrefix($cardPrefix);
+
+        if (!$authorMapping) {
+            // 如果找不到作者映射，则重定向到作者管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('找不到指定的作者映射'));
+            exit;
+        }
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $newCardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
+            $authorName = isset($_POST['author_name']) ? trim($_POST['author_name']) : '';
+            $alias = isset($_POST['alias']) ? trim($_POST['alias']) : null;
+            $contact = isset($_POST['contact']) ? trim($_POST['contact']) : null;
+            $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
+
+            // 验证数据
+            $errors = [];
+
+            if (empty($newCardPrefix)) {
+                $errors[] = '请输入卡片前缀';
+            }
+
+            if (empty($authorName)) {
+                $errors[] = '请输入作者名称';
+            }
+
+            // 如果没有错误，则更新作者映射
+            if (empty($errors)) {
+                // 使用新方法更新作者映射（包括卡片前缀）
+                $result = $this->authorMappingModel->updateAuthorMappingWithPrefix(
+                    $cardPrefix,
+                    $newCardPrefix,
+                    $authorName,
+                    $alias,
+                    $contact,
+                    $notes
+                );
+
+                if ($result) {
+                    // 设置成功消息
+                    $message = '成功更新作者映射';
+                } else {
+                    // 设置错误消息
+                    if ($cardPrefix !== $newCardPrefix) {
+                        $message = '更新失败：新卡片前缀已存在';
+                    } else {
+                        $message = '更新失败：未知错误';
+                    }
+                }
+
+                // 重定向到作者管理页面
+                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+                exit;
+            }
+
+            // 如果有错误，则显示错误信息
+            if (!empty($errors)) {
+                // 更新作者映射信息，以便在表单中显示用户输入的值
+                $authorMapping['card_prefix'] = $newCardPrefix;
+                $authorMapping['author_name'] = $authorName;
+                $authorMapping['alias'] = $alias;
+                $authorMapping['contact'] = $contact;
+                $authorMapping['notes'] = $notes;
+
+                // 渲染视图
+                include __DIR__ . '/../Views/layout.php';
+                include __DIR__ . '/../Views/admin/edit_author.php';
+                include __DIR__ . '/../Views/footer.php';
+                return;
+            }
+        }
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/edit_author.php';
+        include __DIR__ . '/../Views/footer.php';
     }
 }

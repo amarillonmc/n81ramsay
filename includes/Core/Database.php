@@ -1,7 +1,7 @@
 <?php
 /**
  * 数据库操作类
- * 
+ *
  * 负责与SQLite数据库交互，提供数据库操作接口
  */
 class Database {
@@ -10,16 +10,16 @@ class Database {
      * @var PDO
      */
     private $pdo;
-    
+
     /**
      * 单例实例
      * @var Database
      */
     private static $instance;
-    
+
     /**
      * 构造函数
-     * 
+     *
      * 初始化PDO连接
      */
     private function __construct() {
@@ -27,41 +27,41 @@ class Database {
             // 检查数据库文件是否存在，如果不存在则创建
             $dbFile = DB_PATH;
             $dbDir = dirname($dbFile);
-            
+
             if (!file_exists($dbDir)) {
                 mkdir($dbDir, 0755, true);
             }
-            
+
             // 创建PDO连接
             $this->pdo = new PDO('sqlite:' . $dbFile);
-            
+
             // 设置错误模式
             $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            
+
             // 启用外键约束
             $this->pdo->exec('PRAGMA foreign_keys = ON');
-            
+
             // 初始化数据库表
             $this->initTables();
-            
+
         } catch (PDOException $e) {
             die('数据库连接失败: ' . $e->getMessage());
         }
     }
-    
+
     /**
      * 获取单例实例
-     * 
+     *
      * @return Database 数据库实例
      */
     public static function getInstance() {
         if (self::$instance === null) {
             self::$instance = new self();
         }
-        
+
         return self::$instance;
     }
-    
+
     /**
      * 初始化数据库表
      */
@@ -81,7 +81,7 @@ class Database {
                 vote_link TEXT UNIQUE NOT NULL
             )
         ');
-        
+
         // 创建投票记录表
         $this->pdo->exec('
             CREATE TABLE IF NOT EXISTS vote_records (
@@ -96,7 +96,7 @@ class Database {
                 UNIQUE (vote_id, ip_address)
             )
         ');
-        
+
         // 创建投票周期表
         $this->pdo->exec('
             CREATE TABLE IF NOT EXISTS vote_cycles (
@@ -105,11 +105,26 @@ class Database {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ');
-        
+
+        // 创建作者映射表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS author_mappings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                card_prefix TEXT NOT NULL,
+                author_name TEXT NOT NULL,
+                alias TEXT,
+                contact TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (card_prefix)
+            )
+        ');
+
         // 检查投票周期表是否有数据，如果没有则插入初始数据
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM vote_cycles');
         $count = $stmt->fetchColumn();
-        
+
         if ($count == 0) {
             $this->pdo->exec('
                 INSERT INTO vote_cycles (current_cycle, updated_at)
@@ -117,10 +132,10 @@ class Database {
             ');
         }
     }
-    
+
     /**
      * 执行SQL查询
-     * 
+     *
      * @param string $sql SQL语句
      * @param array $params 参数数组
      * @return PDOStatement 查询结果
@@ -139,10 +154,10 @@ class Database {
             }
         }
     }
-    
+
     /**
      * 获取单行数据
-     * 
+     *
      * @param string $sql SQL语句
      * @param array $params 参数数组
      * @return array|false 查询结果
@@ -151,10 +166,10 @@ class Database {
         $stmt = $this->query($sql, $params);
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
-    
+
     /**
      * 获取多行数据
-     * 
+     *
      * @param string $sql SQL语句
      * @param array $params 参数数组
      * @return array 查询结果
@@ -163,10 +178,10 @@ class Database {
         $stmt = $this->query($sql, $params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    
+
     /**
      * 获取单个值
-     * 
+     *
      * @param string $sql SQL语句
      * @param array $params 参数数组
      * @return mixed 查询结果
@@ -175,10 +190,10 @@ class Database {
         $stmt = $this->query($sql, $params);
         return $stmt->fetchColumn();
     }
-    
+
     /**
      * 插入数据
-     * 
+     *
      * @param string $table 表名
      * @param array $data 数据数组
      * @return int 最后插入的ID
@@ -188,21 +203,21 @@ class Database {
         $placeholders = array_map(function($field) {
             return ':' . $field;
         }, $fields);
-        
+
         $sql = sprintf(
             'INSERT INTO %s (%s) VALUES (%s)',
             $table,
             implode(', ', $fields),
             implode(', ', $placeholders)
         );
-        
+
         $this->query($sql, $data);
         return $this->pdo->lastInsertId();
     }
-    
+
     /**
      * 更新数据
-     * 
+     *
      * @param string $table 表名
      * @param array $data 数据数组
      * @param string $where 条件语句
@@ -213,22 +228,22 @@ class Database {
         $setParts = array_map(function($field) {
             return $field . ' = :' . $field;
         }, array_keys($data));
-        
+
         $sql = sprintf(
             'UPDATE %s SET %s WHERE %s',
             $table,
             implode(', ', $setParts),
             $where
         );
-        
+
         $params = array_merge($data, $whereParams);
         $stmt = $this->query($sql, $params);
         return $stmt->rowCount();
     }
-    
+
     /**
      * 删除数据
-     * 
+     *
      * @param string $table 表名
      * @param string $where 条件语句
      * @param array $params 条件参数
@@ -239,46 +254,46 @@ class Database {
         $stmt = $this->query($sql, $params);
         return $stmt->rowCount();
     }
-    
+
     /**
      * 开始事务
      */
     public function beginTransaction() {
         $this->pdo->beginTransaction();
     }
-    
+
     /**
      * 提交事务
      */
     public function commit() {
         $this->pdo->commit();
     }
-    
+
     /**
      * 回滚事务
      */
     public function rollBack() {
         $this->pdo->rollBack();
     }
-    
+
     /**
      * 获取当前投票周期
-     * 
+     *
      * @return int 当前投票周期
      */
     public function getCurrentVoteCycle() {
         return $this->getValue('SELECT current_cycle FROM vote_cycles ORDER BY id DESC LIMIT 1');
     }
-    
+
     /**
      * 更新投票周期
-     * 
+     *
      * @param int $cycle 新的投票周期
      * @return bool 是否成功
      */
     public function updateVoteCycle($cycle) {
-        $this->update('vote_cycles', 
-            ['current_cycle' => $cycle, 'updated_at' => date('Y-m-d H:i:s')], 
+        $this->update('vote_cycles',
+            ['current_cycle' => $cycle, 'updated_at' => date('Y-m-d H:i:s')],
             'id = (SELECT id FROM vote_cycles ORDER BY id DESC LIMIT 1)'
         );
         return true;

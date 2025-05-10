@@ -431,7 +431,23 @@ class CardParser {
      * @return string 作者名称
      */
     public function getCardAuthor($card) {
-        // 首先检查卡片描述中是否有作者签名
+        // 首先检查数据库中的作者映射
+        $cardId = (string)$card['id'];
+        $db = Database::getInstance();
+
+        // 尝试使用卡片ID前缀查找数据库中的作者映射
+        if (strlen($cardId) >= 3) {
+            $cardPrefix = substr($cardId, 0, 3);
+            $authorMapping = $db->getRow('SELECT * FROM author_mappings WHERE card_prefix = :card_prefix', [
+                ':card_prefix' => $cardPrefix
+            ]);
+
+            if ($authorMapping) {
+                return $this->normalizeAuthorName($authorMapping['author_name']);
+            }
+        }
+
+        // 其次检查卡片描述中是否有作者签名
         $desc = $card['desc'];
         if (preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/i', $desc, $matches)) {
             // 清理作者名称，移除可能的额外分隔符
@@ -443,9 +459,7 @@ class CardParser {
             return $authorName;
         }
 
-        // 如果描述中没有作者信息，则根据卡片ID前缀查找
-        $cardId = (string)$card['id'];
-
+        // 最后根据strings.conf中的作者信息查找
         // 首先尝试完全匹配
         foreach ($this->authors as $prefix => $authorInfo) {
             // 确保 $prefix 是字符串类型
@@ -472,6 +486,15 @@ class CardParser {
 
         // 如果无法确定作者，返回"未知作者"
         return "未知作者";
+    }
+
+    /**
+     * 获取strings.conf文件中的作者信息
+     *
+     * @return array 作者信息数组
+     */
+    public function getAuthorsFromStringsConf() {
+        return $this->authors;
     }
 
     /**

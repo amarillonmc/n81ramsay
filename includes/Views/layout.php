@@ -32,6 +32,9 @@ $isLoggedIn = $auth->isLoggedIn();
                         <?php if ($auth->hasPermission(1)): ?>
                             <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=votes">投票管理</a></li>
                             <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
+                            <?php if ($auth->hasPermission(2)): ?>
+                                <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
+                            <?php endif; ?>
                         <?php endif; ?>
 
                         <!-- 用户信息和登出链接 -->
