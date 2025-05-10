@@ -1,0 +1,50 @@
+# 2023-12-10 20:00 - 文档整合记录
+
+## 整合内容
+
+对doc/etc/目录下的文本文件进行了整合，将分散的文档按功能和类型进行了分类整理。主要工作包括：
+
+1. 创建了以下主题文档：
+   - card_features.md - 卡片功能与修复
+   - author_management.md - 作者管理功能与修复
+   - system_fixes.md - 系统修复记录
+   - layout_fixes.md - 布局与界面修复
+   - development_log.md - 开发日志
+   - README.md - 总体文档索引
+
+2. 将所有带fix的文件的修复记录整合进相关功能文件中：
+   - 将strpos_fix.txt整合到card_features.md中
+   - 将2023-11-15-fixes系列文件整合到system_fixes.md和layout_fixes.md中
+   - 将layout-fix系列文件整合到layout_fixes.md中
+   - 将author_identification_regex_fix和author_name_special_characters_fix整合到author_management.md中
+
+3. 按照功能模块而非时间戳组织内容，使文档结构更加清晰
+
+4. 创建了完整的README.md，包含系统概述、功能模块、技术实现、文档索引、部署说明和配置说明
+
+## 删除的文件
+
+以下文件已被整合到新的文档中，可以删除：
+
+1. 2023-11-09_card_features_and_fixes.txt
+2. 2023-11-09_card_pagination.txt
+3. 2023-11-09_strpos_fix.txt
+4. 2023-11-15-fixes.txt 及其系列文件（-2到-6）
+5. 2023-11-22_*系列文件（初始计划和代码生成相关）
+6. 2023-11-23-layout-fix.txt 及其系列文件
+7. 2023-11-23-readme-update.txt
+8. 2023-12-01_*系列文件（作者管理相关）
+9. 2023-12-02_*到2023-12-09_*系列文件（作者功能相关修复）
+
+## 保留的文件
+
+1. RAMSAY_开发文档.md - 作为中文版总体文档保留
+2. 新创建的主题文档文件
+3. 本整合记录文件
+
+## 注意事项
+
+1. 所有文档均按功能模块组织，便于查找和维护
+2. 每个文档文件都包含详细的目录，方便导航
+3. README.md文件提供了所有文档的索引和系统概述
+4. 开发日志按时间顺序记录了所有开发活动，可作为历史参考
