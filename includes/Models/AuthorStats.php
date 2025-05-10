@@ -46,6 +46,8 @@ class AuthorStats {
 
             // 统计每个作者的卡片数量
             foreach ($cards as $card) {
+                // 使用 CardParser 的 getCardAuthor 方法获取作者
+                // 该方法已经实现了优先级：数据库记录 > 卡片描述文本 > strings.conf
                 $author = $this->cardParser->getCardAuthor($card);
 
                 // 如果作者名为空，使用卡片ID前三位作为作者名
@@ -168,7 +170,70 @@ class AuthorStats {
         }
 
         // 获取禁卡列表
-        return $this->cardParser->getLflist()[$standardEnvironment['header']] ?? [];
+        $banlist = $this->cardParser->getLflist()[$standardEnvironment['header']] ?? [];
+
+        // 排除 TCG 禁卡
+        $tcgBanlist = $this->getTCGBanlist();
+
+        // 从标准环境禁卡列表中移除 TCG 禁卡
+        foreach ($tcgBanlist as $cardId => $cardInfo) {
+            if (isset($banlist[$cardId])) {
+                unset($banlist[$cardId]);
+            }
+        }
+
+        return $banlist;
+    }
+
+    /**
+     * 获取 TCG 禁卡列表
+     *
+     * @return array TCG 禁卡列表
+     */
+    private function getTCGBanlist() {
+        $cardDataPath = CARD_DATA_PATH;
+        $lflistFile = $cardDataPath . '/lflist.conf';
+        $tcgBanlist = [];
+
+        if (file_exists($lflistFile)) {
+            $content = file_get_contents($lflistFile);
+            $lines = explode("\n", $content);
+
+            $inTCGSection = false;
+
+            foreach ($lines as $line) {
+                $line = trim($line);
+
+                // 检查是否进入 TCG 禁卡部分
+                if (strpos($line, '#Forbidden TCG') === 0) {
+                    $inTCGSection = true;
+                    continue;
+                }
+
+                // 检查是否离开 TCG 禁卡部分（遇到新的环境标题或其他主要部分）
+                if ($inTCGSection && (strpos($line, '!') === 0 || strpos($line, '#[') === 0)) {
+                    $inTCGSection = false;
+                    continue;
+                }
+
+                // 如果在 TCG 禁卡部分，且不是注释行或空行，则解析卡片信息
+                if ($inTCGSection && !empty($line) && strpos($line, '#') !== 0) {
+                    $parts = preg_split('/\s+/', $line, 3);
+                    if (count($parts) >= 2) {
+                        $cardId = (int)trim($parts[0]);
+                        $status = (int)trim($parts[1]);
+                        $comment = isset($parts[2]) ? trim($parts[2]) : '';
+
+                        $tcgBanlist[$cardId] = [
+                            'status' => $status,
+                            'comment' => $comment
+                        ];
+                    }
+                }
+            }
+        }
+
+        return $tcgBanlist;
     }
 
     /**
