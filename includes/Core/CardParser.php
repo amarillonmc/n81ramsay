@@ -573,11 +573,30 @@ class CardParser {
     /**
      * 获取所有卡片数据库文件
      *
+     * @param bool $excludeFiles 是否排除配置中指定的文件
      * @return array 数据库文件列表
      */
-    public function getCardDatabaseFiles() {
+    public function getCardDatabaseFiles($excludeFiles = true) {
         $cardDataPath = CARD_DATA_PATH;
         $files = glob($cardDataPath . '/*.cdb');
+
+        // 如果需要排除特定文件
+        if ($excludeFiles && defined('EXCLUDED_CARD_DATABASES')) {
+            $excludedFiles = json_decode(EXCLUDED_CARD_DATABASES, true);
+
+            if (is_array($excludedFiles) && !empty($excludedFiles)) {
+                $filteredFiles = [];
+
+                foreach ($files as $file) {
+                    $fileName = basename($file);
+                    if (!in_array($fileName, $excludedFiles)) {
+                        $filteredFiles[] = $file;
+                    }
+                }
+
+                return $filteredFiles;
+            }
+        }
 
         return $files;
     }

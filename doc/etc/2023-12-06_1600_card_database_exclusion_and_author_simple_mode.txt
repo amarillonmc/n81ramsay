@@ -1,0 +1,142 @@
+# 2023-12-06 16:00 - 卡片数据库排除和作者简略识别模式
+
+按照用户需求，添加了两个新的配置项并实现了对应的功能：
+
+1. 配置需要从 CARD_DATA_PATH 中排除的文件
+2. 配置作者榜单的简略识别模式
+
+## 主要变更
+
+### 1. 配置文件更新
+
+在 config.php 中添加了两个新的配置项：
+
+```php
+// 作者光荣榜配置
+define('AUTHOR_HALL_OF_FAME_SIMPLE_MODE', false); // 是否启用简略识别模式，仅使用管理员配置的作者列表
+define('EXCLUDED_CARD_DATABASES', json_encode(['Pre_Nerf_cards.cdb', 'SoundStageLib.cdb'])); // 需要排除的卡片数据库文件
+```
+
+### 2. CardParser 类更新
+
+修改了 `getCardDatabaseFiles()` 方法，支持排除特定的卡片数据库文件：
+
+```php
+/**
+ * 获取所有卡片数据库文件
+ *
+ * @param bool $excludeFiles 是否排除配置中指定的文件
+ * @return array 数据库文件列表
+ */
+public function getCardDatabaseFiles($excludeFiles = true) {
+    $cardDataPath = CARD_DATA_PATH;
+    $files = glob($cardDataPath . '/*.cdb');
+    
+    // 如果需要排除特定文件
+    if ($excludeFiles && defined('EXCLUDED_CARD_DATABASES')) {
+        $excludedFiles = json_decode(EXCLUDED_CARD_DATABASES, true);
+        
+        if (is_array($excludedFiles) && !empty($excludedFiles)) {
+            $filteredFiles = [];
+            
+            foreach ($files as $file) {
+                $fileName = basename($file);
+                if (!in_array($fileName, $excludedFiles)) {
+                    $filteredFiles[] = $file;
+                }
+            }
+            
+            return $filteredFiles;
+        }
+    }
+
+    return $files;
+}
+```
+
+### 3. AuthorStats 模型更新
+
+添加了对简略识别模式的支持：
+
+1. 修改了 `getAuthorStats()` 方法，根据配置决定使用哪种方式获取作者：
+
+```php
+// 根据配置决定使用哪种方式获取作者
+if (defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') && AUTHOR_HALL_OF_FAME_SIMPLE_MODE) {
+    // 简略识别模式：仅使用管理员配置的作者列表
+    $author = $this->getAuthorFromDatabase($card);
+} else {
+    // 完整识别模式：使用 CardParser 的 getCardAuthor 方法
+    // 该方法已经实现了优先级：数据库记录 > 卡片描述文本 > strings.conf
+    $author = $this->cardParser->getCardAuthor($card);
+}
+```
+
+2. 添加了 `getAuthorFromDatabase()` 方法，仅从数据库中获取作者信息：
+
+```php
+/**
+ * 仅从数据库中获取作者信息
+ *
+ * @param array $card 卡片信息
+ * @return string 作者名称
+ */
+private function getAuthorFromDatabase($card) {
+    $cardId = (string)$card['id'];
+    $db = Database::getInstance();
+    
+    // 尝试使用卡片ID前缀查找数据库中的作者映射
+    if (strlen($cardId) >= 3) {
+        $cardPrefix = substr($cardId, 0, 3);
+        $authorMapping = $db->getRow('SELECT * FROM author_mappings WHERE card_prefix = :card_prefix', [
+            ':card_prefix' => $cardPrefix
+        ]);
+        
+        if ($authorMapping) {
+            return $authorMapping['author_name'];
+        }
+    }
+    
+    // 如果在数据库中找不到作者信息，返回"未知作者"
+    return "未知作者";
+}
+```
+
+## 功能说明
+
+### 1. 卡片数据库排除功能
+
+- 默认排除 'Pre_Nerf_cards.cdb' 和 'SoundStageLib.cdb' 这两个文件
+- 可以通过修改 config.php 中的 EXCLUDED_CARD_DATABASES 配置项来自定义需要排除的文件
+- 排除的文件不会被加载到卡片列表中，也不会出现在作者榜单的统计中
+
+### 2. 作者简略识别模式
+
+- 默认为关闭状态（false）
+- 当设置为 true 时，作者榜单只会使用管理员通过作者管理功能配置的作者列表来识别作者
+- 如果在数据库中找不到对应的作者信息，则将作者标记为"未知作者"
+- 这种模式下，不会使用卡片描述文本或 strings.conf 文件中的作者信息
+
+## 使用说明
+
+### 修改排除的卡片数据库文件
+
+在 config.php 中修改 EXCLUDED_CARD_DATABASES 配置项：
+
+```php
+define('EXCLUDED_CARD_DATABASES', json_encode(['文件1.cdb', '文件2.cdb']));
+```
+
+### 启用/禁用简略识别模式
+
+在 config.php 中修改 AUTHOR_HALL_OF_FAME_SIMPLE_MODE 配置项：
+
+```php
+define('AUTHOR_HALL_OF_FAME_SIMPLE_MODE', true); // 启用简略识别模式
+```
+
+或
+
+```php
+define('AUTHOR_HALL_OF_FAME_SIMPLE_MODE', false); // 禁用简略识别模式（使用完整识别逻辑）
+```

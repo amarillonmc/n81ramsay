@@ -72,6 +72,8 @@ define('CARDS_PER_PAGE', 20); // 默认每页显示卡片数量
 // 作者光荣榜配置
 define('AUTHOR_HALL_OF_FAME_ENABLED', true); // 是否启用作者光荣榜功能
 define('AUTHOR_HALL_OF_FAME_HIGHLIGHT_THRESHOLD', 17); // 禁卡比例高亮阈值（百分比）
+define('AUTHOR_HALL_OF_FAME_SIMPLE_MODE', false); // 是否启用简略识别模式，仅使用管理员配置的作者列表
+define('EXCLUDED_CARD_DATABASES', json_encode(['Pre_Nerf_cards.cdb', 'SoundStageLib.cdb'])); // 需要排除的卡片数据库文件
 
 // 错误处理配置
 if (DEBUG_MODE) {

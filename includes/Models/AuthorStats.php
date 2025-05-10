@@ -30,11 +30,24 @@ class AuthorStats {
         // 作者统计数据
         $authorStats = [];
 
+        // 已处理的卡片ID集合，用于防止重复统计
+        $processedCardIds = [];
+
         // 获取标准环境禁卡列表
         $standardBanlist = $this->getStandardBanlist();
 
         // 获取系列信息
         $setcodes = $this->getSetcodes();
+
+        // 如果是简略识别模式，预先加载所有作者映射
+        $authorMappings = [];
+        if (defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') && AUTHOR_HALL_OF_FAME_SIMPLE_MODE) {
+            $db = Database::getInstance();
+            $mappings = $db->getRows('SELECT * FROM author_mappings');
+            foreach ($mappings as $mapping) {
+                $authorMappings[$mapping['card_prefix']] = $mapping['author_name'];
+            }
+        }
 
         // 处理每个数据库文件
         foreach ($dbFiles as $dbFile) {
@@ -46,15 +59,28 @@ class AuthorStats {
 
             // 统计每个作者的卡片数量
             foreach ($cards as $card) {
-                // 使用 CardParser 的 getCardAuthor 方法获取作者
-                // 该方法已经实现了优先级：数据库记录 > 卡片描述文本 > strings.conf
-                $author = $this->cardParser->getCardAuthor($card);
+                // 检查卡片ID是否已经处理过，防止重复统计
+                $cardId = (int)$card['id'];
+                if (isset($processedCardIds[$cardId])) {
+                    continue;
+                }
+                $processedCardIds[$cardId] = true;
+
+                // 根据配置决定使用哪种方式获取作者
+                if (defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') && AUTHOR_HALL_OF_FAME_SIMPLE_MODE) {
+                    // 简略识别模式：仅使用管理员配置的作者列表
+                    $author = $this->getAuthorFromMappings($card, $authorMappings);
+                } else {
+                    // 完整识别模式：使用 CardParser 的 getCardAuthor 方法
+                    // 该方法已经实现了优先级：数据库记录 > 卡片描述文本 > strings.conf
+                    $author = $this->cardParser->getCardAuthor($card);
+                }
 
                 // 如果作者名为空，使用卡片ID前三位作为作者名
                 if (empty(trim($author)) && $author !== "未知作者") {
-                    $cardId = (string)$card['id'];
-                    if (strlen($cardId) >= 3) {
-                        $author = "ID前缀: " . substr($cardId, 0, 3);
+                    $cardIdStr = (string)$card['id'];
+                    if (strlen($cardIdStr) >= 3) {
+                        $author = "ID前缀: " . substr($cardIdStr, 0, 3);
                     } else {
                         $author = "未知作者";
                     }
@@ -87,7 +113,7 @@ class AuthorStats {
                 ];
 
                 // 检查是否在标准环境被禁止
-                if (isset($standardBanlist[$card['id']]) && $standardBanlist[$card['id']]['status'] === 0 && !$isNo42) {
+                if (isset($standardBanlist[$cardId]) && $standardBanlist[$cardId]['status'] === 0 && !$isNo42) {
                     $authorStats[$author]['banned_cards']++;
                     $authorStats[$author]['banned_cards_list'][] = [
                         'id' => $card['id'],
@@ -326,6 +352,29 @@ class AuthorStats {
         }
 
         return $result;
+    }
+
+    /**
+     * 从预加载的作者映射中获取作者信息
+     *
+     * @param array $card 卡片信息
+     * @param array $authorMappings 预加载的作者映射
+     * @return string 作者名称
+     */
+    private function getAuthorFromMappings($card, $authorMappings) {
+        $cardId = (string)$card['id'];
+
+        // 尝试使用卡片ID前缀查找作者映射
+        if (strlen($cardId) >= 3) {
+            $cardPrefix = substr($cardId, 0, 3);
+
+            if (isset($authorMappings[$cardPrefix])) {
+                return $authorMappings[$cardPrefix];
+            }
+        }
+
+        // 如果找不到作者信息，返回"未知作者"
+        return "未知作者";
     }
 
     /**
