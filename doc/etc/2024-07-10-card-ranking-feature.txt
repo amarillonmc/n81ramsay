@@ -1,0 +1,48 @@
+卡片排行榜功能实现记录 - 2024-07-10
+
+1. 功能概述：
+   - 实现了卡组文件解析功能，可以分析DECK_LOG_PATH目录下的ydk文件
+   - 实现了卡片排行榜功能，可以统计卡片使用率并展示排行榜
+   - 支持按时间范围（一周内、两周内、一个月内、全部）筛选
+   - 支持显示前3名/前7名/前10名卡片
+   - 实现了缓存机制，避免频繁重新生成统计数据
+   - 管理员可以强制更新统计信息
+
+2. 新增文件：
+   - includes/Core/DeckParser.php：卡组文件解析类
+   - includes/Core/CardRanking.php：卡片排行榜核心类
+   - includes/Models/CardRanking.php：卡片排行榜模型
+   - includes/Controllers/CardRankingController.php：卡片排行榜控制器
+   - includes/Views/card_ranking/index.php：卡片排行榜视图
+
+3. 修改文件：
+   - config.php：添加卡片排行榜相关配置
+   - index.php：添加卡片排行榜控制器映射
+   - includes/Views/layout.php：添加卡片排行榜导航链接
+   - includes/Controllers/CardController.php：修改卡片详情页面，针对TCG卡片进行特殊处理
+   - includes/Views/cards/detail.php：修改卡片详情页面，针对TCG卡片进行特殊处理
+
+4. 配置项说明：
+   - CARD_RANKING_ENABLED：是否启用卡片排行榜功能，默认为false
+   - CARD_RANKING_CACHE_DAYS：卡片排行榜缓存天数，默认为7天
+   - TCG_CARD_DATA_PATH：TCG卡片数据库路径，默认为assets/cards.cdb
+   - ALLOW_TCG_CARD_VOTING：是否允许对TCG卡发起禁卡投票，默认为false
+   - DECK_LOG_PATH：卡组文件存放路径，默认为/deck_log
+
+5. 卡组文件解析说明：
+   - 支持解析文件名格式：YYYY-MM-DD HH-mm-ss [进程ID] [位置] [客户端IP最后几位] [玩家名].ydk
+   - 支持解析卡组文件内容，区分主卡组和副卡组
+   - 统计每张卡的使用情况，包括投入1/2/3数量和SIDE投入数量
+
+6. 卡片排行榜功能说明：
+   - 支持按时间范围筛选：一周内、两周内、一个月内、全部
+   - 支持显示前3名/前7名/前10名卡片
+   - 显示卡片ID、卡名、类别、投入1/2/3数量、SIDE投入数量和使用率
+   - 卡名超链接至卡片详情页面
+   - 管理员可以通过"更新排行榜"按钮强制更新统计信息
+
+7. TCG卡片处理说明：
+   - 如果卡片ID在DIY卡数据库中找不到，会从TCG_CARD_DATA_PATH指定的数据库中查找
+   - TCG卡片详情页面不显示卡图
+   - 如果ALLOW_TCG_CARD_VOTING为false，则不显示投票按钮
+   - TCG卡片的系列信息从DB_STRINGS_PATH中的##setname部分获取

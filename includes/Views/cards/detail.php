@@ -4,7 +4,13 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-4">
-                <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <?php if (!$isTcgCard): // 只有非TCG卡片才显示卡图 ?>
+                    <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <?php else: ?>
+                    <div class="tcg-card-placeholder">
+                        <p>TCG卡片 - 无图片显示</p>
+                    </div>
+                <?php endif; ?>
             </div>
             <div class="col-md-8">
                 <table class="table">
@@ -89,7 +95,9 @@
                 </table>
 
                 <div class="mt-3">
-                    <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $card['id']; ?>" class="btn">发起投票</a>
+                    <?php if (!$isTcgCard || ($isTcgCard && $allowTcgCardVoting)): // 非TCG卡片或允许对TCG卡投票时显示投票按钮 ?>
+                        <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $card['id']; ?>" class="btn">发起投票</a>
+                    <?php endif; ?>
                     <a href="<?php echo BASE_URL; ?>" class="btn btn-secondary">返回列表</a>
                 </div>
             </div>

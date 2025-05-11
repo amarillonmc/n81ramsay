@@ -108,6 +108,12 @@ class CardController {
             exit;
         }
 
+        // 判断是否为TCG卡片
+        $isTcgCard = false;
+        if (isset($card['database_file']) && $card['database_file'] === basename(TCG_CARD_DATA_PATH)) {
+            $isTcgCard = true;
+        }
+
         // 获取环境列表
         $environments = Utils::getEnvironments();
 
@@ -117,6 +123,9 @@ class CardController {
             $header = $env['header'];
             $limitStatus[$header] = $this->cardModel->getCardLimitStatus($cardId, $header);
         }
+
+        // 是否允许对TCG卡发起禁卡投票
+        $allowTcgCardVoting = defined('ALLOW_TCG_CARD_VOTING') ? ALLOW_TCG_CARD_VOTING : false;
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';

@@ -20,3 +20,5 @@
 
 // 示例：修改服务器记录卡组文件存放位置
 // define('DECK_LOG_PATH', __DIR__ . '/custom/deck_logs');
+
+define('CARD_RANKING_ENABLED', true);

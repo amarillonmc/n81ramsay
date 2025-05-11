@@ -140,6 +140,14 @@ if (!defined('EXCLUDED_CARD_DATABASES')) {
     define('EXCLUDED_CARD_DATABASES', json_encode(['Pre_Nerf_cards.cdb', 'SoundStageLib.cdb'])); // 需要排除的卡片数据库文件
 }
 
+// 卡片排行榜配置
+if (!defined('CARD_RANKING_ENABLED')) {
+    define('CARD_RANKING_ENABLED', false); // 是否启用卡片排行榜功能
+}
+if (!defined('CARD_RANKING_CACHE_DAYS')) {
+    define('CARD_RANKING_CACHE_DAYS', 7); // 卡片排行榜缓存天数，超过此天数将重新生成
+}
+
 // 错误处理配置
 if (defined('DEBUG_MODE') && DEBUG_MODE) {
     ini_set('display_errors', 1);

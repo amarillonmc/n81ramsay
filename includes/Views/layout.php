@@ -23,6 +23,10 @@ $isLoggedIn = $auth->isLoggedIn();
                     <li><a href="<?php echo BASE_URL; ?>">卡片检索</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=vote">投票概览</a></li>
 
+                    <?php if (defined('CARD_RANKING_ENABLED') && CARD_RANKING_ENABLED): ?>
+                        <li><a href="<?php echo BASE_URL; ?>?controller=card_ranking">卡片排行榜</a></li>
+                    <?php endif; ?>
+
                     <?php if (defined('AUTHOR_HALL_OF_FAME_ENABLED') && AUTHOR_HALL_OF_FAME_ENABLED): ?>
                         <li><a href="<?php echo BASE_URL; ?>?controller=author">作者光荣榜</a></li>
                     <?php endif; ?>
