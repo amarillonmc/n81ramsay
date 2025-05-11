@@ -62,12 +62,18 @@
                         <th>卡片描述</th>
                         <td><?php echo nl2br(Utils::escapeHtml($card['desc'])); ?></td>
                     </tr>
-                    <?php if (!empty($card['author'])): ?>
                     <tr>
                         <th>卡片作者</th>
-                        <td><?php echo Utils::escapeHtml($card['author']); ?></td>
+                        <td>
+                            <?php if ($isTcgCard): ?>
+                                TCG/OCG卡片
+                            <?php elseif (!empty($card['author'])): ?>
+                                <?php echo Utils::escapeHtml($card['author']); ?>
+                            <?php else: ?>
+                                未知
+                            <?php endif; ?>
+                        </td>
                     </tr>
-                    <?php endif; ?>
                     <tr>
                         <th>数据库文件</th>
                         <td><?php echo Utils::escapeHtml($card['database_file']); ?></td>

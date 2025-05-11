@@ -4,10 +4,10 @@
  *
  * 处理卡片排行榜相关的数据操作
  */
-class CardRanking {
+class CardRankingModel {
     /**
      * 卡片排行榜核心类
-     * @var CardRanking
+     * @var \CardRanking
      */
     private $cardRankingCore;
 
@@ -15,6 +15,8 @@ class CardRanking {
      * 构造函数
      */
     public function __construct() {
+        // 确保核心类已加载
+        require_once __DIR__ . '/../Core/CardRanking.php';
         $this->cardRankingCore = \CardRanking::getInstance();
     }
 

@@ -7,7 +7,7 @@
 class CardRankingController {
     /**
      * 卡片排行榜模型
-     * @var CardRanking
+     * @var CardRankingModel
      */
     private $cardRankingModel;
 
@@ -21,7 +21,15 @@ class CardRankingController {
      * 构造函数
      */
     public function __construct() {
-        $this->cardRankingModel = new CardRanking();
+        // 确保所有必要的类已加载
+        if (!class_exists('DeckParser')) {
+            require_once __DIR__ . '/../Core/DeckParser.php';
+        }
+
+        // 确保模型类已加载
+        require_once __DIR__ . '/../Models/CardRanking.php';
+
+        $this->cardRankingModel = new CardRankingModel();
         $this->userModel = new User();
     }
 

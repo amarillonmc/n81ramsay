@@ -766,7 +766,9 @@ class CardParser {
      * @return array|null 卡片信息
      */
     public function getCardById($cardId) {
+        // 首先从DIY卡数据库中查找
         $dbFiles = $this->getCardDatabaseFiles();
+        $card = null;
 
         foreach ($dbFiles as $dbFile) {
             $db = $this->getCardDatabase($dbFile);
@@ -802,6 +804,46 @@ class CardParser {
                 }
             } catch (PDOException $e) {
                 error_log('获取卡片数据失败: ' . $e->getMessage());
+            }
+        }
+
+        // 如果在DIY卡数据库中找不到，则从TCG卡数据库中查找
+        if (!$card && defined('TCG_CARD_DATA_PATH') && file_exists(TCG_CARD_DATA_PATH)) {
+            try {
+                $tcgDb = new PDO('sqlite:' . TCG_CARD_DATA_PATH);
+                $tcgDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+                $sql = "
+                    SELECT
+                        d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                        t.name, t.desc
+                    FROM
+                        datas d
+                    JOIN
+                        texts t ON d.id = t.id
+                    WHERE
+                        d.id = :id
+                ";
+
+                $stmt = $tcgDb->prepare($sql);
+                $stmt->execute(['id' => $cardId]);
+                $card = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($card) {
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode']);
+                    $card['type_text'] = $this->getTypeText($card['type']);
+                    $card['race_text'] = $this->getRaceText($card['race']);
+                    $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                    $card['level_text'] = $this->getLevelText($card['level']);
+                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['database_file'] = basename(TCG_CARD_DATA_PATH);
+                    // TCG卡片不设置作者
+                    $card['author'] = '';
+
+                    return $card;
+                }
+            } catch (PDOException $e) {
+                error_log('获取TCG卡片数据失败: ' . $e->getMessage());
             }
         }
 

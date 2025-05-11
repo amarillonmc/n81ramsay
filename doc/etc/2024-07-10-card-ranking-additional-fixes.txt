@@ -1,0 +1,32 @@
+卡片排行榜功能额外修复记录 - 2024-07-10
+
+1. 问题描述：
+   在应用之前的修复后，仍然出现错误：
+   "Fatal error: Uncaught Error: Call to private CardRanking::__construct() from context 'CardRankingController'"
+
+2. 根本原因分析：
+   - 类名冲突：模型类 `CardRanking` 和核心类 `\CardRanking` 名称相同，导致PHP解释器混淆
+   - 类加载顺序：即使使用完全限定名称，PHP仍然可能混淆这两个类
+   - 命名空间问题：没有使用命名空间进一步区分这两个类
+
+3. 解决方案：
+   - 重命名模型类：将 `CardRanking` 模型类重命名为 `CardRankingModel`，避免与核心类名称冲突
+   - 显式加载：在控制器中显式加载模型类，确保正确的加载顺序
+   - 更新类型提示：更新控制器中的类型提示，使用新的模型类名
+
+4. 修改文件：
+   - includes/Models/CardRanking.php：将类名从 `CardRanking` 改为 `CardRankingModel`
+   - includes/Controllers/CardRankingController.php：
+     - 更新类型提示：`@var CardRankingModel`
+     - 显式加载模型类：`require_once __DIR__ . '/../Models/CardRanking.php'`
+     - 使用新的类名创建实例：`new CardRankingModel()`
+
+5. 注意事项：
+   - 这种修复方法避免了类名冲突，使代码更加清晰
+   - 显式加载确保了正确的类加载顺序
+   - 更新类型提示有助于IDE提供更准确的代码补全和错误检查
+
+6. 后续建议：
+   - 考虑在未来的开发中使用命名空间，进一步避免类名冲突
+   - 为核心类和模型类使用不同的命名约定，例如以"Core"或"Model"作为后缀
+   - 在大型项目中实现自动加载机制，减少手动加载类的需要
