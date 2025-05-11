@@ -46,13 +46,28 @@ class CardRankingController {
         // 获取请求参数
         $timeRange = isset($_GET['time_range']) ? $_GET['time_range'] : 'week';
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+        $detailLimit = isset($_GET['detail_limit']) ? (int)$_GET['detail_limit'] : 10;
 
         // 验证参数
         $timeRange = $this->cardRankingModel->validateTimeRange($timeRange);
         $limit = $this->cardRankingModel->validateLimit($limit);
 
+        // 获取详细统计显示数量选项
+        $detailLimitOptions = $this->cardRankingModel->getDetailLimitOptions();
+
+        // 验证详细统计显示数量
+        if (!array_key_exists($detailLimit, $detailLimitOptions)) {
+            $detailLimit = 10; // 默认值
+        }
+
         // 获取卡片排行榜数据
         $rankingData = $this->cardRankingModel->getCardRanking($timeRange, $limit);
+
+        // 处理详细统计数据
+        $detailCards = $rankingData['all_cards'];
+        if ($detailLimit > 0) {
+            $detailCards = array_slice($detailCards, 0, $detailLimit);
+        }
 
         // 获取时间范围选项
         $timeRangeOptions = $this->cardRankingModel->getTimeRangeOptions();

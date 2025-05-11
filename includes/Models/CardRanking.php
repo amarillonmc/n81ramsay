@@ -56,6 +56,20 @@ class CardRankingModel {
     }
 
     /**
+     * 获取可用的详细统计显示数量选项
+     *
+     * @return array 详细统计显示数量选项
+     */
+    public function getDetailLimitOptions() {
+        return [
+            10 => '前10名',
+            30 => '前30名',
+            50 => '前50名',
+            0 => '全部'
+        ];
+    }
+
+    /**
      * 验证时间范围
      *
      * @param string $timeRange 时间范围

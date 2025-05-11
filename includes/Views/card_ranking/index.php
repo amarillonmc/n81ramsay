@@ -14,7 +14,7 @@
         <div class="filter-options">
             <form action="<?php echo BASE_URL; ?>" method="get" class="form-inline">
                 <input type="hidden" name="controller" value="card_ranking">
-                
+
                 <div class="form-group">
                     <label for="time_range">时间范围：</label>
                     <select id="time_range" name="time_range" class="form-control" onchange="this.form.submit()">
@@ -25,13 +25,24 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                
+
                 <div class="form-group ml-3">
-                    <label for="limit">显示数量：</label>
+                    <label for="limit">热门卡片显示：</label>
                     <select id="limit" name="limit" class="form-control" onchange="this.form.submit()">
                         <?php foreach ($limitOptions as $value): ?>
                             <option value="<?php echo $value; ?>" <?php echo $limit === $value ? 'selected' : ''; ?>>
                                 前<?php echo $value; ?>名
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-group ml-3">
+                    <label for="detail_limit">详细统计显示：</label>
+                    <select id="detail_limit" name="detail_limit" class="form-control" onchange="this.form.submit()">
+                        <?php foreach ($detailLimitOptions as $value => $label): ?>
+                            <option value="<?php echo $value; ?>" <?php echo $detailLimit === $value ? 'selected' : ''; ?>>
+                                <?php echo $label; ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -60,6 +71,10 @@
         <div class="table-responsive mt-4">
             <h3>详细统计</h3>
             <p>总计分析卡组数量: <?php echo $rankingData['total_decks']; ?></p>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span>显示: <?php echo $detailLimitOptions[$detailLimit]; ?></span>
+                <span>总计卡片数量: <?php echo count($rankingData['all_cards']); ?></span>
+            </div>
             <table class="table table-striped">
                 <thead>
                     <tr>
@@ -75,7 +90,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($rankingData['top_cards'] as $index => $card): ?>
+                    <?php foreach ($detailCards as $index => $card): ?>
                         <tr>
                             <td><?php echo $index + 1; ?></td>
                             <td><?php echo $card['id']; ?></td>
