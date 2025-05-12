@@ -7,13 +7,28 @@
         </div>
     <?php endif; ?>
 
+    <?php if (isset($_SESSION['author_debug_message'])): ?>
+        <div class="alert alert-success">
+            <?php
+                echo Utils::escapeHtml($_SESSION['author_debug_message']);
+                // 显示后清除消息
+                unset($_SESSION['author_debug_message']);
+            ?>
+        </div>
+    <?php endif; ?>
+
     <div class="card">
         <div class="card-header">
             <div class="d-flex justify-content-between align-items-center">
                 <span>作者光荣榜 - 生成时间：<?php echo $generatedTime; ?></span>
 
                 <?php if ($this->userModel->hasPermission(1)): ?>
-                    <a href="<?php echo BASE_URL; ?>?controller=author&action=update" class="btn btn-primary">更新榜单</a>
+                    <div class="btn-group">
+                        <a href="<?php echo BASE_URL; ?>?controller=author&action=update" class="btn btn-primary">更新榜单</a>
+                        <?php if (defined('DEBUG_MODE') && DEBUG_MODE): ?>
+                            <a href="<?php echo BASE_URL; ?>?controller=author&action=debug" class="btn btn-warning">生成调试内容</a>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>

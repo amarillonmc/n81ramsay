@@ -1,0 +1,84 @@
+# 作者名称编码处理修复
+
+## 问题描述
+
+在作者光荣榜功能中，发现了与编码相关的问题，导致榜单中出现空行或乱码。这些问题主要表现在：
+
+1. 作者名称中包含中文或其他非ASCII字符时，可能无法正确处理
+2. 不同编码格式的作者名称可能导致识别和显示问题
+3. 作者名称中的特殊字符和控制字符可能导致系统错误
+
+## 修复内容
+
+### 1. CardParser类中的normalizeAuthorName方法改进
+
+修改了`normalizeAuthorName`方法，增强了对各种编码的支持：
+
+- 添加了编码检查和转换：使用`mb_check_encoding`和`mb_convert_encoding`确保作者名称使用UTF-8编码
+- 为所有字符串操作添加了UTF-8编码参数：如`mb_strpos`、`mb_substr`等
+- 为所有正则表达式添加了Unicode支持标志`/u`
+- 添加了控制字符过滤：使用`preg_replace('/[\x00-\x1F\x7F]/u', '', $authorName)`移除可能导致问题的控制字符
+
+```php
+// 确保使用UTF-8编码处理
+if (!mb_check_encoding($authorName, 'UTF-8')) {
+    // 尝试转换编码
+    $authorName = mb_convert_encoding($authorName, 'UTF-8', 'auto');
+}
+
+// 过滤掉可能导致问题的控制字符
+$authorName = preg_replace('/[\x00-\x1F\x7F]/u', '', $authorName);
+```
+
+### 2. CardParser类中的getCardAuthor方法改进
+
+修改了`getCardAuthor`方法，增强了对各种编码的支持：
+
+- 为所有正则表达式添加了Unicode支持标志`/u`和不区分大小写标志`/i`
+- 添加了编码检查和转换，确保从卡片描述中提取的作者名称使用UTF-8编码
+- 使用Unicode感知的正则表达式处理分隔符和特殊字符
+
+```php
+// 确保使用UTF-8编码处理
+if (!mb_check_encoding($matches[1], 'UTF-8')) {
+    // 尝试转换编码
+    $matches[1] = mb_convert_encoding($matches[1], 'UTF-8', 'auto');
+}
+
+// 移除开头可能存在的分隔符
+$authorName = preg_replace('/^[-—_:：\s]+/u', '', $authorName);
+```
+
+### 3. AuthorStats类中的getAuthorStats方法改进
+
+修改了`getAuthorStats`方法，增强了对各种编码的支持：
+
+- 添加了编码检查和转换，确保作者名称使用UTF-8编码
+- 过滤掉可能导致问题的控制字符
+- 使用Unicode感知的字符串函数，如`mb_strpos`代替`strpos`
+
+```php
+// 确保作者名使用UTF-8编码
+if (!mb_check_encoding($author, 'UTF-8')) {
+    // 尝试转换编码
+    $author = mb_convert_encoding($author, 'UTF-8', 'auto');
+}
+
+// 过滤掉可能导致问题的控制字符
+$author = preg_replace('/[\x00-\x1F\x7F]/u', '', $author);
+
+// 使用Unicode感知的函数
+'is_unknown' => ($author === "未知作者" || mb_strpos($author, "ID前缀: ", 0, 'UTF-8') === 0)
+```
+
+## 技术说明
+
+1. **多字节字符串处理**：使用PHP的`mb_*`系列函数处理多字节字符串，确保正确处理中文、日文等非ASCII字符。
+
+2. **Unicode正则表达式**：为所有正则表达式添加`/u`标志，启用Unicode模式，确保正确处理多字节字符。
+
+3. **编码检查与转换**：使用`mb_check_encoding`检查字符串编码，使用`mb_convert_encoding`转换编码，确保所有字符串使用统一的UTF-8编码。
+
+4. **控制字符过滤**：使用正则表达式过滤掉ASCII控制字符（0x00-0x1F和0x7F），这些字符可能导致显示问题或系统错误。
+
+这些修复应该能解决作者光荣榜中的编码问题，确保正确处理和显示各种语言的作者名称。

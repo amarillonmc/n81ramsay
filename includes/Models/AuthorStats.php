@@ -76,6 +76,15 @@ class AuthorStats {
                     $author = $this->cardParser->getCardAuthor($card);
                 }
 
+                // 确保作者名使用UTF-8编码
+                if (!mb_check_encoding($author, 'UTF-8')) {
+                    // 尝试转换编码
+                    $author = mb_convert_encoding($author, 'UTF-8', 'auto');
+                }
+
+                // 过滤掉可能导致问题的控制字符
+                $author = preg_replace('/[\x00-\x1F\x7F]/u', '', $author);
+
                 // 如果作者名为空，使用卡片ID前三位作为作者名
                 if (empty(trim($author)) && $author !== "未知作者") {
                     $cardIdStr = (string)$card['id'];
@@ -94,7 +103,7 @@ class AuthorStats {
                         'banned_cards' => 0,
                         'banned_series' => 0,
                         'banned_percentage' => 0,
-                        'is_unknown' => ($author === "未知作者" || strpos($author, "ID前缀: ") === 0),
+                        'is_unknown' => ($author === "未知作者" || mb_strpos($author, "ID前缀: ", 0, 'UTF-8') === 0),
                         'cards' => [],
                         'banned_cards_list' => [],
                         'banned_series_list' => []

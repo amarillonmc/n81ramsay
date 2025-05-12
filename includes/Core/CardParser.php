@@ -456,18 +456,24 @@ class CardParser {
         // 3. DoItYourself/DIY 后直接跟作者名（无分隔符）
         if (
             // 格式1: DoItYourself/DIY 后跟分隔符或by，然后是作者名
-            preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/i', $desc, $matches) ||
+            preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/iu', $desc, $matches) ||
 
             // 格式2: 分隔符后跟DoItYourself/DIY，然后是空格，然后是作者名
-            preg_match('/[-—_:：]+\s*(?:DoItYourself|DIY)\s+([^\n\r]+)/i', $desc, $matches) ||
+            preg_match('/[-—_:：]+\s*(?:DoItYourself|DIY)\s+([^\n\r]+)/iu', $desc, $matches) ||
 
             // 格式3: DoItYourself/DIY 后直接跟作者名（无分隔符）
-            preg_match('/(?:DoItYourself|DIY)\s+([^\n\r]+)/i', $desc, $matches)
+            preg_match('/(?:DoItYourself|DIY)\s+([^\n\r]+)/iu', $desc, $matches)
         ) {
+            // 确保使用UTF-8编码处理
+            if (!mb_check_encoding($matches[1], 'UTF-8')) {
+                // 尝试转换编码
+                $matches[1] = mb_convert_encoding($matches[1], 'UTF-8', 'auto');
+            }
+
             // 清理作者名称，移除可能的额外分隔符
             $authorName = trim($matches[1]);
             // 移除开头可能存在的分隔符
-            $authorName = preg_replace('/^[-—_:：\s]+/', '', $authorName);
+            $authorName = preg_replace('/^[-—_:：\s]+/u', '', $authorName);
             // 提取作者名，去除后面可能的系列名或其他文本（如"图侵删歉"）
             $authorName = $this->normalizeAuthorName($authorName);
             return $authorName;
@@ -518,6 +524,12 @@ class CardParser {
      * @return string 规范化后的作者名称
      */
     private function normalizeAuthorName($authorName) {
+        // 确保使用UTF-8编码处理
+        if (!mb_check_encoding($authorName, 'UTF-8')) {
+            // 尝试转换编码
+            $authorName = mb_convert_encoding($authorName, 'UTF-8', 'auto');
+        }
+
         // 去除两端空白
         $authorName = trim($authorName);
 
@@ -529,13 +541,13 @@ class CardParser {
         // 移除"图侵删歉"等常见附加文本
         $commonSuffixes = ['图侵删歉', '图侵删', '侵删', '图源网络', '图源', '图片来源网络'];
         foreach ($commonSuffixes as $suffix) {
-            if (mb_strpos($authorName, $suffix) !== false) {
-                $authorName = trim(mb_substr($authorName, 0, mb_strpos($authorName, $suffix)));
+            if (mb_strpos($authorName, $suffix, 0, 'UTF-8') !== false) {
+                $authorName = trim(mb_substr($authorName, 0, mb_strpos($authorName, $suffix, 0, 'UTF-8'), 'UTF-8'));
             }
         }
 
         // 提取方括号、尖括号或引号前的作者名
-        if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)/', $authorName, $matches)) {
+        if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)/u', $authorName, $matches)) {
             $authorName = trim($matches[1]);
         }
 
@@ -544,25 +556,25 @@ class CardParser {
         // 2. 如果作者名是纯英文，且看起来像"名字 系列名"的格式，则截断为第一个单词
 
         // 检查作者名是否包含特殊字符（非英文字母、数字和基本标点）
-        if (preg_match('/[^\x00-\x7F]/', $authorName)) {
+        if (preg_match('/[^\x00-\x7F]/u', $authorName)) {
             // 包含特殊字符（如中文、日文等），不进行截断
             // 但仍然需要处理可能的方括号等标记
-            if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)(?:\s+[\[「『\(（<《])/', $authorName, $matches)) {
+            if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)(?:\s+[\[「『\(（<《])/u', $authorName, $matches)) {
                 $authorName = trim($matches[1]);
             }
         }
         // 只对纯英文名称进行处理
-        else if (preg_match('/^[a-zA-Z0-9\s\.\-_]+$/', $authorName)) {
+        else if (preg_match('/^[a-zA-Z0-9\s\.\-_]+$/u', $authorName)) {
             // 检查是否有方括号等标记，如果有，则在这些标记前截断
-            if (preg_match('/^(\S+)(?:\s+[\[「『\(（<《])/', $authorName, $matches)) {
+            if (preg_match('/^(\S+)(?:\s+[\[「『\(（<《])/u', $authorName, $matches)) {
                 $authorName = $matches[1];
             }
             // 否则，检查是否是"名字 系列名"的格式
-            else if (preg_match('/^(\S+)(?:\s+.+)/', $authorName, $matches)) {
+            else if (preg_match('/^(\S+)(?:\s+.+)/u', $authorName, $matches)) {
                 // 只有当第一个单词看起来像一个完整的名字时才截断
                 // 例如，"Justfish Shadow"应该截断为"Justfish"
                 // 但"Lin Yanjun"不应该截断
-                if (!preg_match('/^[A-Z][a-z]+\s+[A-Z][a-z]+$/', $authorName)) {
+                if (!preg_match('/^[A-Z][a-z]+\s+[A-Z][a-z]+$/u', $authorName)) {
                     $authorName = $matches[1];
                 }
             }
@@ -572,6 +584,9 @@ class CardParser {
         if (empty(trim($authorName))) {
             return "未知作者";
         }
+
+        // 过滤掉可能导致问题的控制字符
+        $authorName = preg_replace('/[\x00-\x1F\x7F]/u', '', $authorName);
 
         return $authorName;
     }
