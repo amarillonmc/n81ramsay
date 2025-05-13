@@ -65,7 +65,11 @@
                                 ?>
                                 <tr<?php echo !empty($rowClass) ? ' class="' . $rowClass . '"' : ''; ?>>
                                     <td><?php echo $stats['rank']; ?></td>
-                                    <td><?php echo Utils::escapeHtml($author); ?></td>
+                                    <td>
+                                        <a href="<?php echo BASE_URL; ?>?controller=author&action=detail&name=<?php echo urlencode($author); ?>">
+                                            <?php echo Utils::escapeHtml($author); ?>
+                                        </a>
+                                    </td>
                                     <td><?php echo $stats['total_cards']; ?></td>
                                     <td><?php echo $stats['banned_cards']; ?></td>
                                     <td><?php echo $stats['banned_percentage']; ?>%</td>

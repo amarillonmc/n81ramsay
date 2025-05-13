@@ -106,6 +106,81 @@ class AuthorController {
     }
 
     /**
+     * 作者详情页面
+     */
+    public function detail() {
+        // 检查功能是否启用
+        if (!AUTHOR_HALL_OF_FAME_ENABLED) {
+            header('Location: ' . BASE_URL);
+            exit;
+        }
+
+        // 获取作者名称
+        $authorName = isset($_GET['name']) ? urldecode($_GET['name']) : '';
+
+        if (empty($authorName)) {
+            header('Location: ' . BASE_URL . '?controller=author');
+            exit;
+        }
+
+        // 获取分页参数
+        $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+        $perPage = isset($_GET['per_page']) ? intval($_GET['per_page']) : 30;
+
+        // 验证每页显示数量
+        $validPerPageOptions = [30, 50, 0]; // 0表示显示全部
+        if (!in_array($perPage, $validPerPageOptions)) {
+            $perPage = 30; // 默认值
+        }
+
+        // 获取当前标签页
+        $tab = isset($_GET['tab']) ? $_GET['tab'] : 'all';
+
+        // 获取作者统计数据
+        $authorStats = $this->authorStatsModel->getAuthorStats();
+
+        // 检查作者是否存在
+        if (!isset($authorStats[$authorName])) {
+            header('Location: ' . BASE_URL . '?controller=author');
+            exit;
+        }
+
+        // 获取作者信息
+        $author = $authorStats[$authorName];
+
+        // 根据标签页获取不同的卡片列表
+        if ($tab === 'banned') {
+            // 获取作者的被禁卡片
+            $result = $this->authorStatsModel->getAuthorBannedCards($authorName, $page, $perPage);
+            $cards = $result['cards'];
+            $pagination = [
+                'total' => $result['total'],
+                'page' => $result['page'],
+                'per_page' => $result['per_page'],
+                'total_pages' => $result['total_pages']
+            ];
+        } else {
+            // 获取作者的所有卡片
+            $result = $this->authorStatsModel->getAuthorCards($authorName, $page, $perPage);
+            $cards = $result['cards'];
+            $pagination = [
+                'total' => $result['total'],
+                'page' => $result['page'],
+                'per_page' => $result['per_page'],
+                'total_pages' => $result['total_pages']
+            ];
+        }
+
+        // 设置每页显示选项
+        $perPageOptions = $validPerPageOptions;
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/authors/detail.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
      * 生成作者光荣榜调试内容
      */
     public function debug() {

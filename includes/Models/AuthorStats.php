@@ -472,4 +472,114 @@ class AuthorStats {
 
         return true;
     }
+
+    /**
+     * 获取作者的所有卡片
+     *
+     * @param string $authorName 作者名称
+     * @param int $page 页码
+     * @param int $perPage 每页显示数量
+     * @return array 包含卡片列表和分页信息的数组
+     */
+    public function getAuthorCards($authorName, $page = 1, $perPage = 30) {
+        // 获取作者统计数据
+        $authorStats = $this->getAuthorStats();
+
+        // 检查作者是否存在
+        if (!isset($authorStats[$authorName])) {
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => $page,
+                'per_page' => $perPage,
+                'total_pages' => 0
+            ];
+        }
+
+        // 获取作者的所有卡片
+        $allCards = [];
+        foreach ($authorStats[$authorName]['cards'] as $cardInfo) {
+            // 获取完整的卡片信息
+            $card = $this->cardParser->getCardById($cardInfo['id']);
+            if ($card) {
+                $allCards[] = $card;
+            }
+        }
+
+        // 计算分页信息
+        $total = count($allCards);
+        $totalPages = $perPage > 0 ? ceil($total / $perPage) : 1;
+
+        // 获取当前页的卡片
+        if ($perPage > 0) {
+            $offset = ($page - 1) * $perPage;
+            $cards = array_slice($allCards, $offset, $perPage);
+        } else {
+            // 如果perPage为0，则显示所有卡片
+            $cards = $allCards;
+        }
+
+        return [
+            'cards' => $cards,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages
+        ];
+    }
+
+    /**
+     * 获取作者的所有被禁卡片
+     *
+     * @param string $authorName 作者名称
+     * @param int $page 页码
+     * @param int $perPage 每页显示数量
+     * @return array 包含卡片列表和分页信息的数组
+     */
+    public function getAuthorBannedCards($authorName, $page = 1, $perPage = 30) {
+        // 获取作者统计数据
+        $authorStats = $this->getAuthorStats();
+
+        // 检查作者是否存在
+        if (!isset($authorStats[$authorName])) {
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => $page,
+                'per_page' => $perPage,
+                'total_pages' => 0
+            ];
+        }
+
+        // 获取作者的所有被禁卡片
+        $allBannedCards = [];
+        foreach ($authorStats[$authorName]['banned_cards_list'] as $cardInfo) {
+            // 获取完整的卡片信息
+            $card = $this->cardParser->getCardById($cardInfo['id']);
+            if ($card) {
+                $allBannedCards[] = $card;
+            }
+        }
+
+        // 计算分页信息
+        $total = count($allBannedCards);
+        $totalPages = $perPage > 0 ? ceil($total / $perPage) : 1;
+
+        // 获取当前页的卡片
+        if ($perPage > 0) {
+            $offset = ($page - 1) * $perPage;
+            $cards = array_slice($allBannedCards, $offset, $perPage);
+        } else {
+            // 如果perPage为0，则显示所有卡片
+            $cards = $allBannedCards;
+        }
+
+        return [
+            'cards' => $cards,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages
+        ];
+    }
 }
