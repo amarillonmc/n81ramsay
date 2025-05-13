@@ -26,10 +26,11 @@ class CardRankingModel {
      * @param string $timeRange 时间范围 (week, two_weeks, month, all)
      * @param int $limit 显示数量限制
      * @param bool $forceUpdate 是否强制更新
+     * @param bool $diyOnly 是否只显示DIY卡片
      * @return array 卡片排行榜数据
      */
-    public function getCardRanking($timeRange = 'week', $limit = 10, $forceUpdate = false) {
-        return $this->cardRankingCore->getCardRanking($timeRange, $limit, $forceUpdate);
+    public function getCardRanking($timeRange = 'week', $limit = 10, $forceUpdate = false, $diyOnly = false) {
+        return $this->cardRankingCore->getCardRanking($timeRange, $limit, $forceUpdate, $diyOnly);
     }
 
     /**
@@ -89,5 +90,12 @@ class CardRankingModel {
     public function validateLimit($limit) {
         $validOptions = $this->getLimitOptions();
         return in_array($limit, $validOptions) ? $limit : 10;
+    }
+
+    /**
+     * 清除所有缓存文件
+     */
+    public function clearAllCaches() {
+        return $this->cardRankingCore->clearAllCaches();
     }
 }

@@ -47,6 +47,7 @@ class CardRankingController {
         $timeRange = isset($_GET['time_range']) ? $_GET['time_range'] : 'week';
         $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
         $detailLimit = isset($_GET['detail_limit']) ? (int)$_GET['detail_limit'] : 10;
+        $diyOnly = isset($_GET['diy_only']) ? (bool)$_GET['diy_only'] : false;
 
         // 验证参数
         $timeRange = $this->cardRankingModel->validateTimeRange($timeRange);
@@ -61,7 +62,7 @@ class CardRankingController {
         }
 
         // 获取卡片排行榜数据
-        $rankingData = $this->cardRankingModel->getCardRanking($timeRange, $limit);
+        $rankingData = $this->cardRankingModel->getCardRanking($timeRange, $limit, false, $diyOnly);
 
         // 处理详细统计数据
         $detailCards = $rankingData['all_cards'];
@@ -108,6 +109,30 @@ class CardRankingController {
 
         // 重定向回卡片排行榜页面
         header('Location: ' . BASE_URL . '?controller=card_ranking&time_range=' . $timeRange);
+        exit;
+    }
+
+    /**
+     * 清除所有卡片排行榜缓存
+     */
+    public function clearCache() {
+        // 检查功能是否启用
+        if (!defined('CARD_RANKING_ENABLED') || !CARD_RANKING_ENABLED) {
+            header('Location: ' . BASE_URL);
+            exit;
+        }
+
+        // 要求管理员权限
+        $this->userModel->requirePermission(1);
+
+        // 清除所有缓存
+        $this->cardRankingModel->clearAllCaches();
+
+        // 设置成功消息
+        $_SESSION['success_message'] = '卡片排行榜缓存已清除';
+
+        // 重定向回卡片排行榜页面
+        header('Location: ' . BASE_URL . '?controller=card_ranking');
         exit;
     }
 }

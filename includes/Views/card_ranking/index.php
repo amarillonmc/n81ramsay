@@ -6,7 +6,10 @@
             <span>卡片排行榜 - 生成时间：<?php echo $rankingData['generated_time']; ?></span>
 
             <?php if ($this->userModel->hasPermission(1)): ?>
-                <a href="<?php echo BASE_URL; ?>?controller=card_ranking&action=update&time_range=<?php echo $timeRange; ?>" class="btn btn-primary">更新排行榜</a>
+                <div>
+                    <a href="<?php echo BASE_URL; ?>?controller=card_ranking&action=update&time_range=<?php echo $timeRange; ?>" class="btn btn-primary">更新排行榜</a>
+                    <a href="<?php echo BASE_URL; ?>?controller=card_ranking&action=clearCache" class="btn btn-warning ml-2">清除缓存</a>
+                </div>
             <?php endif; ?>
         </div>
     </div>
@@ -46,6 +49,15 @@
                             </option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+
+                <div class="form-group ml-3">
+                    <div class="checkbox">
+                        <label>
+                            <input type="checkbox" name="diy_only" value="1" <?php echo $diyOnly ? 'checked' : ''; ?> onchange="this.form.submit()">
+                            只看DIY卡排名
+                        </label>
+                    </div>
                 </div>
             </form>
         </div>
@@ -87,6 +99,9 @@
                         <th>投入3数量</th>
                         <th>SIDE投入数量</th>
                         <th>使用率</th>
+                        <?php if (!$diyOnly): ?>
+                        <th>卡片类型</th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
@@ -105,6 +120,9 @@
                             <td><?php echo $card['main_count_3']; ?></td>
                             <td><?php echo $card['side_count']; ?></td>
                             <td><?php echo $card['usage_rate']; ?>%</td>
+                            <?php if (!$diyOnly): ?>
+                            <td><?php echo isset($card['is_tcg']) && $card['is_tcg'] ? 'TCG卡' : 'DIY卡'; ?></td>
+                            <?php endif; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
