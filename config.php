@@ -136,6 +136,9 @@ if (!defined('AUTHOR_HALL_OF_FAME_HIGHLIGHT_THRESHOLD')) {
 if (!defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE')) {
     define('AUTHOR_HALL_OF_FAME_SIMPLE_MODE', false); // 是否启用简略识别模式，仅使用管理员配置的作者列表
 }
+if (!defined('AUTHOR_HALL_OF_FAME_CACHE_DAYS')) {
+    define('AUTHOR_HALL_OF_FAME_CACHE_DAYS', 7); // 作者光荣榜缓存天数，超过此天数将重新生成
+}
 if (!defined('EXCLUDED_CARD_DATABASES')) {
     define('EXCLUDED_CARD_DATABASES', json_encode(['Pre_Nerf_cards.cdb', 'SoundStageLib.cdb'])); // 需要排除的卡片数据库文件
 }

@@ -48,8 +48,8 @@ class AuthorController {
         // 高亮阈值
         $highlightThreshold = AUTHOR_HALL_OF_FAME_HIGHLIGHT_THRESHOLD;
 
-        // 生成时间
-        $generatedTime = date('Y-m-d H:i:s');
+        // 获取生成时间
+        $generatedTime = isset($authorStats['generated_time']) ? $authorStats['generated_time'] : date('Y-m-d H:i:s');
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
@@ -70,11 +70,35 @@ class AuthorController {
         // 要求管理员权限
         $this->userModel->requirePermission(1);
 
-        // 更新作者光荣榜
+        // 更新作者光荣榜（强制重新生成）
         $success = $this->authorStatsModel->updateAuthorHallOfFame();
 
         // 设置消息
         $message = $success ? '作者光荣榜更新成功' : '作者光荣榜更新失败';
+
+        // 重定向到作者光荣榜页面
+        header('Location: ' . BASE_URL . '?controller=author&message=' . urlencode($message));
+        exit;
+    }
+
+    /**
+     * 清除作者光荣榜缓存
+     */
+    public function clearCache() {
+        // 检查功能是否启用
+        if (!AUTHOR_HALL_OF_FAME_ENABLED) {
+            header('Location: ' . BASE_URL);
+            exit;
+        }
+
+        // 要求管理员权限
+        $this->userModel->requirePermission(1);
+
+        // 清除缓存
+        $success = $this->authorStatsModel->clearCache();
+
+        // 设置消息
+        $message = $success ? '作者光荣榜缓存已清除' : '清除作者光荣榜缓存失败';
 
         // 重定向到作者光荣榜页面
         header('Location: ' . BASE_URL . '?controller=author&message=' . urlencode($message));
@@ -100,8 +124,8 @@ class AuthorController {
         // 要求管理员权限
         $this->userModel->requirePermission(1);
 
-        // 获取作者统计数据
-        $authorStats = $this->authorStatsModel->getAuthorStats();
+        // 获取作者统计数据（使用缓存）
+        $authorStats = $this->authorStatsModel->getAuthorStats(false);
 
         // 创建带有时间戳的ranking文件夹
         $timestamp = date('Y-m-d_H-i-s');

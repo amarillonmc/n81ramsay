@@ -25,6 +25,7 @@
                 <?php if ($this->userModel->hasPermission(1)): ?>
                     <div class="btn-group">
                         <a href="<?php echo BASE_URL; ?>?controller=author&action=update" class="btn btn-primary">更新榜单</a>
+                        <a href="<?php echo BASE_URL; ?>?controller=author&action=clearCache" class="btn btn-warning">清除缓存</a>
                         <?php if (defined('DEBUG_MODE') && DEBUG_MODE): ?>
                             <a href="<?php echo BASE_URL; ?>?controller=author&action=debug" class="btn btn-warning">生成调试内容</a>
                         <?php endif; ?>

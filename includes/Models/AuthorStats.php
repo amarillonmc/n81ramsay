@@ -12,18 +12,42 @@ class AuthorStats {
     private $cardParser;
 
     /**
+     * 缓存目录
+     * @var string
+     */
+    private $cacheDir;
+
+    /**
      * 构造函数
      */
     public function __construct() {
         $this->cardParser = CardParser::getInstance();
+        $this->cacheDir = __DIR__ . '/../../data/cache';
+
+        // 确保缓存目录存在
+        if (!file_exists($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
     }
 
     /**
      * 获取作者统计数据
      *
+     * @param bool $forceUpdate 是否强制更新
      * @return array 作者统计数据
      */
-    public function getAuthorStats() {
+    public function getAuthorStats($forceUpdate = false) {
+        // 检查缓存
+        $cacheFile = $this->getCacheFilePath();
+
+        // 如果缓存存在且未过期，且不强制更新，则直接返回缓存数据
+        if (!$forceUpdate && file_exists($cacheFile) && $this->isCacheValid($cacheFile)) {
+            $cachedData = json_decode(file_get_contents($cacheFile), true);
+            if ($cachedData) {
+                return $cachedData;
+            }
+        }
+
         // 获取所有卡片数据库文件
         $dbFiles = $this->cardParser->getCardDatabaseFiles();
 
@@ -179,6 +203,12 @@ class AuthorStats {
         foreach ($sortedAuthorStats as &$stats) {
             $stats['rank'] = $rank++;
         }
+
+        // 添加生成时间
+        $sortedAuthorStats['generated_time'] = date('Y-m-d H:i:s');
+
+        // 缓存数据
+        $this->cacheAuthorStats($sortedAuthorStats);
 
         return $sortedAuthorStats;
     }
@@ -387,19 +417,58 @@ class AuthorStats {
     }
 
     /**
+     * 获取缓存文件路径
+     *
+     * @return string 缓存文件路径
+     */
+    private function getCacheFilePath() {
+        return $this->cacheDir . '/author_hall_of_fame.json';
+    }
+
+    /**
+     * 检查缓存是否有效
+     *
+     * @param string $cacheFile 缓存文件路径
+     * @return bool 缓存是否有效
+     */
+    private function isCacheValid($cacheFile) {
+        $cacheTime = filemtime($cacheFile);
+        $cacheDays = defined('AUTHOR_HALL_OF_FAME_CACHE_DAYS') ? AUTHOR_HALL_OF_FAME_CACHE_DAYS : 7;
+
+        return (time() - $cacheTime) < ($cacheDays * 86400);
+    }
+
+    /**
+     * 缓存作者统计数据
+     *
+     * @param array $authorStats 作者统计数据
+     */
+    private function cacheAuthorStats($authorStats) {
+        $cacheFile = $this->getCacheFilePath();
+        file_put_contents($cacheFile, json_encode($authorStats, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * 清除缓存
+     *
+     * @return bool 是否成功
+     */
+    public function clearCache() {
+        $cacheFile = $this->getCacheFilePath();
+        if (file_exists($cacheFile)) {
+            return unlink($cacheFile);
+        }
+        return true;
+    }
+
+    /**
      * 更新作者光荣榜
      *
      * @return bool 是否成功
      */
     public function updateAuthorHallOfFame() {
-        // 获取作者统计数据
-        $authorStats = $this->getAuthorStats();
-
-        // 生成更新时间
-        $updateTime = date('Y-m-d H:i:s');
-
-        // 保存到数据库或文件
-        // 这里可以根据需要实现保存逻辑
+        // 强制更新作者统计数据（不使用缓存）
+        $this->getAuthorStats(true);
 
         return true;
     }
