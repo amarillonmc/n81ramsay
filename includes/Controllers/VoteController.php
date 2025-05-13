@@ -35,8 +35,12 @@ class VoteController {
             $page = 1;
         }
 
-        // 获取投票列表
-        $votes = $this->voteModel->getAllVotes(true, $page, VOTES_PER_PAGE);
+        // 获取当前投票周期
+        $db = Database::getInstance();
+        $currentCycle = $db->getCurrentVoteCycle();
+
+        // 获取投票列表（按周期分组）
+        $votes = $this->voteModel->getAllVotes(true, $page, VOTES_PER_PAGE, true);
         $totalVotes = $this->voteModel->getVoteCount(true);
 
         // 计算总页数

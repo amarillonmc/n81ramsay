@@ -194,9 +194,10 @@ class Vote {
      * @param bool $includeClosedVotes 是否包含已关闭的投票
      * @param int $page 页码
      * @param int $perPage 每页数量
+     * @param bool $groupByCycle 是否按周期分组
      * @return array 投票列表
      */
-    public function getAllVotes($includeClosedVotes = true, $page = 1, $perPage = 20) {
+    public function getAllVotes($includeClosedVotes = true, $page = 1, $perPage = 20, $groupByCycle = false) {
         $offset = ($page - 1) * $perPage;
 
         $sql = 'SELECT * FROM votes';
@@ -206,7 +207,15 @@ class Vote {
             $sql .= ' WHERE is_closed = 0';
         }
 
-        $sql .= ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+        if ($groupByCycle) {
+            // 按周期和创建时间排序
+            $sql .= ' ORDER BY vote_cycle DESC, created_at DESC';
+        } else {
+            // 仅按创建时间排序
+            $sql .= ' ORDER BY created_at DESC';
+        }
+
+        $sql .= ' LIMIT ? OFFSET ?';
         $params[] = $perPage;
         $params[] = $offset;
 

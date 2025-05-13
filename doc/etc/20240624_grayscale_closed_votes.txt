@@ -1,0 +1,62 @@
+# 已关闭投票卡图灰度显示优化
+
+## 需求描述
+在投票概览页面中，将已关闭的投票卡图以灰度方式显示，以便用户能够直观地区分哪些投票已经关闭。
+
+## 实现方案
+1. 为已关闭投票的卡片图片添加 `grayscale` CSS 类
+2. 添加 CSS 样式，实现灰度效果和交互动画
+3. 优化已关闭投票卡片的整体样式
+
+## 修改内容
+
+### 1. 修改卡片图片显示
+在 `includes\Views\votes\index.php` 文件中，为已关闭投票的卡片图片添加 `grayscale` 类：
+
+```php
+<img src="<?php echo $vote['card']['image_path']; ?>" 
+     alt="<?php echo Utils::escapeHtml($vote['card']['name']); ?>" 
+     class="<?php echo $vote['is_closed'] ? 'grayscale' : ''; ?>">
+```
+
+### 2. 添加灰度效果的 CSS 样式
+在 `includes\Views\votes\index.php` 文件的样式部分，添加以下 CSS 样式：
+
+```css
+/* 已关闭投票的灰度效果 */
+.grayscale {
+    filter: grayscale(100%);
+    opacity: 0.8;
+    transition: filter 0.3s, opacity 0.3s;
+}
+
+.card-item.closed {
+    opacity: 0.9;
+    background-color: #f8f8f8;
+    transition: opacity 0.3s, background-color 0.3s;
+}
+
+.card-item.closed:hover {
+    opacity: 1;
+    background-color: #fff;
+}
+
+.card-item.closed:hover .grayscale {
+    filter: grayscale(50%);
+    opacity: 0.9;
+}
+```
+
+## 效果说明
+1. 已关闭的投票卡片图片会以 100% 灰度显示，并且透明度降低到 80%
+2. 已关闭的投票卡片整体背景色变为浅灰色，透明度为 90%
+3. 当鼠标悬停在已关闭的投票卡片上时：
+   - 卡片透明度恢复到 100%
+   - 背景色变回白色
+   - 卡片图片的灰度降低到 50%，透明度提高到 90%
+4. 所有变化都有平滑的过渡动画效果
+
+这些视觉效果使用户能够直观地区分哪些投票已经关闭，同时保持良好的用户体验。
+
+## 修改时间
+2024年6月24日
