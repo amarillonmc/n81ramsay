@@ -95,6 +95,9 @@ class Vote {
             return false;
         }
 
+        // 生成唯一标识符
+        $identifier = Utils::generateVoterIdentifier($ipAddress, $userId);
+
         // 插入投票记录
         $recordId = $this->db->insert('vote_records', [
             'vote_id' => $voteId,
@@ -102,6 +105,7 @@ class Vote {
             'ip_address' => $ipAddress,
             'status' => $status,
             'comment' => $comment,
+            'identifier' => $identifier,
             'created_at' => date('Y-m-d H:i:s')
         ]);
 

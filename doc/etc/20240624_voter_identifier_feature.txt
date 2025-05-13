@@ -1,0 +1,162 @@
+# 投票者唯一标识符功能
+
+## 需求描述
+在投票详情页面，根据用户的IP地址等信息，生成九位数的唯一字母数字组合标识符，该标识符与投票者的ID一并显示在投票页面上。
+
+## 实现方案
+1. 修改数据库表结构，为 vote_records 表添加 identifier 字段
+2. 在 Utils 类中添加生成唯一标识符的方法
+3. 修改 Vote 模型的 addVoteRecord 方法，生成并保存唯一标识符
+4. 更新投票详情页面，显示投票者的唯一标识符
+5. 添加相关的 CSS 样式
+
+## 修改内容
+
+### 1. 修改数据库表结构
+在 `includes\Core\Database.php` 文件中，修改 initTables 方法，为 vote_records 表添加 identifier 字段：
+
+```php
+// 创建投票记录表
+$this->pdo->exec('
+    CREATE TABLE IF NOT EXISTS vote_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vote_id INTEGER NOT NULL,
+        user_id TEXT NOT NULL,
+        ip_address TEXT NOT NULL,
+        status INTEGER NOT NULL,
+        comment TEXT,
+        identifier TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vote_id) REFERENCES votes(id),
+        UNIQUE (vote_id, ip_address)
+    )
+');
+
+// 检查是否需要添加 identifier 字段
+try {
+    $columns = $this->pdo->query("PRAGMA table_info(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
+    $hasIdentifier = false;
+    
+    foreach ($columns as $column) {
+        if ($column['name'] === 'identifier') {
+            $hasIdentifier = true;
+            break;
+        }
+    }
+    
+    if (!$hasIdentifier) {
+        $this->pdo->exec('ALTER TABLE vote_records ADD COLUMN identifier TEXT');
+    }
+} catch (PDOException $e) {
+    Utils::debug('检查 identifier 字段失败', ['错误' => $e->getMessage()]);
+}
+```
+
+### 2. 在 Utils 类中添加生成唯一标识符的方法
+在 `includes\Core\Utils.php` 文件中，添加 generateVoterIdentifier 方法：
+
+```php
+/**
+ * 生成投票者唯一标识符
+ * 
+ * 根据IP地址、用户代理和时间戳生成9位字母数字组合标识符
+ *
+ * @param string $ipAddress IP地址
+ * @param string $userId 用户ID
+ * @return string 9位唯一标识符
+ */
+public static function generateVoterIdentifier($ipAddress, $userId) {
+    // 获取用户代理信息
+    $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+    
+    // 组合数据并加盐
+    $data = $ipAddress . '|' . $userAgent . '|' . $userId . '|' . time() . '|' . rand(1000, 9999);
+    
+    // 生成哈希
+    $hash = md5($data);
+    
+    // 取前9位，确保包含字母和数字
+    $identifier = substr($hash, 0, 9);
+    
+    // 确保至少包含一个字母和一个数字
+    $hasLetter = preg_match('/[a-f]/i', $identifier);
+    $hasNumber = preg_match('/[0-9]/', $identifier);
+    
+    if (!$hasLetter || !$hasNumber) {
+        // 如果不满足条件，重新生成
+        return self::generateVoterIdentifier($ipAddress, $userId);
+    }
+    
+    return $identifier;
+}
+```
+
+### 3. 修改 Vote 模型的 addVoteRecord 方法
+在 `includes\Models\Vote.php` 文件中，修改 addVoteRecord 方法，生成并保存唯一标识符：
+
+```php
+// 生成唯一标识符
+$identifier = Utils::generateVoterIdentifier($ipAddress, $userId);
+
+// 插入投票记录
+$recordId = $this->db->insert('vote_records', [
+    'vote_id' => $voteId,
+    'user_id' => $userId,
+    'ip_address' => $ipAddress,
+    'status' => $status,
+    'comment' => $comment,
+    'identifier' => $identifier,
+    'created_at' => date('Y-m-d H:i:s')
+]);
+```
+
+### 4. 更新投票详情页面
+在 `includes\Views\votes\vote.php` 文件中，添加显示投票者唯一标识符的代码：
+
+```php
+<div class="vote-record-user">
+    <strong><?php echo Utils::escapeHtml($record['user_id']); ?></strong>
+    <?php if (!empty($record['identifier'])): ?>
+        <span class="vote-record-identifier">#<?php echo $record['identifier']; ?></span>
+    <?php endif; ?>
+    <span class="vote-record-time"><?php echo Utils::getRelativeTime($record['created_at']); ?></span>
+</div>
+```
+
+### 5. 添加 CSS 样式
+在 `assets\css\style.css` 文件中，添加投票记录标识符的样式：
+
+```css
+.vote-record-user {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+}
+
+.vote-record-identifier {
+    display: inline-block;
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 0.85em;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin: 0 8px;
+    font-family: monospace;
+    letter-spacing: 0.5px;
+}
+
+.vote-record-time {
+    color: #6c757d;
+    font-size: 0.85em;
+}
+```
+
+## 效果说明
+1. 每个投票记录都会生成一个唯一的9位字母数字组合标识符
+2. 标识符基于用户的IP地址、用户代理、用户ID和时间戳生成，确保唯一性
+3. 标识符以 "#" 开头，显示在用户ID旁边，使用灰色背景和圆角设计，易于识别
+4. 对于已有的投票记录，如果没有标识符，则不显示
+
+## 修改时间
+2024年6月24日

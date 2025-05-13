@@ -91,11 +91,31 @@ class Database {
                 ip_address TEXT NOT NULL,
                 status INTEGER NOT NULL,
                 comment TEXT,
+                identifier TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (vote_id) REFERENCES votes(id),
                 UNIQUE (vote_id, ip_address)
             )
         ');
+
+        // 检查是否需要添加 identifier 字段
+        try {
+            $columns = $this->pdo->query("PRAGMA table_info(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasIdentifier = false;
+
+            foreach ($columns as $column) {
+                if ($column['name'] === 'identifier') {
+                    $hasIdentifier = true;
+                    break;
+                }
+            }
+
+            if (!$hasIdentifier) {
+                $this->pdo->exec('ALTER TABLE vote_records ADD COLUMN identifier TEXT');
+            }
+        } catch (PDOException $e) {
+            Utils::debug('检查 identifier 字段失败', ['错误' => $e->getMessage()]);
+        }
 
         // 创建投票周期表
         $this->pdo->exec('

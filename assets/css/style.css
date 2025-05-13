@@ -381,6 +381,30 @@ th {
     border-bottom: none;
 }
 
+.vote-record-user {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+}
+
+.vote-record-identifier {
+    display: inline-block;
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 0.85em;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin: 0 8px;
+    font-family: monospace;
+    letter-spacing: 0.5px;
+}
+
+.vote-record-time {
+    color: #6c757d;
+    font-size: 0.85em;
+}
+
 /* 页脚样式 */
 footer {
     background-color: #343a40;

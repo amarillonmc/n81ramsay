@@ -70,6 +70,40 @@ class Utils {
     }
 
     /**
+     * 生成投票者唯一标识符
+     *
+     * 根据IP地址、用户代理和时间戳生成9位字母数字组合标识符
+     *
+     * @param string $ipAddress IP地址
+     * @param string $userId 用户ID
+     * @return string 9位唯一标识符
+     */
+    public static function generateVoterIdentifier($ipAddress, $userId) {
+        // 获取用户代理信息
+        $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+
+        // 组合数据并加盐
+        $data = $ipAddress . '|' . $userAgent . '|' . $userId . '|' . time() . '|' . rand(1000, 9999);
+
+        // 生成哈希
+        $hash = md5($data);
+
+        // 取前9位，确保包含字母和数字
+        $identifier = substr($hash, 0, 9);
+
+        // 确保至少包含一个字母和一个数字
+        $hasLetter = preg_match('/[a-f]/i', $identifier);
+        $hasNumber = preg_match('/[0-9]/', $identifier);
+
+        if (!$hasLetter || !$hasNumber) {
+            // 如果不满足条件，重新生成
+            return self::generateVoterIdentifier($ipAddress, $userId);
+        }
+
+        return $identifier;
+    }
+
+    /**
      * 格式化日期时间
      *
      * @param string $datetime 日期时间字符串

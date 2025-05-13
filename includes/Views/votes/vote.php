@@ -116,6 +116,9 @@
                             <div class="vote-record">
                                 <div class="vote-record-user">
                                     <strong><?php echo Utils::escapeHtml($record['user_id']); ?></strong>
+                                    <?php if (!empty($record['identifier'])): ?>
+                                        <span class="vote-record-identifier">#<?php echo $record['identifier']; ?></span>
+                                    <?php endif; ?>
                                     <span class="vote-record-time"><?php echo Utils::getRelativeTime($record['created_at']); ?></span>
                                 </div>
                                 <div class="vote-record-status <?php echo Utils::getLimitStatusClass($record['status']); ?>">
