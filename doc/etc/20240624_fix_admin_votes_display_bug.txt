@@ -1,0 +1,41 @@
+# 修复管理员投票管理界面的显示问题
+
+## 问题描述
+在管理员的投票管理界面，如果投票卡片有多于一个，则会出现第一张投票卡片重复显示，且覆盖掉之后的一张卡片的显示的情况。
+
+## 原因分析
+问题出在 `AdminController.php` 和 `VoteController.php` 文件中的 `votes()` 方法。在处理投票数据时，使用了引用变量 `&$vote` 进行循环，但循环结束后没有解除引用，导致 `$vote` 变量仍然引用着数组中的最后一个元素。当这个变量在视图中被使用时，就会导致显示问题。
+
+## 修复方法
+在循环结束后添加 `unset($vote)` 来解除引用，防止后续操作影响数组。
+
+## 修改文件
+1. `includes\Controllers\AdminController.php`
+2. `includes\Controllers\VoteController.php`
+
+## 具体修改
+在两个文件中的循环结束后添加了 `unset($vote)` 语句：
+
+```php
+// 处理投票数据
+foreach ($votes as &$vote) {
+    // 获取卡片信息
+    $card = $this->cardModel->getCardById($vote['card_id']);
+    $vote['card'] = $card;
+
+    // 获取环境信息
+    $environment = Utils::getEnvironmentById($vote['environment_id']);
+    $vote['environment'] = $environment;
+
+    // 获取投票统计
+    $vote['stats'] = $this->voteModel->getVoteStats($vote['id']);
+
+    // 获取投票记录
+    $vote['records'] = $this->voteModel->getVoteRecords($vote['id']);
+}
+// 解除引用，防止后续操作影响数组
+unset($vote);
+```
+
+## 修复时间
+2024年6月24日

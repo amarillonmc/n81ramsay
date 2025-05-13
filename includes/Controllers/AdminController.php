@@ -144,6 +144,8 @@ class AdminController {
             // 获取投票记录
             $vote['records'] = $this->voteModel->getVoteRecords($vote['id']);
         }
+        // 解除引用，防止后续操作影响数组
+        unset($vote);
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
