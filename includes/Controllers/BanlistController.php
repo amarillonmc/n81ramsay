@@ -195,4 +195,70 @@ class BanlistController {
         header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
         exit;
     }
+
+    /**
+     * 重新打开投票
+     */
+    public function reopenVote() {
+        // 要求管理员权限（等级1以上）
+        $this->userModel->requirePermission(1);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $voteId = isset($_POST['vote_id']) ? (int)$_POST['vote_id'] : 0;
+
+            // 重新打开投票
+            $result = $this->voteModel->reopenVote($voteId);
+
+            if ($result) {
+                // 设置成功消息
+                $_SESSION['success_message'] = '投票已重新打开';
+            } else {
+                // 设置错误消息
+                $_SESSION['error_message'] = '重新打开投票失败';
+            }
+
+            // 重定向到禁卡表管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到禁卡表管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+        exit;
+    }
+
+    /**
+     * 删除投票
+     */
+    public function deleteVote() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $voteId = isset($_POST['vote_id']) ? (int)$_POST['vote_id'] : 0;
+
+            // 删除投票
+            $result = $this->voteModel->deleteVote($voteId);
+
+            if ($result) {
+                // 设置成功消息
+                $_SESSION['success_message'] = '投票已删除';
+            } else {
+                // 设置错误消息
+                $_SESSION['error_message'] = '删除投票失败';
+            }
+
+            // 重定向到禁卡表管理页面
+            header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到禁卡表管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+        exit;
+    }
 }

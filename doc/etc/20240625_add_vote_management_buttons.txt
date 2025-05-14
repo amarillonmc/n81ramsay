@@ -1,0 +1,181 @@
+# 添加投票管理按钮
+
+## 需求描述
+在禁卡表整理的管理页面显示的已关闭的当期投票，每一行添加两个操作按钮：
+1. "重新打开"（仅限1级以上管理员）：将该投票重新打开。
+2. "删除"（仅限2级以上管理员）：将该投票删除。
+
+## 实现方案
+1. 在 Vote 模型中添加重新打开和删除投票的方法
+2. 在 BanlistController 中添加对应的控制器方法
+3. 在禁卡表管理页面添加操作按钮
+4. 添加相关的 CSS 样式
+
+## 修改内容
+
+### 1. 修改 Vote 模型
+在 `includes\Models\Vote.php` 文件中，添加以下方法：
+
+```php
+/**
+ * 重新打开投票
+ *
+ * @param int $voteId 投票ID
+ * @return bool 是否成功
+ */
+public function reopenVote($voteId) {
+    return $this->db->update(
+        'votes',
+        ['is_closed' => 0],
+        'id = :vote_id',
+        ['vote_id' => $voteId]
+    ) !== false;
+}
+
+/**
+ * 删除投票
+ *
+ * @param int $voteId 投票ID
+ * @return bool 是否成功
+ */
+public function deleteVote($voteId) {
+    // 先删除投票记录
+    $this->db->delete(
+        'vote_records',
+        'vote_id = :vote_id',
+        ['vote_id' => $voteId]
+    );
+    
+    // 再删除投票
+    return $this->db->delete(
+        'votes',
+        'id = :vote_id',
+        ['vote_id' => $voteId]
+    ) !== false;
+}
+```
+
+### 2. 修改 BanlistController
+在 `includes\Controllers\BanlistController.php` 文件中，添加以下方法：
+
+```php
+/**
+ * 重新打开投票
+ */
+public function reopenVote() {
+    // 要求管理员权限（等级1以上）
+    $this->userModel->requirePermission(1);
+    
+    // 检查是否是POST请求
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // 获取表单数据
+        $voteId = isset($_POST['vote_id']) ? (int)$_POST['vote_id'] : 0;
+        
+        // 重新打开投票
+        $result = $this->voteModel->reopenVote($voteId);
+        
+        if ($result) {
+            // 设置成功消息
+            $_SESSION['success_message'] = '投票已重新打开';
+        } else {
+            // 设置错误消息
+            $_SESSION['error_message'] = '重新打开投票失败';
+        }
+        
+        // 重定向到禁卡表管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+        exit;
+    }
+    
+    // 如果不是POST请求，则重定向到禁卡表管理页面
+    header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+    exit;
+}
+
+/**
+ * 删除投票
+ */
+public function deleteVote() {
+    // 要求管理员权限（等级2以上）
+    $this->userModel->requirePermission(2);
+    
+    // 检查是否是POST请求
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // 获取表单数据
+        $voteId = isset($_POST['vote_id']) ? (int)$_POST['vote_id'] : 0;
+        
+        // 删除投票
+        $result = $this->voteModel->deleteVote($voteId);
+        
+        if ($result) {
+            // 设置成功消息
+            $_SESSION['success_message'] = '投票已删除';
+        } else {
+            // 设置错误消息
+            $_SESSION['error_message'] = '删除投票失败';
+        }
+        
+        // 重定向到禁卡表管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+        exit;
+    }
+    
+    // 如果不是POST请求，则重定向到禁卡表管理页面
+    header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
+    exit;
+}
+```
+
+### 3. 修改禁卡表管理页面
+在 `includes\Views\admin\banlist.php` 文件中，为每个投票结果添加操作按钮：
+
+```php
+<?php if (isset($result['vote_id'])): ?>
+    <div class="vote-actions mt-2">
+        <?php if ($this->userModel->hasPermission(1)): ?>
+            <form action="<?php echo BASE_URL; ?>?controller=banlist&action=reopenVote" method="post" style="display: inline;">
+                <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
+                <button type="submit" class="btn btn-sm btn-primary">重新打开</button>
+            </form>
+        <?php endif; ?>
+        
+        <?php if ($this->userModel->hasPermission(2)): ?>
+            <form action="<?php echo BASE_URL; ?>?controller=banlist&action=deleteVote" method="post" style="display: inline;">
+                <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
+                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除此投票吗？此操作不可撤销。')">删除</button>
+            </form>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
+```
+
+### 4. 添加 CSS 样式
+在 `assets\css\style.css` 文件中，添加以下样式：
+
+```css
+/* 投票操作按钮样式 */
+.vote-actions {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #ddd;
+}
+
+.vote-actions form {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 14px;
+}
+```
+
+## 效果
+- 在禁卡表管理页面的投票结果中，每个投票项目下方显示操作按钮
+- 1级以上管理员可以看到"重新打开"按钮，用于重新打开已关闭的投票
+- 2级以上管理员可以看到"删除"按钮，用于删除投票
+- 点击"删除"按钮会弹出确认对话框，防止误操作
+
+## 修改时间
+2024年6月25日

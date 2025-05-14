@@ -70,6 +70,24 @@
                                         <div>准限制: <?php echo $result['stats'][2]; ?></div>
                                         <div>无限制: <?php echo $result['stats'][3]; ?></div>
                                         <div>总票数: <?php echo $result['total_votes']; ?></div>
+
+                                        <?php if (isset($result['vote_id'])): ?>
+                                            <div class="vote-actions mt-2">
+                                                <?php if ($this->userModel->hasPermission(1)): ?>
+                                                    <form action="<?php echo BASE_URL; ?>?controller=banlist&action=reopenVote" method="post" style="display: inline;">
+                                                        <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
+                                                        <button type="submit" class="btn btn-sm btn-primary">重新打开</button>
+                                                    </form>
+                                                <?php endif; ?>
+
+                                                <?php if ($this->userModel->hasPermission(2)): ?>
+                                                    <form action="<?php echo BASE_URL; ?>?controller=banlist&action=deleteVote" method="post" style="display: inline;">
+                                                        <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
+                                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除此投票吗？此操作不可撤销。')">删除</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

@@ -198,6 +198,23 @@ th {
     font-weight: bold;
 }
 
+/* 投票操作按钮样式 */
+.vote-actions {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #ddd;
+}
+
+.vote-actions form {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 14px;
+}
+
 /* 警告框样式 */
 .alert {
     padding: 15px;

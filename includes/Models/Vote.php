@@ -271,6 +271,43 @@ class Vote {
     }
 
     /**
+     * 重新打开投票
+     *
+     * @param int $voteId 投票ID
+     * @return bool 是否成功
+     */
+    public function reopenVote($voteId) {
+        return $this->db->update(
+            'votes',
+            ['is_closed' => 0],
+            'id = :vote_id',
+            ['vote_id' => $voteId]
+        ) !== false;
+    }
+
+    /**
+     * 删除投票
+     *
+     * @param int $voteId 投票ID
+     * @return bool 是否成功
+     */
+    public function deleteVote($voteId) {
+        // 先删除投票记录
+        $this->db->delete(
+            'vote_records',
+            'vote_id = :vote_id',
+            ['vote_id' => $voteId]
+        );
+
+        // 再删除投票
+        return $this->db->delete(
+            'votes',
+            'id = :vote_id',
+            ['vote_id' => $voteId]
+        ) !== false;
+    }
+
+    /**
      * 增加投票周期
      *
      * @return bool 是否成功
