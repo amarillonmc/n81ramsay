@@ -83,7 +83,7 @@ class Utils {
         $userAgent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
 
         // 组合数据并加盐
-        $data = $ipAddress . '|' . $userAgent . '|' . $userId . '|' . time() . '|' . rand(1000, 9999);
+        $data = $ipAddress . '|' . $userAgent;
 
         // 生成哈希
         $hash = md5($data);
