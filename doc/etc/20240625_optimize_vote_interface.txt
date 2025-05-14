@@ -1,0 +1,129 @@
+# 优化投票界面
+
+## 需求描述
+用户反馈，在投票界面进行投票时，无法看到该卡在对应环境下的实际禁止限制情况，会造成判断问题。
+需要在投票界面：
+1. 以醒目方式标出该投票卡目前在该投票对应环境中的禁限情况
+2. 根据该情况，在对应的投票选项旁边标注其为"进一步限制"，"不变"，还是"限制缓和"
+
+## 实现方案
+1. 修改 VoteController.php 的 vote 方法，获取卡片在当前环境中的禁限状态
+2. 更新 votes/vote.php 视图，显示当前禁限状态并在投票选项旁添加变化类型标签
+3. 添加 CSS 样式，使当前禁限状态和变化类型标签视觉上更加醒目
+
+## 修改内容
+
+### 1. 修改 VoteController.php
+在 `includes\Controllers\VoteController.php` 文件中，修改 vote 方法，获取卡片在当前环境中的禁限状态：
+
+```php
+// 获取卡片在当前环境中的禁限状态
+$currentLimitStatus = $this->cardModel->getCardLimitStatus($vote['card_id'], $environment['header']);
+```
+
+### 2. 更新 votes/vote.php 视图
+在 `includes\Views\votes\vote.php` 文件中：
+
+1. 添加当前禁限状态显示：
+```php
+<!-- 显示当前禁限状态 -->
+<div class="current-limit-status">
+    <p>当前禁限状态: <span class="status-badge <?php echo Utils::getLimitStatusClass($currentLimitStatus); ?>">
+        <?php echo Utils::getLimitStatusText($currentLimitStatus); ?>
+    </span></p>
+</div>
+```
+
+2. 在投票选项旁添加变化类型标签：
+   - 对于"禁止"选项：
+     - 如果当前状态 > 0，显示"进一步限制"
+     - 如果当前状态 = 0，显示"不变"
+   - 对于"限制"选项：
+     - 如果当前状态 > 1，显示"进一步限制"
+     - 如果当前状态 = 1，显示"不变"
+     - 如果当前状态 < 1，显示"限制缓和"
+   - 对于"准限制"选项：
+     - 如果当前状态 > 2，显示"进一步限制"
+     - 如果当前状态 = 2，显示"不变"
+     - 如果当前状态 < 2，显示"限制缓和"
+   - 对于"无限制"选项：
+     - 如果当前状态 = 3，显示"不变"
+     - 如果当前状态 < 3，显示"限制缓和"
+
+### 3. 添加 CSS 样式
+在 `assets\css\style.css` 文件中，添加以下样式：
+
+1. 当前禁限状态样式：
+```css
+/* 当前禁限状态样式 */
+.current-limit-status {
+    margin: 15px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 5px solid #007bff;
+}
+
+.current-limit-status p {
+    margin: 0;
+    font-size: 18px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 5px;
+}
+
+.status-badge.forbidden {
+    background-color: #f8d7da;
+}
+
+.status-badge.limited {
+    background-color: #fff3cd;
+}
+
+.status-badge.semi-limited {
+    background-color: #fff3cd;
+}
+
+.status-badge.unlimited {
+    background-color: #d4edda;
+}
+```
+
+2. 变化类型标签样式：
+```css
+/* 变化类型标签样式 */
+.change-type {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 10px;
+}
+
+.further-restriction {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.no-change {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+.relaxed-restriction {
+    background-color: #d4edda;
+    color: #155724;
+}
+```
+
+## 效果
+- 投票详情页面显示卡片在当前环境中的禁限状态，使用醒目的样式
+- 投票选项旁显示变化类型标签，清晰表明该选项相对于当前状态是"进一步限制"、"不变"还是"限制缓和"
+- 变化类型标签使用不同的颜色，方便用户快速识别
+
+## 修改时间
+2024年6月25日

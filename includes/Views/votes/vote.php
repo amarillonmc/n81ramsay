@@ -7,6 +7,14 @@
         <p>投票周期: <?php echo $vote['vote_cycle']; ?></p>
         <p>发起人: <?php echo Utils::escapeHtml($vote['initiator_id']); ?></p>
         <p>发起时间: <?php echo Utils::formatDatetime($vote['created_at']); ?></p>
+
+        <!-- 显示当前禁限状态 -->
+        <div class="current-limit-status">
+            <p>当前禁限状态: <span class="status-badge <?php echo Utils::getLimitStatusClass($currentLimitStatus); ?>">
+                <?php echo Utils::getLimitStatusText($currentLimitStatus); ?>
+            </span></p>
+        </div>
+
         <?php if ($vote['is_closed']): ?>
             <div class="alert alert-info">此投票已关闭</div>
         <?php endif; ?>
@@ -73,21 +81,61 @@
                             <div>
                                 <label>
                                     <input type="radio" name="status" value="0" required> 禁止
+                                    <?php
+                                    $changeType = '';
+                                    if ($currentLimitStatus > 0) {
+                                        $changeType = '<span class="change-type further-restriction">进一步限制</span>';
+                                    } elseif ($currentLimitStatus == 0) {
+                                        $changeType = '<span class="change-type no-change">不变</span>';
+                                    }
+                                    echo $changeType;
+                                    ?>
                                 </label>
                             </div>
                             <div>
                                 <label>
                                     <input type="radio" name="status" value="1"> 限制
+                                    <?php
+                                    $changeType = '';
+                                    if ($currentLimitStatus > 1) {
+                                        $changeType = '<span class="change-type further-restriction">进一步限制</span>';
+                                    } elseif ($currentLimitStatus == 1) {
+                                        $changeType = '<span class="change-type no-change">不变</span>';
+                                    } elseif ($currentLimitStatus < 1) {
+                                        $changeType = '<span class="change-type relaxed-restriction">限制缓和</span>';
+                                    }
+                                    echo $changeType;
+                                    ?>
                                 </label>
                             </div>
                             <div>
                                 <label>
                                     <input type="radio" name="status" value="2"> 准限制
+                                    <?php
+                                    $changeType = '';
+                                    if ($currentLimitStatus > 2) {
+                                        $changeType = '<span class="change-type further-restriction">进一步限制</span>';
+                                    } elseif ($currentLimitStatus == 2) {
+                                        $changeType = '<span class="change-type no-change">不变</span>';
+                                    } elseif ($currentLimitStatus < 2) {
+                                        $changeType = '<span class="change-type relaxed-restriction">限制缓和</span>';
+                                    }
+                                    echo $changeType;
+                                    ?>
                                 </label>
                             </div>
                             <div>
                                 <label>
                                     <input type="radio" name="status" value="3"> 无限制
+                                    <?php
+                                    $changeType = '';
+                                    if ($currentLimitStatus == 3) {
+                                        $changeType = '<span class="change-type no-change">不变</span>';
+                                    } elseif ($currentLimitStatus < 3) {
+                                        $changeType = '<span class="change-type relaxed-restriction">限制缓和</span>';
+                                    }
+                                    echo $changeType;
+                                    ?>
                                 </label>
                             </div>
                         </div>

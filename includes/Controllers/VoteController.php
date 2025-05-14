@@ -174,6 +174,9 @@ class VoteController {
         // 获取投票记录
         $records = $this->voteModel->getVoteRecords($vote['id']);
 
+        // 获取卡片在当前环境中的禁限状态
+        $currentLimitStatus = $this->cardModel->getCardLimitStatus($vote['card_id'], $environment['header']);
+
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $vote['is_closed'] == 0) {
             // 获取表单数据

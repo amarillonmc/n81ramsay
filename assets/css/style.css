@@ -340,6 +340,67 @@ th {
     color: #28a745;
 }
 
+/* 当前禁限状态样式 */
+.current-limit-status {
+    margin: 15px 0;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border-left: 5px solid #007bff;
+}
+
+.current-limit-status p {
+    margin: 0;
+    font-size: 18px;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: 5px;
+}
+
+.status-badge.forbidden {
+    background-color: #f8d7da;
+}
+
+.status-badge.limited {
+    background-color: #fff3cd;
+}
+
+.status-badge.semi-limited {
+    background-color: #fff3cd;
+}
+
+.status-badge.unlimited {
+    background-color: #d4edda;
+}
+
+/* 变化类型标签样式 */
+.change-type {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 10px;
+}
+
+.further-restriction {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.no-change {
+    background-color: #e2e3e5;
+    color: #383d41;
+}
+
+.relaxed-restriction {
+    background-color: #d4edda;
+    color: #155724;
+}
+
 /* 投票样式 */
 .vote-info {
     margin-bottom: 20px;
