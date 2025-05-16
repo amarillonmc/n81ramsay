@@ -24,7 +24,7 @@
                 <?php foreach ($dbFiles as $index => $dbFile): ?>
                     <?php $fileName = basename($dbFile); ?>
                     <li class="nav-item">
-                        <a class="nav-link <?php echo $selectedDb === $dbFile ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($dbFile); ?>">
+                        <a class="nav-link <?php echo $selectedDb === $dbFile ? 'active' : ''; ?>" href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($dbFile)); ?>">
                             <?php echo $fileName; ?>
                         </a>
                     </li>
@@ -41,7 +41,7 @@
                 <h3>卡片列表 (<?php echo $pagination['total']; ?>)</h3>
                 <div class="per-page-selector">
                     <form id="per-page-form" action="<?php echo BASE_URL; ?>" method="get">
-                        <input type="hidden" name="db" value="<?php echo urlencode($selectedDb); ?>">
+                        <input type="hidden" name="db" value="<?php echo urlencode(basename($selectedDb)); ?>">
                         <label for="per_page">每页显示：</label>
                         <select id="per_page" name="per_page" onchange="document.getElementById('per-page-form').submit();">
                             <?php foreach ($perPageOptions as $option): ?>
@@ -74,10 +74,10 @@
                     <ul>
                         <?php if ($pagination['page'] > 1): ?>
                             <li>
-                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($selectedDb); ?>&page=1&per_page=<?php echo $pagination['per_page']; ?>">首页</a>
+                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=1&per_page=<?php echo $pagination['per_page']; ?>">首页</a>
                             </li>
                             <li>
-                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($selectedDb); ?>&page=<?php echo $pagination['page'] - 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">上一页</a>
+                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] - 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">上一页</a>
                             </li>
                         <?php endif; ?>
 
@@ -98,16 +98,16 @@
                         for ($i = $startPage; $i <= $endPage; $i++):
                         ?>
                             <li <?php echo $i == $pagination['page'] ? 'class="active"' : ''; ?>>
-                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($selectedDb); ?>&page=<?php echo $i; ?>&per_page=<?php echo $pagination['per_page']; ?>"><?php echo $i; ?></a>
+                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $i; ?>&per_page=<?php echo $pagination['per_page']; ?>"><?php echo $i; ?></a>
                             </li>
                         <?php endfor; ?>
 
                         <?php if ($pagination['page'] < $pagination['total_pages']): ?>
                             <li>
-                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($selectedDb); ?>&page=<?php echo $pagination['page'] + 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">下一页</a>
+                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] + 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">下一页</a>
                             </li>
                             <li>
-                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode($selectedDb); ?>&page=<?php echo $pagination['total_pages']; ?>&per_page=<?php echo $pagination['per_page']; ?>">末页</a>
+                                <a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['total_pages']; ?>&per_page=<?php echo $pagination['per_page']; ?>">末页</a>
                             </li>
                         <?php endif; ?>
                     </ul>

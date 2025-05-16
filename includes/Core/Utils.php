@@ -1,5 +1,35 @@
 <?php
 /**
+ * 清理临时文件
+ *
+ * 删除根目录下的URL编码文件名的临时文件
+ */
+function cleanupTempFiles() {
+    // 查找根目录下的URL编码文件名的临时文件
+    $files = glob(__DIR__ . '/../../C%3A*');
+    foreach ($files as $file) {
+        if (is_file($file)) {
+            @unlink($file);
+        }
+    }
+
+    // 确保临时目录存在
+    if (!file_exists(TMP_DIR)) {
+        mkdir(TMP_DIR, 0777, true);
+    }
+
+    // 清理临时目录中的0KB文件
+    $tmpFiles = glob(TMP_DIR . '/*.cdb');
+    foreach ($tmpFiles as $file) {
+        if (is_file($file) && filesize($file) === 0) {
+            @unlink($file);
+        }
+    }
+}
+
+// 在脚本结束时执行清理
+register_shutdown_function('cleanupTempFiles');
+/**
  * 工具函数类
  *
  * 提供各种工具函数

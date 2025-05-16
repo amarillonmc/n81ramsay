@@ -598,16 +598,32 @@ class CardParser {
      * @return PDO 数据库连接
      */
     private function getCardDatabase($dbFile) {
-        if (!isset($this->cardDatabases[$dbFile])) {
+        // 验证数据库文件路径
+        if (!file_exists($dbFile)) {
+            Utils::debug('数据库文件不存在', ['文件路径' => $dbFile]);
+            die('卡片数据库文件不存在: ' . htmlspecialchars($dbFile));
+        }
+
+        // 使用文件路径的哈希值作为键，避免使用完整路径
+        $dbKey = md5($dbFile);
+
+        if (!isset($this->cardDatabases[$dbKey])) {
             try {
-                $this->cardDatabases[$dbFile] = new PDO('sqlite:' . $dbFile);
-                $this->cardDatabases[$dbFile]->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                // 确保临时目录存在
+                if (!file_exists(TMP_DIR)) {
+                    mkdir(TMP_DIR, 0777, true);
+                }
+
+                // 使用临时目录中的连接字符串
+                $this->cardDatabases[$dbKey] = new PDO('sqlite:' . $dbFile);
+                $this->cardDatabases[$dbKey]->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             } catch (PDOException $e) {
+                Utils::debug('数据库连接失败', ['错误' => $e->getMessage(), '文件路径' => $dbFile]);
                 die('卡片数据库连接失败: ' . $e->getMessage());
             }
         }
 
-        return $this->cardDatabases[$dbFile];
+        return $this->cardDatabases[$dbKey];
     }
 
     /**
@@ -825,8 +841,22 @@ class CardParser {
         // 如果在DIY卡数据库中找不到，则从TCG卡数据库中查找
         if (!$card && defined('TCG_CARD_DATA_PATH') && file_exists(TCG_CARD_DATA_PATH)) {
             try {
-                $tcgDb = new PDO('sqlite:' . TCG_CARD_DATA_PATH);
-                $tcgDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                // 确保临时目录存在
+                if (!file_exists(TMP_DIR)) {
+                    mkdir(TMP_DIR, 0777, true);
+                }
+
+                // 使用文件路径的哈希值作为键
+                $tcgDbKey = md5(TCG_CARD_DATA_PATH);
+
+                // 如果已经有连接，则重用
+                if (isset($this->cardDatabases[$tcgDbKey])) {
+                    $tcgDb = $this->cardDatabases[$tcgDbKey];
+                } else {
+                    $tcgDb = new PDO('sqlite:' . TCG_CARD_DATA_PATH);
+                    $tcgDb->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                    $this->cardDatabases[$tcgDbKey] = $tcgDb;
+                }
 
                 $sql = "
                     SELECT

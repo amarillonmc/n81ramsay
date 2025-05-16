@@ -28,6 +28,23 @@ class CardController {
         // 获取当前选择的数据库文件
         $selectedDb = isset($_GET['db']) ? $_GET['db'] : null;
 
+        // 验证数据库文件是否在允许的列表中
+        if ($selectedDb !== null) {
+            $isValid = false;
+            foreach ($dbFiles as $dbFile) {
+                if ($selectedDb === $dbFile || $selectedDb === basename($dbFile)) {
+                    $selectedDb = $dbFile; // 确保使用完整路径
+                    $isValid = true;
+                    break;
+                }
+            }
+
+            // 如果不是有效的数据库文件，则重置为null
+            if (!$isValid) {
+                $selectedDb = null;
+            }
+        }
+
         // 如果没有选择数据库文件，则使用第一个
         if ($selectedDb === null && !empty($dbFiles)) {
             $selectedDb = $dbFiles[0];

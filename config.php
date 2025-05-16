@@ -63,6 +63,11 @@ if (!defined('DB_STRINGS_PATH')) {
     define('DB_STRINGS_PATH', __DIR__ . '/res/cardinfo_chinese.txt');
 }
 
+// 临时文件目录
+if (!defined('TMP_DIR')) {
+    define('TMP_DIR', __DIR__ . '/tmp');
+}
+
 // 卡片环境配置
 if (!defined('CARD_ENVIRONMENTS')) {
     define('CARD_ENVIRONMENTS', json_encode([
