@@ -21,7 +21,7 @@
                     <?php if ($card['alias'] > 0): ?>
                         <tr>
                             <th>同名卡</th>
-                            <td><?php echo $card['alias']; ?></td>
+                            <td><a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['alias']; ?>"><?php echo $card['alias']; ?></a></td>
                         </tr>
                     <?php endif; ?>
                     <tr>
@@ -102,7 +102,11 @@
 
                 <div class="mt-3">
                     <?php if (!$isTcgCard || ($isTcgCard && $allowTcgCardVoting)): // 非TCG卡片或允许对TCG卡投票时显示投票按钮 ?>
-                        <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $card['id']; ?>" class="btn">发起投票</a>
+                        <?php
+                        // 如果卡片有alias字段，则使用alias对应的卡片ID发起投票
+                        $voteCardId = ($card['alias'] > 0) ? $card['alias'] : $card['id'];
+                        ?>
+                        <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $voteCardId; ?>" class="btn">发起投票</a>
                     <?php endif; ?>
                     <a href="<?php echo BASE_URL; ?>" class="btn btn-secondary">返回列表</a>
                 </div>

@@ -154,6 +154,28 @@ class DeckParser {
     }
 
     /**
+     * 获取卡片的真实ID（考虑alias字段）
+     *
+     * @param int $cardId 卡片ID
+     * @return int 真实卡片ID
+     */
+    private function getRealCardId($cardId) {
+        // 获取卡片解析器实例
+        $cardParser = CardParser::getInstance();
+
+        // 获取卡片信息
+        $card = $cardParser->getCardById($cardId);
+
+        // 如果卡片存在且有alias字段，则返回alias对应的卡片ID
+        if ($card && $card['alias'] > 0) {
+            return $card['alias'];
+        }
+
+        // 否则返回原始卡片ID
+        return $cardId;
+    }
+
+    /**
      * 统计卡片使用情况
      *
      * @param array $deckFiles 卡组文件列表
@@ -164,9 +186,23 @@ class DeckParser {
 
         foreach ($deckFiles as $file) {
             $deck = $this->parseDeckFile($file);
-            
-            // 统计主卡组卡片
+
+            // 处理主卡组卡片，将卡片ID映射到真实ID（考虑alias字段）
+            $mainDeck = [];
             foreach ($deck['main'] as $cardId) {
+                $realCardId = $this->getRealCardId($cardId);
+                $mainDeck[] = $realCardId;
+            }
+
+            // 处理副卡组卡片，将卡片ID映射到真实ID（考虑alias字段）
+            $sideDeck = [];
+            foreach ($deck['side'] as $cardId) {
+                $realCardId = $this->getRealCardId($cardId);
+                $sideDeck[] = $realCardId;
+            }
+
+            // 统计主卡组卡片
+            foreach ($mainDeck as $cardId) {
                 if (!isset($cardUsage[$cardId])) {
                     $cardUsage[$cardId] = [
                         'main_count_1' => 0,
@@ -176,10 +212,10 @@ class DeckParser {
                         'total_decks' => 0
                     ];
                 }
-                
+
                 // 统计这副卡组中该卡的数量
-                $cardCount = array_count_values($deck['main'])[$cardId] ?? 0;
-                
+                $cardCount = array_count_values($mainDeck)[$cardId] ?? 0;
+
                 // 更新统计数据
                 if ($cardCount === 1) {
                     $cardUsage[$cardId]['main_count_1']++;
@@ -188,13 +224,13 @@ class DeckParser {
                 } elseif ($cardCount === 3) {
                     $cardUsage[$cardId]['main_count_3']++;
                 }
-                
+
                 // 记录使用该卡的卡组数量
                 $cardUsage[$cardId]['total_decks']++;
             }
-            
+
             // 统计副卡组卡片
-            foreach ($deck['side'] as $cardId) {
+            foreach ($sideDeck as $cardId) {
                 if (!isset($cardUsage[$cardId])) {
                     $cardUsage[$cardId] = [
                         'main_count_1' => 0,
@@ -204,12 +240,12 @@ class DeckParser {
                         'total_decks' => 0
                     ];
                 }
-                
+
                 // 更新副卡组统计
                 $cardUsage[$cardId]['side_count']++;
-                
+
                 // 如果该卡只在副卡组出现，也要计入使用该卡的卡组数量
-                if (!in_array($cardId, $deck['main'])) {
+                if (!in_array($cardId, $mainDeck)) {
                     $cardUsage[$cardId]['total_decks']++;
                 }
             }

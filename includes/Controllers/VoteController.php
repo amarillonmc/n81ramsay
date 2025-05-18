@@ -84,6 +84,15 @@ class VoteController {
             $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
             $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
 
+            // 检查卡片是否有alias字段，如果有则使用alias对应的卡片ID
+            $card = $this->cardModel->getCardById($cardId);
+            if ($card && $card['alias'] > 0) {
+                $aliasCard = $this->cardModel->getCardById($card['alias']);
+                if ($aliasCard) {
+                    $cardId = $card['alias'];
+                }
+            }
+
             // 验证数据
             $errors = [];
 
@@ -138,6 +147,15 @@ class VoteController {
         if (!$card) {
             header('Location: ' . BASE_URL);
             exit;
+        }
+
+        // 如果卡片有alias字段，则使用alias对应的卡片ID
+        if ($card['alias'] > 0) {
+            $aliasCard = $this->cardModel->getCardById($card['alias']);
+            if ($aliasCard) {
+                $cardId = $card['alias'];
+                $card = $aliasCard;
+            }
         }
 
         // 获取环境列表
