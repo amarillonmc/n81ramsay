@@ -125,6 +125,9 @@ if (!defined('VOTES_PER_PAGE')) {
 if (!defined('VOTE_LINK_PREFIX')) {
     define('VOTE_LINK_PREFIX', BASE_URL . 'vote/');
 }
+if (!defined('VOTING_RELAXED_MODE')) {
+    define('VOTING_RELAXED_MODE', 0); // 0: 默认模式, 1: 抵消后最高限制, 2: 抵消后最低限制, 3: 得票最多的最低限制
+}
 
 // 卡片配置
 if (!defined('CARDS_PER_PAGE')) {

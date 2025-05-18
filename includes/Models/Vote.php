@@ -318,6 +318,117 @@ class Vote {
     }
 
     /**
+     * 根据投票模式确定最终状态
+     *
+     * @param array $stats 投票统计
+     * @return int 最终状态
+     */
+    private function determineFinalStatus($stats) {
+        // 默认无限制
+        $finalStatus = 3;
+
+        // 获取投票模式
+        $votingMode = defined('VOTING_RELAXED_MODE') ? VOTING_RELAXED_MODE : 0;
+
+        // 根据不同的投票模式处理
+        switch ($votingMode) {
+            case 0: // 默认模式：票数最多的状态
+                $maxVotes = 0;
+                foreach ($stats as $status => $count) {
+                    if ($count > $maxVotes) {
+                        $maxVotes = $count;
+                        $finalStatus = $status;
+                    }
+                }
+                break;
+
+            case 1: // 抵消后最高限制
+                // 计算各限制级别的净票数（高限制和低限制相互抵消）
+                $netVotes = $this->calculateNetVotes($stats);
+
+                // 找出净票数最多的最高限制
+                $maxNetVotes = 0;
+                $highestRestriction = 3;
+
+                foreach ($netVotes as $status => $votes) {
+                    if ($votes > $maxNetVotes || ($votes == $maxNetVotes && $status < $highestRestriction)) {
+                        $maxNetVotes = $votes;
+                        $highestRestriction = $status;
+                    }
+                }
+
+                $finalStatus = $highestRestriction;
+                break;
+
+            case 2: // 抵消后最低限制
+                // 计算各限制级别的净票数（高限制和低限制相互抵消）
+                $netVotes = $this->calculateNetVotes($stats);
+
+                // 找出净票数最多的最低限制
+                $maxNetVotes = 0;
+                $lowestRestriction = 0;
+
+                foreach ($netVotes as $status => $votes) {
+                    if ($votes > $maxNetVotes || ($votes == $maxNetVotes && $status > $lowestRestriction)) {
+                        $maxNetVotes = $votes;
+                        $lowestRestriction = $status;
+                    }
+                }
+
+                $finalStatus = $lowestRestriction;
+                break;
+
+            case 3: // 得票最多的最低限制
+                $maxVotes = 0;
+                $lowestRestriction = 0;
+
+                foreach ($stats as $status => $count) {
+                    if ($count > $maxVotes || ($count == $maxVotes && $status > $lowestRestriction)) {
+                        $maxVotes = $count;
+                        $lowestRestriction = $status;
+                    }
+                }
+
+                $finalStatus = $lowestRestriction;
+                break;
+        }
+
+        return $finalStatus;
+    }
+
+    /**
+     * 计算各限制级别的净票数
+     *
+     * @param array $stats 投票统计
+     * @return array 净票数
+     */
+    private function calculateNetVotes($stats) {
+        $netVotes = [
+            0 => 0, // 禁止
+            1 => 0, // 限制
+            2 => 0, // 准限制
+            3 => 0  // 无限制
+        ];
+
+        // 初始化净票数为原始票数
+        foreach ($stats as $status => $count) {
+            $netVotes[$status] = $count;
+        }
+
+        // 禁止(0)和无限制(3)相互抵消
+        $cancelVotes = min($netVotes[0], $netVotes[3]);
+        $netVotes[0] -= $cancelVotes;
+        $netVotes[3] -= $cancelVotes;
+
+        // 限制(1)和准限制(2)相互抵消
+        $cancelVotes = min($netVotes[1], $netVotes[2]);
+        $netVotes[1] -= $cancelVotes;
+        $netVotes[2] -= $cancelVotes;
+
+        return $netVotes;
+    }
+
+    /**
      * 获取投票结果
      *
      * @param int $voteCycle 投票周期
@@ -358,16 +469,8 @@ class Vote {
             // 获取投票统计
             $stats = $this->getVoteStats($voteId);
 
-            // 确定最终状态（票数最多的状态）
-            $finalStatus = 3; // 默认无限制
-            $maxVotes = 0;
-
-            foreach ($stats as $status => $count) {
-                if ($count > $maxVotes) {
-                    $maxVotes = $count;
-                    $finalStatus = $status;
-                }
-            }
+            // 根据投票模式确定最终状态
+            $finalStatus = $this->determineFinalStatus($stats);
 
             // 添加到结果
             $results[] = [
