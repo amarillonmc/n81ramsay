@@ -262,11 +262,31 @@ class CardParser {
      * 加载系列信息
      */
     private function loadSetcodes() {
+        // 首先从卡片数据目录加载系列信息
         $cardDataPath = CARD_DATA_PATH;
         $stringsFile = $cardDataPath . '/strings.conf';
 
         if (file_exists($stringsFile)) {
-            $content = file_get_contents($stringsFile);
+            $this->loadSetcodesFromFile($stringsFile);
+        }
+
+        // 然后加载assets目录下的strings.conf文件
+        $assetsStringsFile = __DIR__ . '/../../assets/strings.conf';
+        if (file_exists($assetsStringsFile)) {
+            // 将这些系列信息存储在单独的数组中，以便区分来源
+            $this->loadSetcodesFromFile($assetsStringsFile, 'assets');
+        }
+    }
+
+    /**
+     * 从文件加载系列信息
+     *
+     * @param string $filePath 文件路径
+     * @param string $source 来源标识，用于区分不同来源的系列信息
+     */
+    private function loadSetcodesFromFile($filePath, $source = 'default') {
+        if (file_exists($filePath)) {
+            $content = file_get_contents($filePath);
             $lines = explode("\n", $content);
 
             foreach ($lines as $line) {
@@ -283,7 +303,16 @@ class CardParser {
                     if (count($parts) >= 3) {
                         $code = trim($parts[1]);
                         $name = trim($parts[2]);
-                        $this->setcodes[$code] = $name;
+
+                        // 如果是assets来源，则存储在单独的数组中
+                        if ($source === 'assets') {
+                            if (!isset($this->setcodes['assets'])) {
+                                $this->setcodes['assets'] = [];
+                            }
+                            $this->setcodes['assets'][$code] = $name;
+                        } else {
+                            $this->setcodes[$code] = $name;
+                        }
                     }
                 }
             }
@@ -773,7 +802,10 @@ class CardParser {
 
             // 处理卡片数据
             foreach ($cards as &$card) {
-                $card['setcode_text'] = $this->getSetcodeText($card['setcode']);
+                // 判断是否为TCG卡片
+                $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+
+                $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
                 $card['type_text'] = $this->getTypeText($card['type']);
                 $card['race_text'] = $this->getRaceText($card['race']);
                 $card['attribute_text'] = $this->getAttributeText($card['attribute']);
@@ -822,7 +854,10 @@ class CardParser {
                 $card = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($card) {
-                    $card['setcode_text'] = $this->getSetcodeText($card['setcode']);
+                    // 判断是否为TCG卡片
+                    $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
                     $card['type_text'] = $this->getTypeText($card['type']);
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
@@ -875,7 +910,10 @@ class CardParser {
                 $card = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($card) {
-                    $card['setcode_text'] = $this->getSetcodeText($card['setcode']);
+                    // TCG卡片设置标志
+                    $isTcgCard = true;
+
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
                     $card['type_text'] = $this->getTypeText($card['type']);
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
@@ -944,7 +982,10 @@ class CardParser {
                 $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 foreach ($results as &$card) {
-                    $card['setcode_text'] = $this->getSetcodeText($card['setcode']);
+                    // 判断是否为TCG卡片
+                    $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
                     $card['type_text'] = $this->getTypeText($card['type']);
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
@@ -972,15 +1013,28 @@ class CardParser {
      * 获取系列文本
      *
      * @param int $setcode 系列代码
+     * @param bool $isTcgCard 是否为TCG卡片
      * @return string 系列文本
      */
-    public function getSetcodeText($setcode) {
+    public function getSetcodeText($setcode, $isTcgCard = false) {
         $hexSetcode = '0x' . dechex($setcode);
 
+        // 对于TCG卡片，优先从assets/strings.conf中查找
+        if ($isTcgCard && isset($this->setcodes['assets']) && isset($this->setcodes['assets'][$hexSetcode])) {
+            return $this->setcodes['assets'][$hexSetcode];
+        }
+
+        // 对于普通卡片，优先从默认数据中查找
         if (isset($this->setcodes[$hexSetcode])) {
             return $this->setcodes[$hexSetcode];
         }
 
+        // 如果在默认数据中找不到，尝试从assets/strings.conf中查找
+        if (isset($this->setcodes['assets']) && isset($this->setcodes['assets'][$hexSetcode])) {
+            return $this->setcodes['assets'][$hexSetcode];
+        }
+
+        // 如果都找不到，返回未知系列
         return '未知系列 (' . $hexSetcode . ')';
     }
 
