@@ -118,19 +118,31 @@ class Utils {
         // 生成哈希
         $hash = md5($data);
 
-        // 取前9位，确保包含字母和数字
-        $identifier = substr($hash, 0, 9);
+        // 尝试多次生成，避免无限递归
+        $maxAttempts = 10;
+        for ($attempt = 0; $attempt < $maxAttempts; $attempt++) {
+            // 每次尝试使用不同的偏移量
+            $offset = $attempt * 3;
+            $identifier = substr($hash, $offset, 9);
 
-        // 确保至少包含一个字母和一个数字
-        $hasLetter = preg_match('/[a-f]/i', $identifier);
-        $hasNumber = preg_match('/[0-9]/', $identifier);
+            // 如果超出哈希长度，重新生成哈希
+            if (strlen($identifier) < 9) {
+                $hash = md5($hash . $attempt);
+                $identifier = substr($hash, 0, 9);
+            }
 
-        if (!$hasLetter || !$hasNumber) {
-            // 如果不满足条件，重新生成
-            return self::generateVoterIdentifier($ipAddress, $userId);
+            // 确保至少包含一个字母和一个数字
+            $hasLetter = preg_match('/[a-f]/i', $identifier);
+            $hasNumber = preg_match('/[0-9]/', $identifier);
+
+            if ($hasLetter && $hasNumber) {
+                return $identifier;
+            }
         }
 
-        return $identifier;
+        // 如果所有尝试都失败，强制生成一个符合条件的标识符
+        $baseId = substr($hash, 0, 7);
+        return $baseId . 'a1'; // 确保包含字母和数字
     }
 
     /**
@@ -321,6 +333,84 @@ class Utils {
         }
 
         return null;
+    }
+
+    /**
+     * 检查内存使用情况
+     *
+     * @param string $context 上下文信息
+     * @param int $warningThreshold 警告阈值（MB）
+     * @return bool 是否超过警告阈值
+     */
+    public static function checkMemoryUsage($context = '', $warningThreshold = 3072) {
+        $memoryUsage = memory_get_usage(true);
+        $memoryUsageMB = round($memoryUsage / 1024 / 1024, 2);
+        $memoryLimit = ini_get('memory_limit');
+
+        // 转换内存限制为字节
+        $memoryLimitBytes = self::convertToBytes($memoryLimit);
+        $memoryLimitMB = round($memoryLimitBytes / 1024 / 1024, 2);
+
+        $usagePercentage = round(($memoryUsage / $memoryLimitBytes) * 100, 2);
+
+        if (DEBUG_MODE) {
+            self::debug("内存使用情况 - {$context}", [
+                '当前使用' => $memoryUsageMB . 'MB',
+                '内存限制' => $memoryLimitMB . 'MB',
+                '使用百分比' => $usagePercentage . '%'
+            ]);
+        }
+
+        // 如果超过警告阈值，记录警告
+        if ($memoryUsageMB > $warningThreshold) {
+            self::debug("内存使用警告 - {$context}", [
+                '当前使用' => $memoryUsageMB . 'MB',
+                '警告阈值' => $warningThreshold . 'MB',
+                '使用百分比' => $usagePercentage . '%'
+            ]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 转换内存限制字符串为字节数
+     *
+     * @param string $val 内存限制字符串（如 "128M", "1G"）
+     * @return int 字节数
+     */
+    private static function convertToBytes($val) {
+        $val = trim($val);
+        $last = strtolower($val[strlen($val)-1]);
+        $val = (int)$val;
+
+        switch($last) {
+            case 'g':
+                $val *= 1024;
+            case 'm':
+                $val *= 1024;
+            case 'k':
+                $val *= 1024;
+        }
+
+        return $val;
+    }
+
+    /**
+     * 强制垃圾回收
+     *
+     * @param string $context 上下文信息
+     */
+    public static function forceGarbageCollection($context = '') {
+        if (function_exists('gc_collect_cycles')) {
+            $collected = gc_collect_cycles();
+            if (DEBUG_MODE && $collected > 0) {
+                self::debug("垃圾回收 - {$context}", [
+                    '回收对象数' => $collected
+                ]);
+            }
+        }
     }
 
     /**

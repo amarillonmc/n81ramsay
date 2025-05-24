@@ -708,22 +708,66 @@ class CardParser {
             }
         } else {
             $dbFiles = $this->getCardDatabaseFiles();
-            foreach ($dbFiles as $file) {
-                if ($countOnly) {
-                    $totalCards += $this->countCardsInDatabase($file);
-                } else {
-                    // 注意：当获取所有数据库的卡片时，分页逻辑会变得复杂
-                    // 这里简化处理，先获取所有卡片，然后在内存中分页
-                    $cardsFromDb = $this->getCardsFromDatabase($file);
-                    $cards = array_merge($cards, $cardsFromDb);
-                }
-            }
 
-            if (!$countOnly && !empty($cards)) {
-                // 在内存中进行分页
-                $totalCards = count($cards);
+            if ($countOnly) {
+                // 只计算总数
+                foreach ($dbFiles as $file) {
+                    $totalCards += $this->countCardsInDatabase($file);
+                }
+            } else {
+                // 优化：使用数据库级别的分页，避免加载所有卡片到内存
+                Utils::checkMemoryUsage('多数据库卡片获取开始');
+
+                // 首先计算总数
+                foreach ($dbFiles as $file) {
+                    $totalCards += $this->countCardsInDatabase($file);
+                }
+
+                // 计算需要跳过的记录数
                 $offset = ($page - 1) * $perPage;
-                $cards = array_slice($cards, $offset, $perPage);
+                $remaining = $perPage;
+                $currentOffset = 0;
+
+                foreach ($dbFiles as $file) {
+                    if ($remaining <= 0) {
+                        break;
+                    }
+
+                    $dbCardCount = $this->countCardsInDatabase($file);
+
+                    // 如果当前数据库的所有卡片都需要跳过
+                    if ($currentOffset + $dbCardCount <= $offset) {
+                        $currentOffset += $dbCardCount;
+                        continue;
+                    }
+
+                    // 计算在当前数据库中需要跳过的记录数
+                    $dbOffset = max(0, $offset - $currentOffset);
+                    $dbLimit = min($remaining, $dbCardCount - $dbOffset);
+
+                    if ($dbLimit > 0) {
+                        // 从当前数据库获取卡片
+                        $dbPage = floor($dbOffset / $perPage) + 1;
+                        $cardsFromDb = $this->getCardsFromDatabase($file, $dbPage, $dbLimit);
+
+                        // 如果需要进一步调整偏移量
+                        if ($dbOffset % $perPage > 0) {
+                            $cardsFromDb = array_slice($cardsFromDb, $dbOffset % $perPage, $dbLimit);
+                        }
+
+                        $cards = array_merge($cards, $cardsFromDb);
+                        $remaining -= count($cardsFromDb);
+                    }
+
+                    $currentOffset += $dbCardCount;
+
+                    // 检查内存使用情况
+                    if (Utils::checkMemoryUsage('多数据库卡片处理', 2048)) {
+                        Utils::forceGarbageCollection('多数据库卡片获取');
+                    }
+                }
+
+                Utils::checkMemoryUsage('多数据库卡片获取完成');
             }
         }
 
@@ -937,14 +981,17 @@ class CardParser {
      * 搜索卡片
      *
      * @param string $keyword 关键词
+     * @param int $limit 限制结果数量，默认100
      * @return array 卡片列表
      */
-    public function searchCards($keyword) {
+    public function searchCards($keyword, $limit = 100) {
         $keyword = trim($keyword);
 
         if (empty($keyword)) {
             return [];
         }
+
+        Utils::checkMemoryUsage('卡片搜索开始');
 
         $cards = [];
         $dbFiles = $this->getCardDatabaseFiles();
@@ -953,6 +1000,11 @@ class CardParser {
         $isId = is_numeric($keyword);
 
         foreach ($dbFiles as $dbFile) {
+            // 如果已经达到限制数量，停止搜索
+            if (count($cards) >= $limit) {
+                break;
+            }
+
             $db = $this->getCardDatabase($dbFile);
 
             $sql = "
@@ -968,17 +1020,23 @@ class CardParser {
 
             if ($isId) {
                 $sql .= "d.id = :keyword";
-                $params = ['keyword' => (int)$keyword];
             } else {
                 $sql .= "t.name LIKE :keyword OR t.desc LIKE :keyword";
-                $params = ['keyword' => '%' . $keyword . '%'];
             }
 
-            $sql .= " ORDER BY d.id";
+            $sql .= " ORDER BY d.id LIMIT :limit";
 
             try {
                 $stmt = $db->prepare($sql);
-                $stmt->execute($params);
+                $stmt->bindValue(':limit', $limit - count($cards), PDO::PARAM_INT);
+
+                if ($isId) {
+                    $stmt->bindValue(':keyword', (int)$keyword, PDO::PARAM_INT);
+                } else {
+                    $stmt->bindValue(':keyword', '%' . $keyword . '%', PDO::PARAM_STR);
+                }
+
+                $stmt->execute();
                 $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 foreach ($results as &$card) {
@@ -1001,11 +1059,18 @@ class CardParser {
                 if ($isId && !empty($results)) {
                     break;
                 }
+
+                // 检查内存使用情况
+                if (Utils::checkMemoryUsage('卡片搜索处理', 2048)) {
+                    Utils::forceGarbageCollection('卡片搜索');
+                }
+
             } catch (PDOException $e) {
-                error_log('搜索卡片失败: ' . $e->getMessage());
+                Utils::debug('搜索卡片失败', ['错误' => $e->getMessage()]);
             }
         }
 
+        Utils::checkMemoryUsage('卡片搜索完成');
         return $cards;
     }
 

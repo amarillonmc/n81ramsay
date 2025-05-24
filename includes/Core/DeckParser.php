@@ -182,7 +182,11 @@ class DeckParser {
      * @return array 卡片使用统计
      */
     public function analyzeCardUsage($deckFiles) {
+        Utils::checkMemoryUsage('卡组分析开始');
+
         $cardUsage = [];
+        $processedCount = 0;
+        $totalFiles = count($deckFiles);
 
         foreach ($deckFiles as $file) {
             $deck = $this->parseDeckFile($file);
@@ -201,8 +205,12 @@ class DeckParser {
                 $sideDeck[] = $realCardId;
             }
 
+            // 优化：一次性计算主卡组中每张卡的数量，避免重复计算
+            $mainDeckCounts = array_count_values($mainDeck);
+            $uniqueMainCards = array_unique($mainDeck);
+
             // 统计主卡组卡片
-            foreach ($mainDeck as $cardId) {
+            foreach ($uniqueMainCards as $cardId) {
                 if (!isset($cardUsage[$cardId])) {
                     $cardUsage[$cardId] = [
                         'main_count_1' => 0,
@@ -213,8 +221,8 @@ class DeckParser {
                     ];
                 }
 
-                // 统计这副卡组中该卡的数量
-                $cardCount = array_count_values($mainDeck)[$cardId] ?? 0;
+                // 获取这副卡组中该卡的数量
+                $cardCount = $mainDeckCounts[$cardId];
 
                 // 更新统计数据
                 if ($cardCount === 1) {
@@ -230,7 +238,8 @@ class DeckParser {
             }
 
             // 统计副卡组卡片
-            foreach ($sideDeck as $cardId) {
+            $uniqueSideCards = array_unique($sideDeck);
+            foreach ($uniqueSideCards as $cardId) {
                 if (!isset($cardUsage[$cardId])) {
                     $cardUsage[$cardId] = [
                         'main_count_1' => 0,
@@ -249,8 +258,18 @@ class DeckParser {
                     $cardUsage[$cardId]['total_decks']++;
                 }
             }
+
+            $processedCount++;
+
+            // 每处理100个文件检查一次内存使用情况
+            if ($processedCount % 100 === 0) {
+                if (Utils::checkMemoryUsage("卡组分析进度 {$processedCount}/{$totalFiles}", 2048)) {
+                    Utils::forceGarbageCollection('卡组分析');
+                }
+            }
         }
 
+        Utils::checkMemoryUsage('卡组分析完成');
         return $cardUsage;
     }
 }

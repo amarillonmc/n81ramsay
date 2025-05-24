@@ -47,6 +47,8 @@ class VoteController {
         $totalPages = ceil($totalVotes / VOTES_PER_PAGE);
 
         // 处理投票数据
+        Utils::checkMemoryUsage('投票列表处理开始');
+
         foreach ($votes as &$vote) {
             // 获取卡片信息
             $card = $this->cardModel->getCardById($vote['card_id']);
@@ -61,9 +63,17 @@ class VoteController {
 
             // 获取投票记录
             $vote['records'] = $this->voteModel->getVoteRecords($vote['id']);
+
+            // 检查内存使用情况，如果超过阈值则进行垃圾回收
+            if (Utils::checkMemoryUsage('投票数据处理', 2048)) {
+                Utils::forceGarbageCollection('投票列表处理');
+            }
         }
+
         // 解除引用，防止后续操作影响数组
         unset($vote);
+
+        Utils::checkMemoryUsage('投票列表处理完成');
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';

@@ -82,6 +82,9 @@ class Vote {
      * @return bool 是否成功
      */
     public function addVoteRecord($voteId, $userId, $status, $comment) {
+        // 检查内存使用情况
+        Utils::checkMemoryUsage('添加投票记录开始');
+
         // 获取客户端IP
         $ipAddress = Utils::getClientIp();
 
@@ -109,6 +112,7 @@ class Vote {
             'created_at' => date('Y-m-d H:i:s')
         ]);
 
+        Utils::checkMemoryUsage('添加投票记录完成');
         return $recordId !== false;
     }
 
@@ -180,12 +184,17 @@ class Vote {
             3 => 0  // 无限制
         ];
 
-        $records = $this->getVoteRecords($voteId);
+        // 直接从数据库统计，避免加载所有记录到内存
+        $result = $this->db->getRows(
+            'SELECT status, COUNT(*) as count FROM vote_records WHERE vote_id = ? GROUP BY status',
+            [$voteId]
+        );
 
-        foreach ($records as $record) {
-            $status = (int)$record['status'];
+        foreach ($result as $row) {
+            $status = (int)$row['status'];
+            $count = (int)$row['count'];
             if (isset($stats[$status])) {
-                $stats[$status]++;
+                $stats[$status] = $count;
             }
         }
 
