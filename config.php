@@ -128,6 +128,9 @@ if (!defined('VOTE_LINK_PREFIX')) {
 if (!defined('VOTING_RELAXED_MODE')) {
     define('VOTING_RELAXED_MODE', 0); // 0: 默认模式, 1: 抵消后最高限制, 2: 抵消后最低限制, 3: 得票最多的最低限制
 }
+if (!defined('ALLOW_MEANINGLESS_VOTING')) {
+    define('ALLOW_MEANINGLESS_VOTING', false); // 是否允许无意义投票（对卡片发起与其当前禁限状态相同的投票）
+}
 
 // 卡片配置
 if (!defined('CARDS_PER_PAGE')) {

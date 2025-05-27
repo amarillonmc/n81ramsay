@@ -122,6 +122,18 @@ class VoteController {
                 $errors[] = '请输入您的ID';
             }
 
+            // 检查是否为无意义投票
+            if (!ALLOW_MEANINGLESS_VOTING && $cardId > 0 && $environmentId > 0) {
+                $environment = Utils::getEnvironmentById($environmentId);
+                if ($environment) {
+                    $currentStatus = $this->cardModel->getCardLimitStatus($cardId, $environment['header']);
+                    if ($status == $currentStatus) {
+                        $statusText = Utils::getLimitStatusText($status);
+                        $errors[] = "无法对已经是{$statusText}的卡片发起{$statusText}投票，这是无意义的投票";
+                    }
+                }
+            }
+
             // 如果没有错误，则创建投票
             if (empty($errors)) {
                 $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId);
@@ -139,6 +151,12 @@ class VoteController {
             if (!empty($errors)) {
                 $card = $this->cardModel->getCardById($cardId);
                 $environments = Utils::getEnvironments();
+
+                // 获取卡片在各环境中的禁限状态
+                $limitStatus = [];
+                foreach ($environments as $env) {
+                    $limitStatus[$env['id']] = $this->cardModel->getCardLimitStatus($cardId, $env['header']);
+                }
 
                 include __DIR__ . '/../Views/layout.php';
                 include __DIR__ . '/../Views/votes/create.php';
@@ -170,6 +188,12 @@ class VoteController {
 
         // 获取环境列表
         $environments = Utils::getEnvironments();
+
+        // 获取卡片在各环境中的禁限状态
+        $limitStatus = [];
+        foreach ($environments as $env) {
+            $limitStatus[$env['id']] = $this->cardModel->getCardLimitStatus($cardId, $env['header']);
+        }
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
