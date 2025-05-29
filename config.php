@@ -162,6 +162,11 @@ if (!defined('CARD_RANKING_CACHE_DAYS')) {
     define('CARD_RANKING_CACHE_DAYS', 7); // 卡片排行榜缓存天数，超过此天数将重新生成
 }
 
+// 服务器提示配置
+if (!defined('TIPS_FILE_PATH')) {
+    define('TIPS_FILE_PATH', __DIR__ . '/data/const/tips.json'); // 服务器提示文件位置
+}
+
 // 错误处理配置
 if (defined('DEBUG_MODE') && DEBUG_MODE) {
     ini_set('display_errors', 1);

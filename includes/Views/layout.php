@@ -38,6 +38,7 @@ $isLoggedIn = $auth->isLoggedIn();
                             <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
                             <?php if ($auth->hasPermission(2)): ?>
                                 <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
+                                <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=tips">服务器提示管理</a></li>
                             <?php endif; ?>
                         <?php endif; ?>
 

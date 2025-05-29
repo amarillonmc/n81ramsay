@@ -476,4 +476,188 @@ class AdminController {
         include __DIR__ . '/../Views/admin/edit_author.php';
         include __DIR__ . '/../Views/footer.php';
     }
+
+    /**
+     * 服务器提示管理
+     */
+    public function tips() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 读取tips文件
+        $tips = $this->loadTips();
+
+        // 获取消息
+        $message = isset($_GET['message']) ? $_GET['message'] : '';
+        $error = isset($_GET['error']) ? $_GET['error'] : '';
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/tips.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 添加提示
+     */
+    public function addTip() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $tipContent = isset($_POST['tip_content']) ? trim($_POST['tip_content']) : '';
+
+            if (empty($tipContent)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('提示内容不能为空'));
+                exit;
+            }
+
+            // 读取现有tips
+            $tips = $this->loadTips();
+
+            // 添加新tip
+            $tips[] = $tipContent;
+
+            // 保存tips
+            if ($this->saveTips($tips)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功添加提示'));
+            } else {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+            }
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到tips管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=tips');
+        exit;
+    }
+
+    /**
+     * 编辑提示
+     */
+    public function editTip() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $index = isset($_POST['index']) ? (int)$_POST['index'] : -1;
+            $tipContent = isset($_POST['tip_content']) ? trim($_POST['tip_content']) : '';
+
+            if (empty($tipContent)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('提示内容不能为空'));
+                exit;
+            }
+
+            // 读取现有tips
+            $tips = $this->loadTips();
+
+            // 检查索引是否有效
+            if ($index < 0 || $index >= count($tips)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('无效的提示索引'));
+                exit;
+            }
+
+            // 更新tip
+            $tips[$index] = $tipContent;
+
+            // 保存tips
+            if ($this->saveTips($tips)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功更新提示'));
+            } else {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+            }
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到tips管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=tips');
+        exit;
+    }
+
+    /**
+     * 删除提示
+     */
+    public function deleteTip() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $index = isset($_POST['index']) ? (int)$_POST['index'] : -1;
+
+            // 读取现有tips
+            $tips = $this->loadTips();
+
+            // 检查索引是否有效
+            if ($index < 0 || $index >= count($tips)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('无效的提示索引'));
+                exit;
+            }
+
+            // 删除tip
+            array_splice($tips, $index, 1);
+
+            // 保存tips
+            if ($this->saveTips($tips)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功删除提示'));
+            } else {
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+            }
+            exit;
+        }
+
+        // 如果不是POST请求，则重定向到tips管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=tips');
+        exit;
+    }
+
+    /**
+     * 读取tips文件
+     *
+     * @return array tips数组
+     */
+    private function loadTips() {
+        $tipsFile = TIPS_FILE_PATH;
+
+        if (!file_exists($tipsFile)) {
+            return [];
+        }
+
+        $content = file_get_contents($tipsFile);
+        if ($content === false) {
+            return [];
+        }
+
+        $tips = json_decode($content, true);
+        if (!is_array($tips)) {
+            return [];
+        }
+
+        return $tips;
+    }
+
+    /**
+     * 保存tips到文件
+     *
+     * @param array $tips tips数组
+     * @return bool 是否保存成功
+     */
+    private function saveTips($tips) {
+        $tipsFile = TIPS_FILE_PATH;
+
+        // 确保目录存在
+        $dir = dirname($tipsFile);
+        if (!is_dir($dir)) {
+            if (!mkdir($dir, 0755, true)) {
+                return false;
+            }
+        }
+
+        // 保存为格式化的JSON
+        $content = json_encode($tips, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        return file_put_contents($tipsFile, $content) !== false;
+    }
 }
