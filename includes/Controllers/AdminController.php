@@ -519,11 +519,25 @@ class AdminController {
             // 添加新tip
             $tips[] = $tipContent;
 
+            // 调试信息
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                Utils::debug('添加Tips调试', [
+                    'tip_content' => $tipContent,
+                    'tips_count' => count($tips),
+                    'tips_file_path' => TIPS_FILE_PATH,
+                    'dir_exists' => is_dir(dirname(TIPS_FILE_PATH)),
+                    'dir_writable' => is_writable(dirname(TIPS_FILE_PATH)),
+                    'file_exists' => file_exists(TIPS_FILE_PATH),
+                    'file_writable' => file_exists(TIPS_FILE_PATH) ? is_writable(TIPS_FILE_PATH) : 'N/A'
+                ]);
+            }
+
             // 保存tips
-            if ($this->saveTips($tips)) {
+            $saveResult = $this->saveTips($tips);
+            if ($saveResult === true) {
                 header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功添加提示'));
             } else {
-                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败: ' . $saveResult));
             }
             exit;
         }
@@ -563,10 +577,11 @@ class AdminController {
             $tips[$index] = $tipContent;
 
             // 保存tips
-            if ($this->saveTips($tips)) {
+            $saveResult = $this->saveTips($tips);
+            if ($saveResult === true) {
                 header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功更新提示'));
             } else {
-                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败: ' . $saveResult));
             }
             exit;
         }
@@ -600,10 +615,11 @@ class AdminController {
             array_splice($tips, $index, 1);
 
             // 保存tips
-            if ($this->saveTips($tips)) {
+            $saveResult = $this->saveTips($tips);
+            if ($saveResult === true) {
                 header('Location: ' . BASE_URL . '?controller=admin&action=tips&message=' . urlencode('成功删除提示'));
             } else {
-                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败'));
+                header('Location: ' . BASE_URL . '?controller=admin&action=tips&error=' . urlencode('保存失败: ' . $saveResult));
             }
             exit;
         }
@@ -620,6 +636,28 @@ class AdminController {
      */
     private function loadTips() {
         $tipsFile = TIPS_FILE_PATH;
+        $originalPath = dirname(__DIR__, 2) . '/data/const/tips.json';
+
+        // 如果当前使用的是临时路径，且临时文件不存在，但原始文件存在，则复制原始文件
+        if ($tipsFile !== $originalPath && !file_exists($tipsFile) && file_exists($originalPath) && is_readable($originalPath)) {
+            $originalContent = file_get_contents($originalPath);
+            if ($originalContent !== false) {
+                // 确保临时目录存在
+                $tempDir = dirname($tipsFile);
+                if (!is_dir($tempDir)) {
+                    @mkdir($tempDir, 0755, true);
+                }
+                // 复制原始文件到临时位置
+                file_put_contents($tipsFile, $originalContent);
+
+                if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                    Utils::debug('复制原始tips文件到临时位置', [
+                        'from' => $originalPath,
+                        'to' => $tipsFile
+                    ]);
+                }
+            }
+        }
 
         if (!file_exists($tipsFile)) {
             return [];
@@ -642,22 +680,74 @@ class AdminController {
      * 保存tips到文件
      *
      * @param array $tips tips数组
-     * @return bool 是否保存成功
+     * @return bool|string 保存成功返回true，失败返回错误信息
      */
     private function saveTips($tips) {
         $tipsFile = TIPS_FILE_PATH;
 
+        // 调试信息
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            Utils::debug('saveTips开始', [
+                'tips_file' => $tipsFile,
+                'tips_count' => count($tips),
+                'tips_data' => $tips
+            ]);
+        }
+
         // 确保目录存在
         $dir = dirname($tipsFile);
         if (!is_dir($dir)) {
-            if (!mkdir($dir, 0755, true)) {
-                return false;
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                Utils::debug('创建目录', ['dir' => $dir]);
             }
+            if (!mkdir($dir, 0755, true)) {
+                $error = error_get_last();
+                $errorMsg = "无法创建目录 {$dir}: " . ($error ? $error['message'] : '未知错误');
+                if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                    Utils::debug('目录创建失败', ['error' => $errorMsg]);
+                }
+                return $errorMsg;
+            }
+        }
+
+        // 检查目录权限
+        if (!is_writable($dir)) {
+            $errorMsg = "目录 {$dir} 不可写";
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                Utils::debug('目录权限检查失败', ['error' => $errorMsg]);
+            }
+            return $errorMsg;
         }
 
         // 保存为格式化的JSON
         $content = json_encode($tips, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+        if ($content === false) {
+            $errorMsg = "JSON编码失败: " . json_last_error_msg();
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                Utils::debug('JSON编码失败', ['error' => $errorMsg]);
+            }
+            return $errorMsg;
+        }
 
-        return file_put_contents($tipsFile, $content) !== false;
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            Utils::debug('JSON编码成功', ['content_length' => strlen($content)]);
+        }
+
+        // 尝试写入文件
+        $result = file_put_contents($tipsFile, $content);
+        if ($result === false) {
+            $error = error_get_last();
+            $errorMsg = "文件写入失败: " . ($error ? $error['message'] : '未知错误');
+            if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                Utils::debug('文件写入失败', ['error' => $errorMsg]);
+            }
+            return $errorMsg;
+        }
+
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            Utils::debug('文件写入成功', ['bytes_written' => $result]);
+        }
+
+        return true;
     }
 }

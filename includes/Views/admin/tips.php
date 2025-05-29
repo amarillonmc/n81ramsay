@@ -20,6 +20,39 @@
     </div>
 <?php endif; ?>
 
+<?php
+$originalPath = dirname(__DIR__, 3) . '/data/const/tips.json';
+$isUsingTempPath = (TIPS_FILE_PATH !== $originalPath);
+?>
+
+<?php if ($isUsingTempPath): ?>
+    <div class="alert alert-warning">
+        <strong>注意：正在使用临时文件路径</strong><br>
+        由于原始目录权限问题，系统正在使用临时目录存储提示文件。<br>
+        当前文件路径：<?php echo Utils::escapeHtml(TIPS_FILE_PATH); ?><br>
+        原始路径：<?php echo Utils::escapeHtml($originalPath); ?><br>
+        <strong>建议：</strong>请联系系统管理员修复目录权限问题。
+    </div>
+<?php endif; ?>
+
+<?php if (defined('DEBUG_MODE') && DEBUG_MODE): ?>
+    <div class="alert alert-info">
+        <strong>调试信息</strong><br>
+        当前文件路径：<?php echo Utils::escapeHtml(TIPS_FILE_PATH); ?><br>
+        原始文件路径：<?php echo Utils::escapeHtml($originalPath); ?><br>
+        使用临时路径：<?php echo $isUsingTempPath ? '是' : '否'; ?><br>
+        目录：<?php echo Utils::escapeHtml(dirname(TIPS_FILE_PATH)); ?><br>
+        目录是否存在：<?php echo is_dir(dirname(TIPS_FILE_PATH)) ? '是' : '否'; ?><br>
+        目录是否可写：<?php echo is_writable(dirname(TIPS_FILE_PATH)) ? '是' : '否'; ?><br>
+        文件是否存在：<?php echo file_exists(TIPS_FILE_PATH) ? '是' : '否'; ?><br>
+        <?php if (file_exists(TIPS_FILE_PATH)): ?>
+            文件是否可读：<?php echo is_readable(TIPS_FILE_PATH) ? '是' : '否'; ?><br>
+            文件是否可写：<?php echo is_writable(TIPS_FILE_PATH) ? '是' : '否'; ?><br>
+            文件大小：<?php echo filesize(TIPS_FILE_PATH); ?> 字节<br>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
+
 <div class="card mb-4">
     <div class="card-header">
         <h3>添加新提示</h3>

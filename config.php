@@ -164,7 +164,20 @@ if (!defined('CARD_RANKING_CACHE_DAYS')) {
 
 // 服务器提示配置
 if (!defined('TIPS_FILE_PATH')) {
-    define('TIPS_FILE_PATH', __DIR__ . '/data/const/tips.json'); // 服务器提示文件位置
+    // 检查原始路径是否可写
+    $originalPath = __DIR__ . '/data/const/tips.json';
+    $originalDir = dirname($originalPath);
+
+    if (is_dir($originalDir) && is_writable($originalDir)) {
+        define('TIPS_FILE_PATH', $originalPath);
+    } else {
+        // 使用系统临时目录作为备选
+        $tempDir = sys_get_temp_dir() . '/ramsay_tips';
+        if (!is_dir($tempDir)) {
+            @mkdir($tempDir, 0755, true);
+        }
+        define('TIPS_FILE_PATH', $tempDir . '/tips.json');
+    }
 }
 
 // 错误处理配置
