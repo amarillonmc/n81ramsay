@@ -1,0 +1,34 @@
+召唤词管理功能数据库错误修复 - 2024年12月20日 14:30
+
+问题描述：
+访问"召唤词管理"页面时出现SQL错误：
+SQLSTATE[HY000]: General error: 1 no such table: users
+SQL: SELECT ds.*, u.username FROM dialogue_submissions ds LEFT JOIN users u ON ds.user_id = u.id WHERE ds.status = "pending" ORDER BY ds.created_at ASC
+
+问题原因：
+DialogueModel.php中的getPendingSubmissions()方法尝试连接不存在的users表。
+RAMSAY系统使用配置文件中的ADMIN_CONFIG管理用户，而不是数据库表。
+
+修复内容：
+
+1. 修改 includes/Models/DialogueModel.php
+   - getPendingSubmissions()方法
+   - 移除对users表的LEFT JOIN
+   - 简化SQL查询为只查询dialogue_submissions表
+
+2. 修改 includes/Controllers/DialogueController.php  
+   - admin()方法中为每个投稿添加username字段
+   - 使用user_id作为username的值
+
+修复后的SQL查询：
+SELECT * FROM dialogue_submissions WHERE status = "pending" ORDER BY created_at ASC
+
+测试结果：
+- 召唤词管理页面现在应该能正常访问
+- 不再出现users表不存在的错误
+- 投稿列表能正常显示，用户名显示为user_id
+
+注意事项：
+- 由于系统没有独立的用户名系统，投稿者显示为其输入的user_id
+- 这与系统的整体架构保持一致
+- 未来如果需要真正的用户系统，需要创建users表并修改相关逻辑

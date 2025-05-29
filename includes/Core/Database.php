@@ -141,6 +141,22 @@ class Database {
             )
         ');
 
+        // 创建召唤词投稿表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS dialogue_submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                card_id TEXT NOT NULL,
+                dialogue TEXT NOT NULL,
+                author_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT "pending",
+                reviewed_by TEXT,
+                reviewed_at TIMESTAMP,
+                reject_reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ');
+
         // 检查投票周期表是否有数据，如果没有则插入初始数据
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM vote_cycles');
         $count = $stmt->fetchColumn();

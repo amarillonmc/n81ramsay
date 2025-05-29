@@ -180,6 +180,33 @@ if (!defined('TIPS_FILE_PATH')) {
     }
 }
 
+// 召唤词配置
+if (!defined('DIALOGUES_FILE_PATH')) {
+    // 检查原始路径是否可写
+    $originalPath = __DIR__ . '/data/const/dialogues-custom.json';
+    $originalDir = dirname($originalPath);
+
+    if (is_dir($originalDir) && is_writable($originalDir)) {
+        define('DIALOGUES_FILE_PATH', $originalPath);
+    } else {
+        // 使用系统临时目录作为备选
+        $tempDir = sys_get_temp_dir() . '/ramsay_dialogues';
+        if (!is_dir($tempDir)) {
+            @mkdir($tempDir, 0755, true);
+        }
+        define('DIALOGUES_FILE_PATH', $tempDir . '/dialogues-custom.json');
+    }
+}
+
+// 召唤词投稿配置
+if (!defined('MAX_PENDING_DIALOGUES_PER_USER')) {
+    define('MAX_PENDING_DIALOGUES_PER_USER', 5); // 用户可以同时投稿的召唤词数量
+}
+
+if (!defined('DIALOGUE_SUBMISSION_STRICTNESS')) {
+    define('DIALOGUE_SUBMISSION_STRICTNESS', 2); // 召唤词投稿严格度：0=无限制，1=仅验证作者存在，2=验证作者和卡片前缀匹配
+}
+
 // 错误处理配置
 if (defined('DEBUG_MODE') && DEBUG_MODE) {
     ini_set('display_errors', 1);

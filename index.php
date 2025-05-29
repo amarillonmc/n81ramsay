@@ -38,7 +38,8 @@ $controllerMap = [
     'admin' => 'AdminController',
     'banlist' => 'BanlistController',
     'author' => 'AuthorController',
-    'card_ranking' => 'CardRankingController'
+    'card_ranking' => 'CardRankingController',
+    'dialogue' => 'DialogueController'
 ];
 
 // 特殊路由处理

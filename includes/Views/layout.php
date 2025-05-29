@@ -22,6 +22,7 @@ $isLoggedIn = $auth->isLoggedIn();
                 <ul>
                     <li><a href="<?php echo BASE_URL; ?>">卡片检索</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=vote">投票概览</a></li>
+                    <li><a href="<?php echo BASE_URL; ?>?controller=dialogue">召唤词一览</a></li>
 
                     <?php if (defined('CARD_RANKING_ENABLED') && CARD_RANKING_ENABLED): ?>
                         <li><a href="<?php echo BASE_URL; ?>?controller=card_ranking">卡片排行榜</a></li>
@@ -36,6 +37,7 @@ $isLoggedIn = $auth->isLoggedIn();
                         <?php if ($auth->hasPermission(1)): ?>
                             <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=votes">投票管理</a></li>
                             <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
+                            <li><a href="<?php echo BASE_URL; ?>?controller=dialogue&action=admin">召唤词管理</a></li>
                             <?php if ($auth->hasPermission(2)): ?>
                                 <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
                                 <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=tips">服务器提示管理</a></li>
