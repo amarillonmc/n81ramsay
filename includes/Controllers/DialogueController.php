@@ -170,6 +170,8 @@ class DialogueController {
                 // 由于没有users表，username就使用user_id
                 $submission['username'] = $submission['user_id'];
             }
+            // 解除引用，防止后续操作影响数组
+            unset($submission);
 
             // 读取现有召唤词
             $dialogues = $this->dialogueModel->loadDialogues();
