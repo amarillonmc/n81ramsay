@@ -1382,7 +1382,7 @@ class CardParser {
                         JOIN
                             texts t ON d.id = t.id
                         WHERE
-                            (d.setcode & :setcode) = :setcode
+                            (d.setcode & 0xfff) = (:setcode & 0xfff)
                             AND d.setcode > 0
                             AND d.setcode != :setcode
                         ORDER BY
