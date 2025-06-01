@@ -107,6 +107,10 @@
                         $voteCardId = ($card['alias'] > 0) ? $card['alias'] : $card['id'];
                         ?>
                         <a href="<?php echo BASE_URL; ?>?controller=vote&action=create&card_id=<?php echo $voteCardId; ?>" class="btn">发起投票</a>
+
+                        <?php if (defined('SERIES_VOTING_ENABLED') && SERIES_VOTING_ENABLED && !$isTcgCard && $card['setcode'] > 0): ?>
+                            <a href="<?php echo BASE_URL; ?>?controller=vote&action=createSeries&card_id=<?php echo $voteCardId; ?>" class="btn btn-warning">发起系列投票</a>
+                        <?php endif; ?>
                     <?php endif; ?>
                     <a href="<?php echo BASE_URL; ?>" class="btn btn-secondary">返回列表</a>
                 </div>

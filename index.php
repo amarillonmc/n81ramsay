@@ -31,6 +31,11 @@ $controllerName = isset($_GET['controller']) ? $_GET['controller'] : 'card';
 $methodName = isset($_GET['action']) ? $_GET['action'] : 'index';
 $params = [];
 
+// 调试信息
+if (defined('DEBUG_MODE') && DEBUG_MODE) {
+    error_log("Route debug - Controller: $controllerName, Method: $methodName");
+}
+
 // 映射控制器名称到类名
 $controllerMap = [
     'card' => 'CardController',
@@ -39,7 +44,8 @@ $controllerMap = [
     'banlist' => 'BanlistController',
     'author' => 'AuthorController',
     'card_ranking' => 'CardRankingController',
-    'dialogue' => 'DialogueController'
+    'dialogue' => 'DialogueController',
+    'api' => 'ApiController'
 ];
 
 // 特殊路由处理
@@ -52,14 +58,44 @@ if ($controllerName === 'vote' && isset($_GET['id'])) {
 // 确定控制器类名
 $controllerClass = isset($controllerMap[$controllerName]) ? $controllerMap[$controllerName] : 'CardController';
 
-// 创建控制器实例
-$controller = new $controllerClass();
+// 调试信息
+if (defined('DEBUG_MODE') && DEBUG_MODE) {
+    error_log("Route debug - Controller class: $controllerClass");
+}
 
-// 调用方法
-if (method_exists($controller, $methodName)) {
-    call_user_func_array([$controller, $methodName], $params);
-} else {
-    // 如果方法不存在，则显示404页面
-    header('HTTP/1.0 404 Not Found');
-    echo '404 Not Found';
+try {
+    // 创建控制器实例
+    $controller = new $controllerClass();
+
+    // 调试信息
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        error_log("Route debug - Controller instance created successfully");
+        error_log("Route debug - Method exists: " . (method_exists($controller, $methodName) ? 'yes' : 'no'));
+    }
+
+    // 调用方法
+    if (method_exists($controller, $methodName)) {
+        call_user_func_array([$controller, $methodName], $params);
+    } else {
+        // 如果方法不存在，则显示404页面
+        if (defined('DEBUG_MODE') && DEBUG_MODE) {
+            error_log("Route debug - Method $methodName not found in $controllerClass");
+        }
+        header('HTTP/1.0 404 Not Found');
+        echo '404 Not Found';
+    }
+} catch (Exception $e) {
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        error_log("Route debug - Exception: " . $e->getMessage());
+        error_log("Route debug - Trace: " . $e->getTraceAsString());
+    }
+    header('HTTP/1.0 500 Internal Server Error');
+    echo '500 Internal Server Error';
+} catch (Error $e) {
+    if (defined('DEBUG_MODE') && DEBUG_MODE) {
+        error_log("Route debug - Fatal Error: " . $e->getMessage());
+        error_log("Route debug - Trace: " . $e->getTraceAsString());
+    }
+    header('HTTP/1.0 500 Internal Server Error');
+    echo '500 Internal Server Error';
 }

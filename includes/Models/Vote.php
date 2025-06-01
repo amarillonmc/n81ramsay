@@ -33,21 +33,27 @@ class Vote {
      * @param int $status 禁限状态
      * @param string $reason 理由
      * @param string $initiatorId 发起人ID
+     * @param bool $isSeriesVote 是否为系列投票
+     * @param int $setcode 系列代码（仅系列投票时使用）
      * @return string|false 投票链接或失败
      */
-    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId) {
+    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId, $isSeriesVote = false, $setcode = 0) {
         // 获取当前投票周期
         $voteCycle = $this->db->getCurrentVoteCycle();
 
         // 检查是否已存在相同卡片和环境的投票
-        $existingVote = $this->getVoteByCardAndEnvironment($cardId, $environmentId, $voteCycle);
+        if ($isSeriesVote) {
+            $existingVote = $this->getVoteBySetcodeAndEnvironment($setcode, $environmentId, $voteCycle);
+        } else {
+            $existingVote = $this->getVoteByCardAndEnvironment($cardId, $environmentId, $voteCycle);
+        }
 
         if ($existingVote) {
             return $existingVote['vote_link'];
         }
 
         // 生成投票链接
-        $voteLink = Utils::generateVoteLink($cardId, $environmentId, $voteCycle);
+        $voteLink = Utils::generateVoteLink($cardId, $environmentId, $voteCycle, $isSeriesVote, $setcode);
 
         // 插入投票数据
         $voteId = $this->db->insert('votes', [
@@ -59,7 +65,9 @@ class Vote {
             'vote_cycle' => $voteCycle,
             'created_at' => date('Y-m-d H:i:s'),
             'is_closed' => 0,
-            'vote_link' => $voteLink
+            'vote_link' => $voteLink,
+            'is_series_vote' => $isSeriesVote ? 1 : 0,
+            'setcode' => $setcode
         ]);
 
         if (!$voteId) {
@@ -152,8 +160,23 @@ class Vote {
      */
     public function getVoteByCardAndEnvironment($cardId, $environmentId, $voteCycle) {
         return $this->db->getRow(
-            'SELECT * FROM votes WHERE card_id = ? AND environment_id = ? AND vote_cycle = ?',
+            'SELECT * FROM votes WHERE card_id = ? AND environment_id = ? AND vote_cycle = ? AND is_series_vote = 0',
             [$cardId, $environmentId, $voteCycle]
+        );
+    }
+
+    /**
+     * 根据系列代码和环境获取投票
+     *
+     * @param int $setcode 系列代码
+     * @param int $environmentId 环境ID
+     * @param int $voteCycle 投票周期
+     * @return array|null 投票信息
+     */
+    public function getVoteBySetcodeAndEnvironment($setcode, $environmentId, $voteCycle) {
+        return $this->db->getRow(
+            'SELECT * FROM votes WHERE setcode = ? AND environment_id = ? AND vote_cycle = ? AND is_series_vote = 1',
+            [$setcode, $environmentId, $voteCycle]
         );
     }
 

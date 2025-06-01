@@ -59,10 +59,16 @@ class Utils {
      * @param int $cardId 卡片ID
      * @param int $environmentId 环境ID
      * @param int $voteCycle 投票周期
+     * @param bool $isSeriesVote 是否为系列投票
+     * @param int $setcode 系列代码（仅系列投票时使用）
      * @return string 投票链接
      */
-    public static function generateVoteLink($cardId, $environmentId, $voteCycle) {
-        $hash = md5($cardId . '-' . $environmentId . '-' . $voteCycle);
+    public static function generateVoteLink($cardId, $environmentId, $voteCycle, $isSeriesVote = false, $setcode = 0) {
+        if ($isSeriesVote) {
+            $hash = md5('series-' . $setcode . '-' . $environmentId . '-' . $voteCycle);
+        } else {
+            $hash = md5($cardId . '-' . $environmentId . '-' . $voteCycle);
+        }
         return substr($hash, 0, 8);
     }
 

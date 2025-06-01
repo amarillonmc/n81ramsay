@@ -78,7 +78,9 @@ class Database {
                 vote_cycle INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 is_closed INTEGER DEFAULT 0,
-                vote_link TEXT UNIQUE NOT NULL
+                vote_link TEXT UNIQUE NOT NULL,
+                is_series_vote INTEGER DEFAULT 0,
+                setcode INTEGER DEFAULT 0
             )
         ');
 
@@ -115,6 +117,31 @@ class Database {
             }
         } catch (PDOException $e) {
             Utils::debug('检查 identifier 字段失败', ['错误' => $e->getMessage()]);
+        }
+
+        // 检查是否需要添加系列投票相关字段
+        try {
+            $columns = $this->pdo->query("PRAGMA table_info(votes)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasSeriesVote = false;
+            $hasSetcode = false;
+
+            foreach ($columns as $column) {
+                if ($column['name'] === 'is_series_vote') {
+                    $hasSeriesVote = true;
+                }
+                if ($column['name'] === 'setcode') {
+                    $hasSetcode = true;
+                }
+            }
+
+            if (!$hasSeriesVote) {
+                $this->pdo->exec('ALTER TABLE votes ADD COLUMN is_series_vote INTEGER DEFAULT 0');
+            }
+            if (!$hasSetcode) {
+                $this->pdo->exec('ALTER TABLE votes ADD COLUMN setcode INTEGER DEFAULT 0');
+            }
+        } catch (PDOException $e) {
+            Utils::debug('检查系列投票字段失败', ['错误' => $e->getMessage()]);
         }
 
         // 创建投票周期表

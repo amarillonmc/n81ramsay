@@ -1324,4 +1324,118 @@ class CardParser {
     public function getAuthors() {
         return $this->authors;
     }
+
+    /**
+     * 根据系列代码获取同系列卡片
+     *
+     * @param int $setcode 系列代码
+     * @param bool $excludeTcgCards 是否排除TCG卡片
+     * @return array 卡片列表
+     */
+    public function getCardsBySetcode($setcode, $excludeTcgCards = true) {
+        $cards = [];
+        $dbFiles = $this->getCardDatabaseFiles();
+
+        foreach ($dbFiles as $dbFile) {
+            // 如果需要排除TCG卡片，跳过TCG数据库
+            if ($excludeTcgCards && basename($dbFile) === basename(TCG_CARD_DATA_PATH)) {
+                continue;
+            }
+
+            try {
+                $db = $this->getCardDatabase($dbFile);
+
+                // 查询具有指定setcode的卡片
+                // 游戏王setcode匹配逻辑：卡片的setcode应该包含目标setcode的所有位
+                $results = [];
+
+                // 方式1: 精确匹配 - 最优先
+                $sql1 = "
+                    SELECT
+                        d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                        t.name, t.desc
+                    FROM
+                        datas d
+                    JOIN
+                        texts t ON d.id = t.id
+                    WHERE
+                        d.setcode = :setcode
+                    ORDER BY
+                        d.id ASC
+                ";
+
+                $stmt = $db->prepare($sql1);
+                $stmt->execute(['setcode' => $setcode]);
+                $exactResults = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                if (!empty($exactResults)) {
+                    $results = $exactResults;
+                } else {
+                    // 方式2: 位运算匹配 - 卡片的setcode包含目标setcode
+                    // 只有当卡片setcode的位包含目标setcode的所有位时才匹配
+                    $sql2 = "
+                        SELECT
+                            d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                            t.name, t.desc
+                        FROM
+                            datas d
+                        JOIN
+                            texts t ON d.id = t.id
+                        WHERE
+                            (d.setcode & :setcode) = :setcode
+                            AND d.setcode > 0
+                            AND d.setcode != :setcode
+                        ORDER BY
+                            d.id ASC
+                    ";
+
+                    $stmt = $db->prepare($sql2);
+                    $stmt->execute(['setcode' => $setcode]);
+                    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }
+
+                // 确定使用的查询方式
+                $queryMethod = 'none';
+                if (!empty($exactResults)) {
+                    $queryMethod = 'exact';
+                } elseif (!empty($results)) {
+                    $queryMethod = 'bitwise';
+                }
+
+                // 调试信息
+                if (defined('DEBUG_MODE') && DEBUG_MODE) {
+                    Utils::debug('查询系列卡片', [
+                        'setcode' => $setcode,
+                        'setcode_hex' => '0x' . dechex($setcode),
+                        'database' => basename($dbFile),
+                        'query_method' => $queryMethod,
+                        'exact_results' => count($exactResults),
+                        'bitwise_results' => count($results) - count($exactResults),
+                        'final_results' => count($results)
+                    ]);
+                }
+
+                foreach ($results as &$card) {
+                    // 判断是否为TCG卡片
+                    $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
+                    $card['type_text'] = $this->getTypeText($card['type']);
+                    $card['race_text'] = $this->getRaceText($card['race']);
+                    $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                    $card['level_text'] = $this->getLevelText($card['level']);
+                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['database_file'] = basename($dbFile);
+                    $card['author'] = $this->getCardAuthor($card);
+                }
+
+                $cards = array_merge($cards, $results);
+
+            } catch (PDOException $e) {
+                Utils::debug('获取系列卡片数据失败', ['错误' => $e->getMessage(), '数据库' => $dbFile]);
+            }
+        }
+
+        return $cards;
+    }
 }

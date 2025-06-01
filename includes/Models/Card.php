@@ -81,6 +81,17 @@ class Card {
     }
 
     /**
+     * 根据系列代码获取同系列卡片
+     *
+     * @param int $setcode 系列代码
+     * @param bool $excludeTcgCards 是否排除TCG卡片
+     * @return array 卡片列表
+     */
+    public function getCardsBySetcode($setcode, $excludeTcgCards = true) {
+        return $this->cardParser->getCardsBySetcode($setcode, $excludeTcgCards);
+    }
+
+    /**
      * 获取卡片图片URL
      *
      * @param int $cardId 卡片ID

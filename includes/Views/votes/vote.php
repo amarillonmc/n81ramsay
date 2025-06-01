@@ -2,11 +2,21 @@
 
 <div class="card">
     <div class="card-header">
-        <h3><?php echo Utils::escapeHtml($card['name']); ?> (<?php echo $card['id']; ?>)</h3>
+        <h3>
+            <?php echo Utils::escapeHtml($card['name']); ?> (<?php echo $card['id']; ?>)
+            <?php if ($vote['is_series_vote']): ?>
+                <span class="series-vote-badge">系列投票</span>
+            <?php endif; ?>
+        </h3>
         <p>环境: <?php echo Utils::escapeHtml($environment['text']); ?></p>
         <p>投票周期: <?php echo $vote['vote_cycle']; ?></p>
         <p>发起人: <?php echo Utils::escapeHtml($vote['initiator_id']); ?></p>
         <p>发起时间: <?php echo Utils::formatDatetime($vote['created_at']); ?></p>
+        <?php if ($vote['is_series_vote']): ?>
+            <div class="alert alert-warning">
+                <strong>系列投票说明：</strong>此投票将对 "<?php echo Utils::escapeHtml($card['setcode_text']); ?>" 系列下的所有卡片统一应用投票结果。
+            </div>
+        <?php endif; ?>
 
         <!-- 显示当前禁限状态 -->
         <div class="current-limit-status">
@@ -188,3 +198,132 @@
         <a href="<?php echo BASE_URL; ?>?controller=vote" class="btn btn-secondary">返回投票列表</a>
     </div>
 </div>
+
+<?php if ($vote['is_series_vote']): ?>
+    <div class="card mt-3">
+        <div class="card-header">
+            <h4>系列中的卡片</h4>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSeriesCards()">
+                <span id="toggle-text">展开显示</span>
+            </button>
+        </div>
+        <div class="card-body" id="series-cards-container" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>卡片ID</th>
+                            <th>卡名</th>
+                            <th>类别</th>
+                            <th>属性</th>
+                            <th>种族</th>
+                            <th>ATK</th>
+                            <th>DEF</th>
+                        </tr>
+                    </thead>
+                    <tbody id="series-cards-tbody">
+                        <tr>
+                            <td colspan="7" class="text-center">
+                                <button type="button" class="btn btn-primary" onclick="loadSeriesCards()">加载系列卡片</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let seriesCardsLoaded = false;
+
+    function toggleSeriesCards() {
+        const container = document.getElementById('series-cards-container');
+        const toggleText = document.getElementById('toggle-text');
+
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            toggleText.textContent = '收起显示';
+        } else {
+            container.style.display = 'none';
+            toggleText.textContent = '展开显示';
+        }
+    }
+
+    function loadSeriesCards() {
+        if (seriesCardsLoaded) return;
+
+        const setcode = <?php echo $card['setcode']; ?>;
+        const tbody = document.getElementById('series-cards-tbody');
+
+        // 显示加载中
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">加载中...</td></tr>';
+
+        // 使用AJAX加载系列卡片数据
+        const apiUrl = '<?php echo BASE_URL; ?>?controller=api&action=getSeriesCards&setcode=' + setcode;
+        console.log('Loading series cards from:', apiUrl);
+
+        fetch(apiUrl)
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error('HTTP error! status: ' + response.status);
+                }
+                return response.text();
+            })
+            .then(text => {
+                console.log('Response text:', text);
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    console.error('JSON parse error:', e);
+                    throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+                }
+            })
+            .then(data => {
+                console.log('Parsed data:', data);
+                if (data.success && data.cards && data.cards.length > 0) {
+                    let html = '';
+                    data.cards.forEach(card => {
+                        html += '<tr>';
+                        html += '<td><a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=' + card.id + '">' + card.id + '</a></td>';
+                        html += '<td>' + escapeHtml(card.name) + '</td>';
+                        html += '<td>' + escapeHtml(card.type_text) + '</td>';
+                        html += '<td>' + escapeHtml(card.attribute_text) + '</td>';
+                        html += '<td>' + escapeHtml(card.race_text) + '</td>';
+                        html += '<td>' + ((card.type & 1) > 0 ? (card.atk < 0 ? '?' : card.atk) : '-') + '</td>';
+                        html += '<td>' + ((card.type & 1) > 0 ? (card.def < 0 ? '?' : card.def) : '-') + '</td>';
+                        html += '</tr>';
+                    });
+                    tbody.innerHTML = html;
+                } else {
+                    const message = data.message || '暂无数据';
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center">' + escapeHtml(message) + '</td></tr>';
+                }
+                seriesCardsLoaded = true;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger">加载失败: ' + escapeHtml(error.message) + '</td></tr>';
+            });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    </script>
+<?php endif; ?>
+
+<style>
+/* 系列投票标识 */
+.series-vote-badge {
+    background-color: #ff6b35;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    margin-left: 10px;
+    font-weight: bold;
+}
+</style>

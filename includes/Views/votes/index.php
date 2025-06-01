@@ -37,9 +37,17 @@
                             <a href="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>">
                                 <img src="<?php echo $vote['card']['image_path']; ?>" alt="<?php echo Utils::escapeHtml($vote['card']['name']); ?>" class="<?php echo $vote['is_closed'] ? 'grayscale' : ''; ?>">
                                 <div class="card-item-body">
-                                    <div class="card-item-title"><?php echo Utils::escapeHtml($vote['card']['name']); ?></div>
+                                    <div class="card-item-title">
+                                        <?php echo Utils::escapeHtml($vote['card']['name']); ?>
+                                        <?php if ($vote['is_series_vote']): ?>
+                                            <span class="series-vote-badge">系列投票</span>
+                                        <?php endif; ?>
+                                    </div>
                                     <div>ID: <?php echo $vote['card']['id']; ?></div>
                                     <div>环境: <?php echo Utils::escapeHtml($vote['environment']['text']); ?></div>
+                                    <?php if ($vote['is_series_vote']): ?>
+                                        <div>系列: <?php echo Utils::escapeHtml($vote['card']['setcode_text']); ?></div>
+                                    <?php endif; ?>
                                     <div>状态:
                                         <?php if ($vote['is_closed']): ?>
                                             <span class="text-muted">已关闭</span>
@@ -151,6 +159,17 @@
     .card-item.closed:hover .grayscale {
         filter: grayscale(50%);
         opacity: 0.9;
+    }
+
+    /* 系列投票标识 */
+    .series-vote-badge {
+        background-color: #ff6b35;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 0.7em;
+        margin-left: 5px;
+        font-weight: bold;
     }
     </style>
 <?php endif; ?>
