@@ -64,6 +64,12 @@ class VoteController {
             // 获取投票记录
             $vote['records'] = $this->voteModel->getVoteRecords($vote['id']);
 
+            // 如果是系列投票，获取系列卡片数量
+            if ($vote['is_series_vote'] && $card && $card['setcode'] > 0) {
+                $seriesCards = $this->cardModel->getCardsBySetcode($card['setcode']);
+                $vote['series_card_count'] = count($seriesCards);
+            }
+
             // 检查内存使用情况，如果超过阈值则进行垃圾回收
             if (Utils::checkMemoryUsage('投票数据处理', 2048)) {
                 Utils::forceGarbageCollection('投票列表处理');

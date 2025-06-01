@@ -33,20 +33,42 @@
             <div class="vote-cycle-content" style="display: <?php echo ($cycle == $currentCycle) ? 'block' : 'none'; ?>;">
                 <div class="card-grid">
                     <?php foreach ($cycleVotes as $vote): ?>
-                        <div class="card-item <?php echo $vote['is_closed'] ? 'closed' : ''; ?>">
+                        <div class="card-item <?php echo $vote['is_closed'] ? 'closed' : ''; ?> <?php echo $vote['is_series_vote'] ? 'series-vote' : ''; ?>">
                             <a href="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>">
-                                <img src="<?php echo $vote['card']['image_path']; ?>" alt="<?php echo Utils::escapeHtml($vote['card']['name']); ?>" class="<?php echo $vote['is_closed'] ? 'grayscale' : ''; ?>">
+                                <div class="card-image-container">
+                                    <img src="<?php echo $vote['card']['image_path']; ?>" alt="<?php echo Utils::escapeHtml($vote['card']['name']); ?>" class="<?php echo $vote['is_closed'] ? 'grayscale' : ''; ?>">
+                                    <?php if ($vote['is_series_vote']): ?>
+                                        <div class="series-overlay">
+                                            <div class="series-indicator">系列</div>
+                                            <div class="series-cards-count"><?php
+                                                // 获取系列卡片数量
+                                                if (isset($vote['series_card_count'])) {
+                                                    echo $vote['series_card_count'] . '张卡片';
+                                                } else {
+                                                    echo "多张卡片";
+                                                }
+                                            ?></div>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                                 <div class="card-item-body">
                                     <div class="card-item-title">
-                                        <?php echo Utils::escapeHtml($vote['card']['name']); ?>
                                         <?php if ($vote['is_series_vote']): ?>
-                                            <span class="series-vote-badge">系列投票</span>
+                                            <div class="series-vote-title">
+                                                <span class="series-name"><?php echo Utils::escapeHtml($vote['card']['setcode_text']); ?></span>
+                                                <span class="series-vote-label">系列投票</span>
+                                            </div>
+                                            <div class="representative-card">
+                                                代表卡片: <?php echo Utils::escapeHtml($vote['card']['name']); ?>
+                                            </div>
+                                        <?php else: ?>
+                                            <?php echo Utils::escapeHtml($vote['card']['name']); ?>
                                         <?php endif; ?>
                                     </div>
                                     <div>ID: <?php echo $vote['card']['id']; ?></div>
                                     <div>环境: <?php echo Utils::escapeHtml($vote['environment']['text']); ?></div>
                                     <?php if ($vote['is_series_vote']): ?>
-                                        <div>系列: <?php echo Utils::escapeHtml($vote['card']['setcode_text']); ?></div>
+                                        <div class="series-info">系列代码: 0x<?php echo dechex($vote['card']['setcode']); ?></div>
                                     <?php endif; ?>
                                     <div>状态:
                                         <?php if ($vote['is_closed']): ?>
@@ -161,15 +183,101 @@
         opacity: 0.9;
     }
 
-    /* 系列投票标识 */
-    .series-vote-badge {
+    /* 系列投票样式 */
+    .card-image-container {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+    }
+
+    .series-overlay {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: linear-gradient(135deg, #ff6b35, #ff8c42);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 0.7em;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        z-index: 10;
+        min-width: 50px;
+    }
+
+    .series-indicator {
+        font-size: 0.9em;
+        margin-bottom: 1px;
+    }
+
+    .series-cards-count {
+        font-size: 0.7em;
+        opacity: 0.9;
+    }
+
+    .series-vote-title {
+        margin-bottom: 5px;
+    }
+
+    .series-name {
+        font-weight: bold;
+        color: #ff6b35;
+        font-size: 1.1em;
+        display: block;
+        margin-bottom: 2px;
+    }
+
+    .series-vote-label {
         background-color: #ff6b35;
         color: white;
         padding: 2px 6px;
         border-radius: 8px;
         font-size: 0.7em;
-        margin-left: 5px;
         font-weight: bold;
+        display: inline-block;
+    }
+
+    .representative-card {
+        font-size: 0.85em;
+        color: #666;
+        margin-top: 3px;
+    }
+
+    .series-info {
+        font-size: 0.9em;
+        color: #555;
+        font-style: italic;
+    }
+
+    /* 系列投票卡片的特殊边框效果 */
+    .card-item.series-vote {
+        border: 2px solid #ff6b35;
+        border-radius: 8px;
+        background: linear-gradient(145deg, #fff, #fef8f5);
+    }
+
+    .card-item.series-vote:hover {
+        box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+
+    /* 系列投票的图片叠加效果 */
+    .series-vote .card-image-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg,
+            transparent 0%,
+            transparent 70%,
+            rgba(255, 107, 53, 0.1) 70%,
+            rgba(255, 107, 53, 0.2) 100%);
+        pointer-events: none;
+        z-index: 5;
     }
     </style>
 <?php endif; ?>
