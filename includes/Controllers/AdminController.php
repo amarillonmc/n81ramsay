@@ -30,6 +30,12 @@ class AdminController {
     private $authorMappingModel;
 
     /**
+     * 投票者封禁模型
+     * @var VoterBan
+     */
+    private $voterBanModel;
+
+    /**
      * 构造函数
      */
     public function __construct() {
@@ -37,6 +43,7 @@ class AdminController {
         $this->voteModel = new Vote();
         $this->cardModel = new Card();
         $this->authorMappingModel = new AuthorMapping();
+        $this->voterBanModel = new VoterBan();
     }
 
     /**
@@ -749,5 +756,124 @@ class AdminController {
         }
 
         return true;
+    }
+
+    /**
+     * 投票者封禁管理
+     */
+    public function voterBans() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 获取所有活跃的封禁记录
+        $bans = $this->voterBanModel->getAllActiveBans();
+
+        // 获取消息
+        $message = isset($_GET['message']) ? $_GET['message'] : '';
+        $error = isset($_GET['error']) ? $_GET['error'] : '';
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/voter_bans.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 添加投票者封禁
+     */
+    public function addVoterBan() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取表单数据
+            $voterIdentifier = isset($_POST['voter_identifier']) ? trim($_POST['voter_identifier']) : '';
+            $banLevel = isset($_POST['ban_level']) ? (int)$_POST['ban_level'] : 0;
+            $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
+
+            // 验证数据
+            $errors = [];
+
+            if (empty($voterIdentifier)) {
+                $errors[] = '请输入投票者标识符';
+            } elseif (strlen($voterIdentifier) !== 9) {
+                $errors[] = '投票者标识符必须为9位字符';
+            }
+
+            if ($banLevel < 1 || $banLevel > 2) {
+                $errors[] = '请选择有效的封禁等级';
+            }
+
+            if (empty($reason)) {
+                $errors[] = '请输入封禁理由';
+            }
+
+            // 如果没有错误，则添加封禁
+            if (empty($errors)) {
+                $operator = 'Admin:' . $this->userModel->getCurrentUsername();
+                $result = $this->voterBanModel->addBan($voterIdentifier, $banLevel, $reason, $operator);
+
+                if ($result) {
+                    // 记录日志
+                    $this->voterBanModel->logBanAction('ban', $voterIdentifier, $banLevel, $reason, $operator);
+
+                    // 重定向到封禁管理页面
+                    header('Location: ' . BASE_URL . '?controller=admin&action=voterBans&message=' . urlencode('封禁添加成功'));
+                    exit;
+                } else {
+                    $errors[] = '封禁添加失败';
+                }
+            }
+
+            // 如果有错误，则显示错误信息
+            if (!empty($errors)) {
+                $error = implode('<br>', $errors);
+                header('Location: ' . BASE_URL . '?controller=admin&action=voterBans&error=' . urlencode($error));
+                exit;
+            }
+        }
+
+        // 如果不是POST请求，则重定向到封禁管理页面
+        header('Location: ' . BASE_URL . '?controller=admin&action=voterBans');
+        exit;
+    }
+
+    /**
+     * 解除投票者封禁
+     */
+    public function removeVoterBan() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取参数
+            $voterIdentifier = isset($_POST['voter_identifier']) ? trim($_POST['voter_identifier']) : '';
+
+            if (empty($voterIdentifier)) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=voterBans&error=' . urlencode('参数错误'));
+                exit;
+            }
+
+            // 获取封禁记录（用于日志）
+            $ban = $this->voterBanModel->getBanByIdentifier($voterIdentifier);
+
+            // 解除封禁
+            $result = $this->voterBanModel->removeBan($voterIdentifier);
+
+            if ($result) {
+                // 记录日志
+                $operator = 'Admin:' . $this->userModel->getCurrentUsername();
+                $this->voterBanModel->logBanAction('unban', $voterIdentifier, 0, '管理员解封', $operator);
+
+                header('Location: ' . BASE_URL . '?controller=admin&action=voterBans&message=' . urlencode('解封成功'));
+            } else {
+                header('Location: ' . BASE_URL . '?controller=admin&action=voterBans&error=' . urlencode('解封失败'));
+            }
+        } else {
+            header('Location: ' . BASE_URL . '?controller=admin&action=voterBans');
+        }
+        exit;
     }
 }

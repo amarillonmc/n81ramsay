@@ -18,11 +18,18 @@ class VoteController {
     private $cardModel;
 
     /**
+     * 投票者封禁模型
+     * @var VoterBan
+     */
+    private $voterBanModel;
+
+    /**
      * 构造函数
      */
     public function __construct() {
         $this->voteModel = new Vote();
         $this->cardModel = new Card();
+        $this->voterBanModel = new VoterBan();
     }
 
     /**
@@ -257,6 +264,26 @@ class VoteController {
 
             if (empty($userId)) {
                 $errors[] = '请输入您的ID';
+            }
+
+            // 检查投票者是否被封禁
+            if (empty($errors)) {
+                $currentIp = Utils::getClientIp();
+                $voterIdentifier = Utils::generateVoterIdentifier($currentIp, $userId);
+                $ban = $this->voterBanModel->checkBan($voterIdentifier);
+
+                if ($ban) {
+                    if ($ban['ban_level'] == 2) {
+                        // 等级2封禁：完全禁止投票
+                        $errors[] = '您已被禁止投票，无法进行投票操作';
+                    } elseif ($ban['ban_level'] == 1) {
+                        // 等级1封禁：检查理由长度
+                        $minLength = defined('SERIES_VOTING_REASON_MIN_LENGTH') ? SERIES_VOTING_REASON_MIN_LENGTH : 400;
+                        if (strlen($comment) < $minLength) {
+                            $errors[] = "由于您的投票受到限制，评论字数不足，至少需要 {$minLength} 个字符，当前为 " . strlen($comment) . " 个字符";
+                        }
+                    }
+                }
             }
 
             // 如果没有错误，则添加投票记录

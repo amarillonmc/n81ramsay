@@ -184,6 +184,19 @@ class Database {
             )
         ');
 
+        // 创建投票者封禁表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS voter_bans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                voter_identifier TEXT NOT NULL UNIQUE,
+                ban_level INTEGER NOT NULL,
+                reason TEXT,
+                banned_by TEXT NOT NULL,
+                banned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
+            )
+        ');
+
         // 检查投票周期表是否有数据，如果没有则插入初始数据
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM vote_cycles');
         $count = $stmt->fetchColumn();

@@ -33,15 +33,22 @@ $isLoggedIn = $auth->isLoggedIn();
                     <?php endif; ?>
 
                     <?php if ($isLoggedIn): ?>
-                        <!-- 管理员功能链接 -->
+                        <!-- 管理员功能下拉菜单 -->
                         <?php if ($auth->hasPermission(1)): ?>
-                            <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=votes">投票管理</a></li>
-                            <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
-                            <li><a href="<?php echo BASE_URL; ?>?controller=dialogue&action=admin">召唤词管理</a></li>
-                            <?php if ($auth->hasPermission(2)): ?>
-                                <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
-                                <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=tips">服务器提示管理</a></li>
-                            <?php endif; ?>
+                            <li class="dropdown">
+                                <a href="#" class="dropdown-toggle">管理员功能 <span class="dropdown-arrow">▼</span></a>
+                                <ul class="dropdown-menu">
+                                    <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=votes">投票管理</a></li>
+                                    <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=banlist">禁卡表整理</a></li>
+                                    <li><a href="<?php echo BASE_URL; ?>?controller=dialogue&action=admin">召唤词管理</a></li>
+                                    <?php if ($auth->hasPermission(2)): ?>
+                                        <li class="dropdown-divider"></li>
+                                        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
+                                        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=tips">服务器提示管理</a></li>
+                                        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=voterBans">投票者封禁管理</a></li>
+                                    <?php endif; ?>
+                                </ul>
+                            </li>
                         <?php endif; ?>
 
                         <!-- 用户信息和登出链接 -->

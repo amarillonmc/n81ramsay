@@ -178,12 +178,42 @@
                         $currentIp = Utils::getClientIp();
                         ?>
                         <?php foreach ($records as $record): ?>
-                            <div class="vote-record" id="vote-record-<?php echo $record['id']; ?>">
+                            <?php
+                            // 检查投票者是否被封禁
+                            $voterBanModel = new VoterBan();
+                            $ban = $voterBanModel->checkBan($record['identifier']);
+                            $isBanned = $ban !== false;
+                            $banLevel = $isBanned ? $ban['ban_level'] : 0;
+
+                            // 对于等级1封禁，检查评论长度是否足够
+                            $isWeakened = false;
+                            if ($banLevel == 1) {
+                                $minLength = defined('SERIES_VOTING_REASON_MIN_LENGTH') ? SERIES_VOTING_REASON_MIN_LENGTH : 400;
+                                if (strlen($record['comment']) < $minLength) {
+                                    $isWeakened = true;
+                                }
+                            }
+                            ?>
+                            <div class="vote-record <?php echo $isWeakened ? 'vote-record-weakened' : ''; ?>" id="vote-record-<?php echo $record['id']; ?>">
                                 <div class="vote-record-header">
                                     <div class="vote-record-user">
                                         <strong><?php echo Utils::escapeHtml($record['user_id']); ?></strong>
                                         <?php if (!empty($record['identifier'])): ?>
                                             <span class="vote-record-identifier">#<?php echo $record['identifier']; ?></span>
+                                        <?php endif; ?>
+                                        <?php if ($isBanned): ?>
+                                            <span class="ban-indicator ban-level-<?php echo $banLevel; ?>" title="该投票者已被封禁">
+                                                <?php if ($banLevel == 1): ?>
+                                                    <i class="fas fa-exclamation-triangle"></i> 受限
+                                                <?php elseif ($banLevel == 2): ?>
+                                                    <i class="fas fa-ban"></i> 封禁
+                                                <?php endif; ?>
+                                            </span>
+                                        <?php endif; ?>
+                                        <?php if ($isWeakened): ?>
+                                            <span class="weakened-indicator" title="该投票因理由不足而不计入统计">
+                                                <i class="fas fa-eye-slash"></i> 不计入
+                                            </span>
                                         <?php endif; ?>
                                         <span class="vote-record-time"><?php echo Utils::getRelativeTime($record['created_at']); ?></span>
                                     </div>
@@ -374,6 +404,39 @@
 .delete-vote-btn {
     font-size: 0.8em;
     padding: 2px 6px;
+}
+
+/* 封禁和弱化显示样式 */
+.vote-record-weakened {
+    opacity: 0.6;
+    background-color: #f8f9fa;
+    border-left: 3px solid #ffc107;
+}
+
+.ban-indicator {
+    font-size: 0.8em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 5px;
+}
+
+.ban-indicator.ban-level-1 {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.ban-indicator.ban-level-2 {
+    background-color: #dc3545;
+    color: white;
+}
+
+.weakened-indicator {
+    font-size: 0.8em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 5px;
+    background-color: #6c757d;
+    color: white;
 }
 </style>
 
