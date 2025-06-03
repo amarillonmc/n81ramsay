@@ -194,6 +194,42 @@ class Vote {
     }
 
     /**
+     * 删除投票记录
+     *
+     * @param int $recordId 投票记录ID
+     * @return bool 是否成功
+     */
+    public function deleteVoteRecord($recordId) {
+        $result = $this->db->delete('vote_records', 'id = ?', [$recordId]);
+        return $result > 0;
+    }
+
+    /**
+     * 根据ID获取投票记录
+     *
+     * @param int $recordId 投票记录ID
+     * @return array|null 投票记录信息
+     */
+    public function getVoteRecordById($recordId) {
+        return $this->db->getRow(
+            'SELECT * FROM vote_records WHERE id = ?',
+            [$recordId]
+        );
+    }
+
+    /**
+     * 检查投票记录是否属于指定用户
+     *
+     * @param int $recordId 投票记录ID
+     * @param string $identifier 用户标识符
+     * @return bool 是否属于该用户
+     */
+    public function isVoteRecordOwnedByUser($recordId, $identifier) {
+        $record = $this->getVoteRecordById($recordId);
+        return $record && $record['identifier'] === $identifier;
+    }
+
+    /**
      * 获取投票统计
      *
      * @param int $voteId 投票ID

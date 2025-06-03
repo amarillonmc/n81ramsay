@@ -510,4 +510,125 @@ class VoteController {
 
         return false;
     }
+
+    /**
+     * 删除投票记录
+     */
+    public function deleteRecord() {
+        // 检查是否为POST请求
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['success' => false, 'message' => '不支持的请求方法']);
+            return;
+        }
+
+        // 获取参数
+        $recordId = isset($_POST['record_id']) ? (int)$_POST['record_id'] : 0;
+        $voteLink = isset($_POST['vote_link']) ? trim($_POST['vote_link']) : '';
+
+        if ($recordId <= 0 || empty($voteLink)) {
+            echo json_encode(['success' => false, 'message' => '参数错误']);
+            return;
+        }
+
+        // 获取投票记录
+        $record = $this->voteModel->getVoteRecordById($recordId);
+        if (!$record) {
+            echo json_encode(['success' => false, 'message' => '投票记录不存在']);
+            return;
+        }
+
+        // 获取投票信息
+        $vote = $this->voteModel->getVoteByLink($voteLink);
+        if (!$vote || $vote['id'] != $record['vote_id']) {
+            echo json_encode(['success' => false, 'message' => '投票信息不匹配']);
+            return;
+        }
+
+        // 检查投票是否已关闭
+        if ($vote['is_closed']) {
+            echo json_encode(['success' => false, 'message' => '投票已关闭，无法删除投票记录']);
+            return;
+        }
+
+        // 权限检查
+        $auth = Auth::getInstance();
+        $canDelete = false;
+        $operatorInfo = '';
+
+        // 检查是否为管理员（等级1以上）
+        if ($auth->isLoggedIn() && $auth->hasPermission(1)) {
+            $canDelete = true;
+            $operatorInfo = 'Admin:' . $auth->getCurrentUsername();
+        }
+        // 检查是否为投票者本人（如果配置允许）
+        elseif (ALLOW_VOTE_DELETION) {
+            $currentIp = Utils::getClientIp();
+            $currentIdentifier = Utils::generateVoterIdentifier($currentIp, $record['user_id']);
+
+            if ($currentIdentifier === $record['identifier']) {
+                $canDelete = true;
+                $operatorInfo = 'User:' . $record['identifier'];
+            }
+        }
+
+        if (!$canDelete) {
+            echo json_encode(['success' => false, 'message' => '您没有权限删除此投票记录']);
+            return;
+        }
+
+        // 记录删除日志
+        $this->logVoteDeletion($record, $vote, $operatorInfo);
+
+        // 删除投票记录
+        $result = $this->voteModel->deleteVoteRecord($recordId);
+
+        if ($result) {
+            echo json_encode(['success' => true, 'message' => '投票记录已删除']);
+        } else {
+            echo json_encode(['success' => false, 'message' => '删除失败']);
+        }
+    }
+
+    /**
+     * 记录投票删除日志
+     *
+     * @param array $record 投票记录
+     * @param array $vote 投票信息
+     * @param string $operatorInfo 操作者信息
+     */
+    private function logVoteDeletion($record, $vote, $operatorInfo) {
+        // 确保日志目录存在
+        $logDir = __DIR__ . '/../../logs';
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+
+        // 准备日志内容
+        $logData = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'operator' => $operatorInfo,
+            'vote_info' => [
+                'vote_id' => $vote['id'],
+                'vote_link' => $vote['vote_link'],
+                'card_id' => $vote['card_id'],
+                'environment_id' => $vote['environment_id'],
+                'vote_cycle' => $vote['vote_cycle']
+            ],
+            'deleted_record' => [
+                'record_id' => $record['id'],
+                'user_id' => $record['user_id'],
+                'identifier' => $record['identifier'],
+                'status' => $record['status'],
+                'comment' => $record['comment'],
+                'created_at' => $record['created_at']
+            ]
+        ];
+
+        // 写入日志文件
+        $logFile = $logDir . '/deletedVote_' . date('Y-m-d') . '.txt';
+        $logContent = json_encode($logData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
+
+        file_put_contents($logFile, $logContent, FILE_APPEND | LOCK_EX);
+    }
 }
