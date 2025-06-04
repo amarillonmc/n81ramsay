@@ -140,7 +140,7 @@ if (!defined('SERIES_VOTING_ENABLED')) {
     define('SERIES_VOTING_ENABLED', true); // 是否启用系列投票功能
 }
 if (!defined('SERIES_VOTING_STRICTNESS')) {
-    define('SERIES_VOTING_STRICTNESS', 2); // 系列投票严格度：0=所有用户可用，1=需要填写理由，2=需要作者身份验证
+    define('SERIES_VOTING_STRICTNESS', 2); // 系列投票严格度：0=所有用户可用，1=需要填写理由，2=发起人必须在作者列表中，3=发起人必须在作者列表中且验证卡片作者
 }
 if (!defined('SERIES_VOTING_REASON_MIN_LENGTH')) {
     define('SERIES_VOTING_REASON_MIN_LENGTH', 400); // 系列投票理由最小字节数

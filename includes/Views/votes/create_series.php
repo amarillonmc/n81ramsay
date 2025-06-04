@@ -25,7 +25,10 @@
                         echo "需要填写至少 {$minReasonLength} 个字符的理由";
                         break;
                     case 2:
-                        echo "需要作者身份验证（您的ID必须与该系列作者信息匹配）";
+                        echo "发起人必须在系统作者列表中";
+                        break;
+                    case 3:
+                        echo "发起人必须在系统作者列表中，且需要验证卡片作者";
                         break;
                 }
                 ?>
@@ -108,9 +111,17 @@
             </div>
 
             <div class="form-group">
-                <label for="initiator_id">您的ID <?php if ($strictness >= 2): ?><span class="text-danger">*（必须与作者信息匹配）</span><?php endif; ?></label>
+                <label for="initiator_id">您的ID <?php if ($strictness >= 2): ?><span class="text-danger">*（必须在系统作者列表中）</span><?php endif; ?></label>
                 <input type="text" name="initiator_id" id="initiator_id" class="form-control" required placeholder="请输入您的ID">
             </div>
+
+            <?php if ($strictness >= 3): ?>
+            <div class="form-group">
+                <label for="card_author_id">卡片作者ID <span class="text-danger">*（必须与该系列作者信息匹配）</span></label>
+                <input type="text" name="card_author_id" id="card_author_id" class="form-control" required placeholder="请输入该系列卡片的作者ID">
+                <small class="form-text text-muted">当前卡片作者：<?php echo Utils::escapeHtml($card['author']); ?></small>
+            </div>
+            <?php endif; ?>
 
             <div class="form-group">
                 <button type="submit" class="btn btn-warning">发起系列投票</button>

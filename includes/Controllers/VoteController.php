@@ -386,10 +386,23 @@ class VoteController {
             }
 
             if ($strictness >= 2) {
-                // 需要作者身份验证
-                $isAuthorized = $this->checkAuthorAuthorization($initiatorId, $card);
+                // 需要发起人身份验证
+                $isAuthorized = $this->checkInitiatorAuthorization($initiatorId);
                 if (!$isAuthorized) {
-                    $errors[] = '您的ID与该卡片系列的作者信息不匹配，无法发起系列投票';
+                    $errors[] = '您的ID不在系统作者列表中，无法发起系列投票';
+                }
+            }
+
+            if ($strictness >= 3) {
+                // 需要额外验证卡片作者
+                $cardAuthorId = isset($_POST['card_author_id']) ? trim($_POST['card_author_id']) : '';
+                if (empty($cardAuthorId)) {
+                    $errors[] = '请填写卡片作者ID';
+                } else {
+                    $isCardAuthorValid = $this->checkCardAuthorAuthorization($cardAuthorId, $card);
+                    if (!$isCardAuthorValid) {
+                        $errors[] = '填写的卡片作者ID与该卡片系列的作者信息不匹配';
+                    }
                 }
             }
 
@@ -495,13 +508,49 @@ class VoteController {
     }
 
     /**
-     * 检查作者授权
+     * 检查发起人是否在作者列表中
      *
      * @param string $initiatorId 发起人ID
+     * @return bool 是否有权限
+     */
+    private function checkInitiatorAuthorization($initiatorId) {
+        $db = Database::getInstance();
+
+        // 检查发起人ID是否在作者映射表中（作为作者名称）
+        $authorMapping = $db->getRow(
+            'SELECT * FROM author_mappings WHERE author_name = :author_name',
+            [':author_name' => $initiatorId]
+        );
+
+        if ($authorMapping) {
+            return true;
+        }
+
+        // 检查是否在别名中（精确匹配逗号分隔的别名）
+        $allMappings = $db->getRows('SELECT * FROM author_mappings WHERE alias IS NOT NULL AND alias != ""');
+        foreach ($allMappings as $mapping) {
+            if (!empty($mapping['alias'])) {
+                $aliases = explode(',', $mapping['alias']);
+                foreach ($aliases as $alias) {
+                    $alias = trim($alias);
+                    if ($alias === $initiatorId) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 检查卡片作者授权
+     *
+     * @param string $cardAuthorId 卡片作者ID
      * @param array $card 卡片信息
      * @return bool 是否有权限
      */
-    private function checkAuthorAuthorization($initiatorId, $card) {
+    private function checkCardAuthorAuthorization($cardAuthorId, $card) {
         // 获取卡片作者信息
         $cardAuthor = $card['author'];
 
@@ -510,7 +559,7 @@ class VoteController {
             return false;
         }
 
-        // 检查发起人ID是否与作者名称或别名匹配
+        // 检查填写的作者ID是否与作者名称或别名匹配
         $db = Database::getInstance();
         $cardPrefix = substr((string)$card['id'], 0, 3);
 
@@ -525,13 +574,13 @@ class VoteController {
             $authorName = $authorMapping['author_name'];
             $alias = $authorMapping['alias'];
 
-            if ($initiatorId === $authorName || (!empty($alias) && $initiatorId === $alias)) {
+            if ($cardAuthorId === $authorName || (!empty($alias) && $cardAuthorId === $alias)) {
                 return true;
             }
         }
 
         // 如果数据库中没有记录，检查是否与卡片作者信息匹配
-        if ($initiatorId === $cardAuthor) {
+        if ($cardAuthorId === $cardAuthor) {
             return true;
         }
 
