@@ -146,6 +146,11 @@ if (!defined('SERIES_VOTING_REASON_MIN_LENGTH')) {
     define('SERIES_VOTING_REASON_MIN_LENGTH', 400); // 系列投票理由最小字节数
 }
 
+// 高级投票配置
+if (!defined('ADVANCED_VOTING_ENABLED')) {
+    define('ADVANCED_VOTING_ENABLED', true); // 是否启用高级投票功能
+}
+
 // 卡片配置
 if (!defined('CARDS_PER_PAGE')) {
     define('CARDS_PER_PAGE', 20); // 默认每页显示卡片数量

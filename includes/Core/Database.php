@@ -124,6 +124,8 @@ class Database {
             $columns = $this->pdo->query("PRAGMA table_info(votes)")->fetchAll(PDO::FETCH_ASSOC);
             $hasSeriesVote = false;
             $hasSetcode = false;
+            $hasAdvancedVote = false;
+            $hasCardIds = false;
 
             foreach ($columns as $column) {
                 if ($column['name'] === 'is_series_vote') {
@@ -131,6 +133,12 @@ class Database {
                 }
                 if ($column['name'] === 'setcode') {
                     $hasSetcode = true;
+                }
+                if ($column['name'] === 'is_advanced_vote') {
+                    $hasAdvancedVote = true;
+                }
+                if ($column['name'] === 'card_ids') {
+                    $hasCardIds = true;
                 }
             }
 
@@ -140,8 +148,14 @@ class Database {
             if (!$hasSetcode) {
                 $this->pdo->exec('ALTER TABLE votes ADD COLUMN setcode INTEGER DEFAULT 0');
             }
+            if (!$hasAdvancedVote) {
+                $this->pdo->exec('ALTER TABLE votes ADD COLUMN is_advanced_vote INTEGER DEFAULT 0');
+            }
+            if (!$hasCardIds) {
+                $this->pdo->exec('ALTER TABLE votes ADD COLUMN card_ids TEXT');
+            }
         } catch (PDOException $e) {
-            Utils::debug('检查系列投票字段失败', ['错误' => $e->getMessage()]);
+            Utils::debug('检查投票字段失败', ['错误' => $e->getMessage()]);
         }
 
         // 创建投票周期表

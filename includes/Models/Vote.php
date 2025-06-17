@@ -35,15 +35,19 @@ class Vote {
      * @param string $initiatorId 发起人ID
      * @param bool $isSeriesVote 是否为系列投票
      * @param int $setcode 系列代码（仅系列投票时使用）
+     * @param bool $isAdvancedVote 是否为高级投票
+     * @param string $cardIds 高级投票的卡片ID列表（JSON格式）
      * @return string|false 投票链接或失败
      */
-    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId, $isSeriesVote = false, $setcode = 0) {
+    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId, $isSeriesVote = false, $setcode = 0, $isAdvancedVote = false, $cardIds = '') {
         // 获取当前投票周期
         $voteCycle = $this->db->getCurrentVoteCycle();
 
         // 检查是否已存在相同卡片和环境的投票
         if ($isSeriesVote) {
             $existingVote = $this->getVoteBySetcodeAndEnvironment($setcode, $environmentId, $voteCycle);
+        } elseif ($isAdvancedVote) {
+            $existingVote = $this->getVoteByAdvancedAndEnvironment($cardIds, $environmentId, $voteCycle);
         } else {
             $existingVote = $this->getVoteByCardAndEnvironment($cardId, $environmentId, $voteCycle);
         }
@@ -53,7 +57,7 @@ class Vote {
         }
 
         // 生成投票链接
-        $voteLink = Utils::generateVoteLink($cardId, $environmentId, $voteCycle, $isSeriesVote, $setcode);
+        $voteLink = Utils::generateVoteLink($cardId, $environmentId, $voteCycle, $isSeriesVote, $setcode, $isAdvancedVote);
 
         // 插入投票数据
         $voteId = $this->db->insert('votes', [
@@ -67,7 +71,9 @@ class Vote {
             'is_closed' => 0,
             'vote_link' => $voteLink,
             'is_series_vote' => $isSeriesVote ? 1 : 0,
-            'setcode' => $setcode
+            'setcode' => $setcode,
+            'is_advanced_vote' => $isAdvancedVote ? 1 : 0,
+            'card_ids' => $cardIds
         ]);
 
         if (!$voteId) {
@@ -177,6 +183,21 @@ class Vote {
         return $this->db->getRow(
             'SELECT * FROM votes WHERE setcode = ? AND environment_id = ? AND vote_cycle = ? AND is_series_vote = 1',
             [$setcode, $environmentId, $voteCycle]
+        );
+    }
+
+    /**
+     * 根据高级投票卡片列表和环境获取投票
+     *
+     * @param string $cardIds 卡片ID列表（JSON格式）
+     * @param int $environmentId 环境ID
+     * @param int $voteCycle 投票周期
+     * @return array|null 投票信息
+     */
+    public function getVoteByAdvancedAndEnvironment($cardIds, $environmentId, $voteCycle) {
+        return $this->db->getRow(
+            'SELECT * FROM votes WHERE card_ids = ? AND environment_id = ? AND vote_cycle = ? AND is_advanced_vote = 1',
+            [$cardIds, $environmentId, $voteCycle]
         );
     }
 

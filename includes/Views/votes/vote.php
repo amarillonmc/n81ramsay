@@ -6,6 +6,8 @@
             <?php echo Utils::escapeHtml($card['name']); ?> (<?php echo $card['id']; ?>)
             <?php if ($vote['is_series_vote']): ?>
                 <span class="series-vote-badge">系列投票</span>
+            <?php elseif ($vote['is_advanced_vote']): ?>
+                <span class="advanced-vote-badge">高级投票</span>
             <?php endif; ?>
         </h3>
         <p>环境: <?php echo Utils::escapeHtml($environment['text']); ?></p>
@@ -15,6 +17,18 @@
         <?php if ($vote['is_series_vote']): ?>
             <div class="alert alert-warning">
                 <strong>系列投票说明：</strong>此投票将对 "<?php echo Utils::escapeHtml($card['setcode_text']); ?>" 系列下的所有卡片统一应用投票结果。
+            </div>
+        <?php elseif ($vote['is_advanced_vote']): ?>
+            <div class="alert alert-info">
+                <strong>高级投票说明：</strong>此投票将对指定的多张卡片统一应用投票结果。
+                <?php if (!empty($vote['card_ids'])): ?>
+                    <?php
+                    $cardIds = json_decode($vote['card_ids'], true);
+                    if (is_array($cardIds)) {
+                        echo '涉及 ' . count($cardIds) . ' 张卡片。';
+                    }
+                    ?>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
@@ -377,10 +391,105 @@
     </script>
 <?php endif; ?>
 
+<?php if ($vote['is_advanced_vote']): ?>
+    <div class="card mt-3">
+        <div class="card-header">
+            <h4>高级投票涉及的卡片</h4>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAdvancedCards()">
+                <span id="advanced-toggle-text">展开显示</span>
+            </button>
+        </div>
+        <div class="card-body" id="advanced-cards-container" style="display: none;">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>卡片ID</th>
+                            <th>卡名</th>
+                            <th>类别</th>
+                            <th>属性/种族</th>
+                            <th>ATK/DEF</th>
+                            <th>当前状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (!empty($advancedCards)): ?>
+                            <?php foreach ($advancedCards as $advancedCard): ?>
+                                <tr>
+                                    <td>
+                                        <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $advancedCard['id']; ?>">
+                                            <?php echo $advancedCard['id']; ?>
+                                        </a>
+                                    </td>
+                                    <td><?php echo Utils::escapeHtml($advancedCard['name']); ?></td>
+                                    <td><?php echo Utils::escapeHtml($advancedCard['type_text']); ?></td>
+                                    <td>
+                                        <?php if ($advancedCard['type'] & 0x1): ?>
+                                            <?php echo Utils::escapeHtml($advancedCard['attribute_text']); ?>
+                                        <?php else: ?>
+                                            <?php echo Utils::escapeHtml($advancedCard['race_text']); ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($advancedCard['type'] & 0x1): ?>
+                                            <?php echo ($advancedCard['atk'] < 0 ? '?' : $advancedCard['atk']) . '/' . ($advancedCard['def'] < 0 ? '?' : $advancedCard['def']); ?>
+                                        <?php else: ?>
+                                            -
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php
+                                        $cardModel = new Card();
+                                        $currentStatus = $cardModel->getCardLimitStatus($advancedCard['id'], $environment['header']);
+                                        ?>
+                                        <span class="status-badge <?php echo Utils::getLimitStatusClass($currentStatus); ?>">
+                                            <?php echo Utils::getLimitStatusText($currentStatus); ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <tr>
+                                <td colspan="6" class="text-center">暂无卡片数据</td>
+                            </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function toggleAdvancedCards() {
+        const container = document.getElementById('advanced-cards-container');
+        const toggleText = document.getElementById('advanced-toggle-text');
+
+        if (container.style.display === 'none') {
+            container.style.display = 'block';
+            toggleText.textContent = '收起显示';
+        } else {
+            container.style.display = 'none';
+            toggleText.textContent = '展开显示';
+        }
+    }
+    </script>
+<?php endif; ?>
+
 <style>
 /* 系列投票标识 */
 .series-vote-badge {
     background-color: #ff6b35;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    margin-left: 10px;
+    font-weight: bold;
+}
+
+/* 高级投票标识 */
+.advanced-vote-badge {
+    background-color: #007bff;
     color: white;
     padding: 4px 8px;
     border-radius: 10px;

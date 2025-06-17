@@ -1,5 +1,11 @@
 <h2>投票概览</h2>
 
+<div class="vote-actions" style="margin-bottom: 20px;">
+    <?php if (defined('ADVANCED_VOTING_ENABLED') && ADVANCED_VOTING_ENABLED): ?>
+        <a href="<?php echo BASE_URL; ?>?controller=vote&action=createAdvanced" class="btn btn-primary">发起高级投票</a>
+    <?php endif; ?>
+</div>
+
 <?php if (empty($votes)): ?>
     <div class="alert alert-info">
         暂无投票
@@ -33,7 +39,7 @@
             <div class="vote-cycle-content" style="display: <?php echo ($cycle == $currentCycle) ? 'block' : 'none'; ?>;">
                 <div class="card-grid">
                     <?php foreach ($cycleVotes as $vote): ?>
-                        <div class="card-item <?php echo $vote['is_closed'] ? 'closed' : ''; ?> <?php echo $vote['is_series_vote'] ? 'series-vote' : ''; ?>">
+                        <div class="card-item <?php echo $vote['is_closed'] ? 'closed' : ''; ?> <?php echo $vote['is_series_vote'] ? 'series-vote' : ''; ?> <?php echo $vote['is_advanced_vote'] ? 'advanced-vote' : ''; ?>">
                             <a href="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>">
                                 <div class="card-image-container">
                                     <img src="<?php echo $vote['card']['image_path']; ?>" alt="<?php echo Utils::escapeHtml($vote['card']['name']); ?>" class="<?php echo $vote['is_closed'] ? 'grayscale' : ''; ?>">
@@ -49,6 +55,18 @@
                                                 }
                                             ?></div>
                                         </div>
+                                    <?php elseif ($vote['is_advanced_vote']): ?>
+                                        <div class="advanced-overlay">
+                                            <div class="advanced-indicator">高级</div>
+                                            <div class="advanced-cards-count"><?php
+                                                // 获取高级投票卡片数量
+                                                if (isset($vote['advanced_card_count'])) {
+                                                    echo $vote['advanced_card_count'] . '张卡片';
+                                                } else {
+                                                    echo "多张卡片";
+                                                }
+                                            ?></div>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                                 <div class="card-item-body">
@@ -57,6 +75,13 @@
                                             <div class="series-vote-title">
                                                 <span class="series-name"><?php echo Utils::escapeHtml($vote['card']['setcode_text']); ?></span>
                                                 <span class="series-vote-label">系列投票</span>
+                                            </div>
+                                            <div class="representative-card">
+                                                代表卡片: <?php echo Utils::escapeHtml($vote['card']['name']); ?>
+                                            </div>
+                                        <?php elseif ($vote['is_advanced_vote']): ?>
+                                            <div class="advanced-vote-title">
+                                                <span class="advanced-vote-label">高级投票</span>
                                             </div>
                                             <div class="representative-card">
                                                 代表卡片: <?php echo Utils::escapeHtml($vote['card']['name']); ?>
@@ -276,6 +301,77 @@
             transparent 70%,
             rgba(255, 107, 53, 0.1) 70%,
             rgba(255, 107, 53, 0.2) 100%);
+        pointer-events: none;
+        z-index: 5;
+    }
+
+    /* 高级投票样式 */
+    .advanced-overlay {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        padding: 4px 8px;
+        border-radius: 8px;
+        font-size: 0.7em;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        z-index: 10;
+        min-width: 50px;
+    }
+
+    .advanced-indicator {
+        font-size: 0.9em;
+        margin-bottom: 1px;
+    }
+
+    .advanced-cards-count {
+        font-size: 0.7em;
+        opacity: 0.9;
+    }
+
+    .advanced-vote-title {
+        margin-bottom: 5px;
+    }
+
+    .advanced-vote-label {
+        background-color: #007bff;
+        color: white;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-size: 0.7em;
+        font-weight: bold;
+        display: inline-block;
+    }
+
+    /* 高级投票卡片的特殊边框效果 */
+    .card-item.advanced-vote {
+        border: 2px solid #007bff;
+        border-radius: 8px;
+        background: linear-gradient(145deg, #fff, #f0f8ff);
+    }
+
+    .card-item.advanced-vote:hover {
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+
+    /* 高级投票的图片叠加效果 */
+    .advanced-vote .card-image-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg,
+            transparent 0%,
+            transparent 70%,
+            rgba(0, 123, 255, 0.1) 70%,
+            rgba(0, 123, 255, 0.2) 100%);
         pointer-events: none;
         z-index: 5;
     }

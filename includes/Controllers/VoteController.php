@@ -77,6 +77,16 @@ class VoteController {
                 $vote['series_card_count'] = count($seriesCards);
             }
 
+            // 如果是高级投票，获取高级投票卡片数量
+            if ($vote['is_advanced_vote'] && !empty($vote['card_ids'])) {
+                $cardIds = json_decode($vote['card_ids'], true);
+                if (is_array($cardIds)) {
+                    $vote['advanced_card_count'] = count($cardIds);
+                } else {
+                    $vote['advanced_card_count'] = 1;
+                }
+            }
+
             // 检查内存使用情况，如果超过阈值则进行垃圾回收
             if (Utils::checkMemoryUsage('投票数据处理', 2048)) {
                 Utils::forceGarbageCollection('投票列表处理');
@@ -149,7 +159,7 @@ class VoteController {
 
             // 如果没有错误，则创建投票
             if (empty($errors)) {
-                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId);
+                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, false, 0, false, '');
 
                 if ($voteLink) {
                     // 重定向到投票页面
@@ -246,6 +256,20 @@ class VoteController {
         $seriesCards = [];
         if ($vote['is_series_vote'] && $card['setcode'] > 0) {
             $seriesCards = $this->cardModel->getCardsBySetcode($card['setcode']);
+        }
+
+        // 如果是高级投票，获取高级投票卡片信息
+        $advancedCards = [];
+        if ($vote['is_advanced_vote'] && !empty($vote['card_ids'])) {
+            $cardIds = json_decode($vote['card_ids'], true);
+            if (is_array($cardIds)) {
+                foreach ($cardIds as $cardId) {
+                    $advancedCard = $this->cardModel->getCardById($cardId);
+                    if ($advancedCard) {
+                        $advancedCards[] = $advancedCard;
+                    }
+                }
+            }
         }
 
         // 检查是否是POST请求
@@ -408,7 +432,7 @@ class VoteController {
 
             // 如果没有错误，则创建系列投票
             if (empty($errors)) {
-                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, true, $card['setcode']);
+                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, true, $card['setcode'], false, '');
 
                 if ($voteLink) {
                     // 重定向到投票页面
@@ -505,6 +529,209 @@ class VoteController {
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/votes/create_series.php';
         include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 高级投票创建
+     */
+    public function createAdvanced() {
+        // 检查高级投票功能是否启用
+        if (!defined('ADVANCED_VOTING_ENABLED') || !ADVANCED_VOTING_ENABLED) {
+            header('Location: ' . BASE_URL);
+            exit;
+        }
+
+        // 检查是否是POST请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $action = isset($_POST['action']) ? $_POST['action'] : '';
+
+            if ($action === 'preview') {
+                // 预览确认页面
+                $this->showAdvancedVotePreview();
+                return;
+            } elseif ($action === 'confirm') {
+                // 确认创建投票
+                $this->confirmAdvancedVote();
+                return;
+            } elseif ($action === 'edit') {
+                // 返回编辑页面，保留表单数据
+                // 继续执行下面的GET请求处理逻辑
+            }
+        }
+
+        // 获取环境列表
+        $environments = Utils::getEnvironments();
+        $errors = [];
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/votes/create_advanced.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 显示高级投票预览确认页面
+     */
+    private function showAdvancedVotePreview() {
+        // 获取表单数据
+        $cardIdsString = isset($_POST['card_ids']) ? trim($_POST['card_ids']) : '';
+        $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
+        $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
+        $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
+        $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+
+        // 验证数据
+        $errors = [];
+
+        if (empty($cardIdsString)) {
+            $errors[] = '请输入卡片ID列表';
+        }
+
+        if ($environmentId <= 0) {
+            $errors[] = '请选择环境';
+        }
+
+        if ($status < 0 || $status > 3) {
+            $errors[] = '请选择有效的禁限状态';
+        }
+
+        if (empty($reason)) {
+            $errors[] = '请输入理由';
+        }
+
+        if (empty($initiatorId)) {
+            $errors[] = '请输入您的ID';
+        }
+
+        // 解析卡片ID列表
+        $cardIds = $this->parseCardIds($cardIdsString);
+        $validCardIds = [];
+        $invalidCardIds = [];
+
+        foreach ($cardIds as $cardId) {
+            $card = $this->cardModel->getCardById($cardId);
+            if ($card) {
+                $validCardIds[] = $cardId;
+            } else {
+                $invalidCardIds[] = $cardId;
+            }
+        }
+
+        if (empty($validCardIds)) {
+            $errors[] = '没有找到有效的卡片ID';
+        }
+
+        // 检查理由长度（使用系列投票的标准）
+        $minReasonLength = defined('SERIES_VOTING_REASON_MIN_LENGTH') ? SERIES_VOTING_REASON_MIN_LENGTH : 400;
+        if (count($validCardIds) > 1 && strlen($reason) < $minReasonLength) {
+            $errors[] = "涉及多张卡片时，理由字数不足，至少需要 {$minReasonLength} 个字符，当前为 " . strlen($reason) . " 个字符";
+        }
+
+        if (!empty($errors)) {
+            $environments = Utils::getEnvironments();
+            include __DIR__ . '/../Views/layout.php';
+            include __DIR__ . '/../Views/votes/create_advanced.php';
+            include __DIR__ . '/../Views/footer.php';
+            return;
+        }
+
+        // 获取环境信息
+        $environment = Utils::getEnvironmentById($environmentId);
+
+        // 获取卡片详细信息
+        $cards = [];
+        foreach ($validCardIds as $cardId) {
+            $card = $this->cardModel->getCardById($cardId);
+            if ($card) {
+                // 获取卡片在当前环境中的禁限状态
+                $card['current_limit_status'] = $this->cardModel->getCardLimitStatus($cardId, $environment['header']);
+                $cards[] = $card;
+            }
+        }
+
+        // 渲染确认页面
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/votes/confirm_advanced.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 确认创建高级投票
+     */
+    private function confirmAdvancedVote() {
+        // 获取表单数据
+        $cardIdsString = isset($_POST['card_ids']) ? trim($_POST['card_ids']) : '';
+        $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
+        $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
+        $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
+        $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+
+        // 解析卡片ID列表
+        $cardIds = $this->parseCardIds($cardIdsString);
+        $validCardIds = [];
+
+        foreach ($cardIds as $cardId) {
+            $card = $this->cardModel->getCardById($cardId);
+            if ($card) {
+                $validCardIds[] = $cardId;
+            }
+        }
+
+        if (empty($validCardIds)) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('没有找到有效的卡片ID'));
+            exit;
+        }
+
+        // 使用第一张卡片作为代表卡片
+        $representativeCardId = $validCardIds[0];
+
+        // 创建高级投票
+        $voteLink = $this->voteModel->createVote(
+            $representativeCardId,
+            $environmentId,
+            $status,
+            $reason,
+            $initiatorId,
+            false, // 不是系列投票
+            0,     // 无系列代码
+            true,  // 是高级投票
+            json_encode($validCardIds) // 卡片ID列表
+        );
+
+        if ($voteLink) {
+            // 重定向到投票页面
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink);
+            exit;
+        } else {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('创建高级投票失败'));
+            exit;
+        }
+    }
+
+    /**
+     * 解析卡片ID列表
+     *
+     * @param string $cardIdsString 卡片ID字符串
+     * @return array 卡片ID数组
+     */
+    private function parseCardIds($cardIdsString) {
+        // 支持多种分隔符：换行、逗号、分号、空格
+        $cardIdsString = str_replace(["\r\n", "\r", "\n", ",", ";", " ", "\t"], "|", $cardIdsString);
+        $cardIds = explode("|", $cardIdsString);
+
+        $result = [];
+        foreach ($cardIds as $cardId) {
+            $cardId = trim($cardId);
+            if (is_numeric($cardId) && $cardId > 0) {
+                $result[] = (int)$cardId;
+            }
+        }
+
+        // 去重并排序
+        $result = array_unique($result);
+        sort($result);
+
+        return $result;
     }
 
     /**
