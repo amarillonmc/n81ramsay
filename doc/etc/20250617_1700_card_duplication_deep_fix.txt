@@ -1,0 +1,177 @@
+高级投票卡片重复显示问题深度修复
+时间：2025年6月17日 17:00
+
+## 问题确认
+用户反馈：即使在第一次修复后，问题依然存在。
+调试信息显示卡片ID解析正确，但页面显示的是重复的第一张卡片信息。
+
+## 深度分析
+
+### 问题现象
+- 输入卡片ID: [33700093, 33700374]
+- 调试显示: 查询到2张卡片，ID列表正确
+- 实际显示: 两行都显示33700093的信息
+
+### 根本原因推测
+1. **PDO语句缓存问题**: PDO可能在重用prepared statement时出现缓存问题
+2. **数据库连接缓存问题**: CardParser的数据库连接缓存可能导致查询结果混乱
+3. **单例状态污染**: CardParser单例可能存在状态污染
+
+## 深度修复方案
+
+### 1. PDO语句优化
+修改CardParser::getCardById方法中的数据库查询：
+- 使用bindValue而不是execute数组参数
+- 立即关闭PDO语句，避免缓存问题
+- 强制使用PDO::PARAM_INT类型绑定
+
+```php
+// 修复前
+$stmt->execute(['id' => $cardId]);
+
+// 修复后
+$stmt->bindValue(':id', (int)$cardId, PDO::PARAM_INT);
+$stmt->execute();
+$card = $stmt->fetch(PDO::FETCH_ASSOC);
+$stmt->closeCursor();
+$stmt = null;
+```
+
+### 2. 数据库连接缓存控制
+添加强制新连接的机制：
+- 在CardParser中添加clearDatabaseCache方法
+- 修改getCardDatabase方法支持forceNew参数
+- 在批量查询时强制使用新连接
+
+```php
+// 新增方法
+public function clearDatabaseCache() {
+    $this->cardDatabases = [];
+}
+
+private function getCardDatabase($dbFile, $forceNew = false) {
+    if ($forceNew || !isset($this->cardDatabases[$dbKey])) {
+        // 创建新连接
+    }
+}
+```
+
+### 3. 批量查询优化
+修改getCardsByIds方法：
+- 为每个卡片查询强制使用新的数据库连接
+- 添加ID匹配验证，确保返回的卡片ID正确
+- 增强调试信息，追踪每个查询步骤
+
+```php
+// 强制使用新连接
+$card = $this->getCardById($cardId, true);
+
+// ID验证
+if ($card && (int)$card['id'] !== $cardId) {
+    // 跳过ID不匹配的结果
+    continue;
+}
+```
+
+### 4. 详细调试信息
+在关键位置添加调试信息：
+- CardParser::getCardById: 记录查询过程和结果
+- Card::getCardsByIds: 记录每个卡片的查询状态
+- 数据库查询: 记录SQL执行和结果
+
+## 修改文件清单
+
+### includes/Core/CardParser.php
+1. 添加clearDatabaseCache方法
+2. 修改getCardDatabase方法支持强制新连接
+3. 修改getCardById方法支持强制新连接参数
+4. 优化PDO语句处理，避免缓存问题
+5. 添加详细调试信息
+
+### includes/Models/Card.php
+1. 修改getCardById方法支持强制新连接参数
+2. 修改getCardsByIds方法使用强制新连接
+3. 添加ID匹配验证
+4. 增强调试信息
+
+## 技术细节
+
+### PDO缓存问题
+PDO的prepared statement可能在某些情况下重用之前的结果，特别是在：
+- 快速连续查询相同的SQL
+- 使用相同的PDO连接对象
+- 参数绑定方式不当
+
+### 数据库连接缓存
+CardParser使用数组缓存数据库连接：
+```php
+private $cardDatabases = [];
+```
+这可能导致连接状态污染，影响后续查询。
+
+### 单例模式影响
+CardParser使用单例模式，可能存在：
+- 状态在多次调用间保持
+- 内部缓存影响查询结果
+- 连接对象重用导致的问题
+
+## 预期效果
+
+### 修复后的行为
+1. 每次批量查询都使用独立的数据库连接
+2. PDO语句立即关闭，避免缓存问题
+3. 严格验证返回的卡片ID与请求ID匹配
+4. 详细的调试信息帮助追踪问题
+
+### 性能影响
+- 批量查询时会创建更多数据库连接
+- 每次查询都会重新准备SQL语句
+- 内存使用可能略有增加
+- 但确保了查询结果的正确性
+
+## 测试验证
+
+### 测试步骤
+1. 创建包含多张不同卡片的高级投票
+2. 检查确认页面是否显示正确的不同卡片
+3. 查看调试日志确认查询过程
+4. 验证每张卡片的详细信息
+
+### 调试信息检查
+查看以下调试信息：
+- CardParser::getCardById 开始/查询结果/返回结果
+- Card::getCardsByIds 开始/查询单个卡片/找到卡片/完成
+- 确认每个步骤的卡片ID和名称正确
+
+## 回退方案
+
+如果修复后仍有问题：
+1. 可以回退到使用单独的数据库查询方法
+2. 考虑重写批量查询逻辑
+3. 检查数据库文件本身是否有问题
+4. 考虑使用不同的数据库访问方式
+
+## 注意事项
+
+### 生产环境
+- 确保DEBUG_MODE在生产环境中关闭
+- 监控数据库连接数量，避免连接泄漏
+- 定期检查内存使用情况
+
+### 性能监控
+- 监控批量查询的响应时间
+- 检查数据库连接池使用情况
+- 关注内存使用变化
+
+### 兼容性
+- 所有修改保持向后兼容
+- 不影响单个卡片查询的性能
+- 普通投票功能不受影响
+
+## 后续优化建议
+
+如果问题解决：
+1. 考虑优化数据库连接管理
+2. 实现更高效的批量查询方法
+3. 添加查询结果缓存机制
+4. 优化CardParser的单例实现

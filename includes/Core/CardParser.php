@@ -621,12 +621,20 @@ class CardParser {
     }
 
     /**
+     * 清除数据库连接缓存
+     */
+    public function clearDatabaseCache() {
+        $this->cardDatabases = [];
+    }
+
+    /**
      * 获取卡片数据库连接
      *
      * @param string $dbFile 数据库文件路径
+     * @param bool $forceNew 是否强制创建新连接
      * @return PDO 数据库连接
      */
-    private function getCardDatabase($dbFile) {
+    private function getCardDatabase($dbFile, $forceNew = false) {
         // 验证数据库文件路径
         if (!file_exists($dbFile)) {
             Utils::debug('数据库文件不存在', ['文件路径' => $dbFile]);
@@ -636,7 +644,7 @@ class CardParser {
         // 使用文件路径的哈希值作为键，避免使用完整路径
         $dbKey = md5($dbFile);
 
-        if (!isset($this->cardDatabases[$dbKey])) {
+        if ($forceNew || !isset($this->cardDatabases[$dbKey])) {
             try {
                 // 确保临时目录存在
                 if (!file_exists(TMP_DIR)) {
@@ -872,13 +880,16 @@ class CardParser {
      * @param int $cardId 卡片ID
      * @return array|null 卡片信息
      */
-    public function getCardById($cardId) {
+    public function getCardById($cardId, $forceNewConnection = false) {
+        // 调试信息
+        Utils::debug('CardParser::getCardById 开始', ['cardId' => $cardId, 'forceNew' => $forceNewConnection]);
+
         // 首先从DIY卡数据库中查找
         $dbFiles = $this->getCardDatabaseFiles();
         $card = null;
 
         foreach ($dbFiles as $dbFile) {
-            $db = $this->getCardDatabase($dbFile);
+            $db = $this->getCardDatabase($dbFile, $forceNewConnection);
 
             $sql = "
                 SELECT
@@ -893,9 +904,23 @@ class CardParser {
             ";
 
             try {
+                // 强制每次都创建新的PDO语句，避免缓存问题
                 $stmt = $db->prepare($sql);
-                $stmt->execute(['id' => $cardId]);
+                $stmt->bindValue(':id', (int)$cardId, PDO::PARAM_INT);
+                $stmt->execute();
                 $card = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                // 立即关闭语句，确保不会有缓存问题
+                $stmt->closeCursor();
+                $stmt = null;
+
+                // 调试信息
+                Utils::debug('CardParser::getCardById 查询结果', [
+                    'cardId' => $cardId,
+                    'dbFile' => basename($dbFile),
+                    'found' => $card ? true : false,
+                    'cardData' => $card ? ['id' => $card['id'], 'name' => $card['name']] : null
+                ]);
 
                 if ($card) {
                     // 判断是否为TCG卡片
@@ -909,6 +934,12 @@ class CardParser {
                     $card['image_path'] = $this->getCardImagePath($card['id']);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
+
+                    // 调试信息
+                    Utils::debug('CardParser::getCardById 返回结果', [
+                        'cardId' => $cardId,
+                        'returnedCard' => ['id' => $card['id'], 'name' => $card['name']]
+                    ]);
 
                     return $card;
                 }
@@ -950,8 +981,13 @@ class CardParser {
                 ";
 
                 $stmt = $tcgDb->prepare($sql);
-                $stmt->execute(['id' => $cardId]);
+                $stmt->bindValue(':id', (int)$cardId, PDO::PARAM_INT);
+                $stmt->execute();
                 $card = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                // 立即关闭语句，确保不会有缓存问题
+                $stmt->closeCursor();
+                $stmt = null;
 
                 if ($card) {
                     // TCG卡片设置标志

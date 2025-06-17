@@ -1,0 +1,71 @@
+投票者封禁SQL查询错误修复
+时间：2025年6月17日 18:30
+
+## 问题描述
+用户在高级投票中分别投票时出现SQL错误：
+```
+SQL查询错误: SQLSTATE[HY000]: General error: 1 no such column: expires_at
+SQL: SELECT * FROM voter_bans WHERE voter_identifier = ? AND (expires_at IS NULL OR expires_at > ?)
+```
+
+## 问题分析
+1. 在 `includes/Models/Vote.php` 的 `getVoterBanStatus` 方法中，查询使用了 `expires_at` 字段
+2. 但在 `includes/Core/Database.php` 中定义的 `voter_bans` 表结构中没有 `expires_at` 字段
+3. 实际的表结构使用 `is_active` 字段来标识封禁是否有效
+
+## 数据库表结构
+`voter_bans` 表的实际字段：
+- `id` - 主键
+- `voter_identifier` - 投票者标识符（唯一）
+- `ban_level` - 封禁等级
+- `reason` - 封禁理由
+- `banned_by` - 封禁操作者
+- `banned_at` - 封禁时间
+- `is_active` - 是否活跃（1=活跃，0=已解封）
+
+## 解决方案
+修改 `includes/Models/Vote.php` 中的 `getVoterBanStatus` 方法：
+
+### 修改前
+```php
+return $this->db->getRow(
+    'SELECT * FROM voter_bans WHERE voter_identifier = ? AND (expires_at IS NULL OR expires_at > ?)',
+    [$voterIdentifier, date('Y-m-d H:i:s')]
+);
+```
+
+### 修改后
+```php
+return $this->db->getRow(
+    'SELECT * FROM voter_bans WHERE voter_identifier = ? AND is_active = 1',
+    [$voterIdentifier]
+);
+```
+
+## 修改说明
+1. 移除了不存在的 `expires_at` 字段查询
+2. 使用 `is_active = 1` 来查询活跃的封禁记录
+3. 简化了查询逻辑，提高了性能
+4. 保持了与现有封禁系统的一致性
+
+## 影响范围
+此修复影响以下功能：
+- 高级投票提交时的封禁状态检查
+- 普通投票提交时的封禁状态检查
+- 系列投票提交时的封禁状态检查
+- 所有涉及投票者封禁状态验证的功能
+
+## 测试建议
+1. 测试正常用户的投票提交功能
+2. 测试被封禁用户的投票限制功能
+3. 验证高级投票的分别投票功能
+4. 确认封禁管理功能正常工作
+
+## 修改文件
+- `includes/Models/Vote.php` - 修复getVoterBanStatus方法的SQL查询
+
+## 验证结果
+- 代码语法检查通过，无错误
+- SQL查询语法正确，使用了正确的字段名
+- 与现有封禁系统逻辑保持一致
+- 修复后的查询更简洁高效

@@ -49,8 +49,8 @@ $controllerMap = [
 ];
 
 // 特殊路由处理
-if ($controllerName === 'vote' && isset($_GET['id'])) {
-    // 如果是投票链接，则调用vote方法
+if ($controllerName === 'vote' && isset($_GET['id']) && !isset($_GET['action'])) {
+    // 如果是投票链接且没有指定action，则调用vote方法
     $params = [$_GET['id']];
     $methodName = 'vote';
 }

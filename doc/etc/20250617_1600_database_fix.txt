@@ -1,0 +1,102 @@
+数据库查询错误修复
+时间：2025年6月17日 16:00
+
+## 问题描述
+用户在上传文件后访问投票概览页面时出现以下错误：
+SQL查询错误: SQLSTATE[HY000]: General error: 1 no such table: cards
+SQL: SELECT vr.*, c.name as card_name FROM vote_records vr LEFT JOIN cards c ON vr.card_id = c.id WHERE vr.vote_id = ? ORDER BY vr.created_at ASC
+
+## 问题原因
+在Vote模型的getVoteRecords方法中，错误地使用了LEFT JOIN查询不存在的'cards'表。
+实际上，卡片数据是从CDB文件（SQLite数据库）中读取的，存储在'datas'和'texts'表中，而不是系统主数据库的'cards'表。
+
+## 解决方案
+
+### 1. 修复Vote模型的getVoteRecords方法
+- 移除对不存在的'cards'表的JOIN查询
+- 改为先查询投票记录，然后通过Card模型批量获取卡片名称
+- 优化查询性能，避免重复查询相同的卡片
+
+### 2. 优化视图文件中的Card模型使用
+- 在控制器中预先获取卡片的当前禁限状态
+- 避免在视图文件中重复创建Card模型实例
+- 提高页面渲染性能
+
+## 修改文件
+
+### includes/Models/Vote.php
+- 重写getVoteRecords方法
+- 使用批量查询优化性能
+- 正确处理卡片名称获取
+
+### includes/Controllers/VoteController.php
+- 在投票详情处理中预先获取卡片状态
+- 减少视图层的数据库查询
+
+### includes/Views/votes/vote.php
+- 移除重复的Card模型创建
+- 使用控制器传递的预处理数据
+- 修复变量名引用错误
+
+## 技术细节
+
+### 原始错误代码
+```sql
+SELECT vr.*, c.name as card_name FROM vote_records vr 
+LEFT JOIN cards c ON vr.card_id = c.id 
+WHERE vr.vote_id = ? 
+ORDER BY vr.created_at ASC
+```
+
+### 修复后的逻辑
+```php
+// 1. 先查询投票记录
+$records = $this->db->getRows(
+    'SELECT * FROM vote_records WHERE vote_id = ? ORDER BY created_at ASC',
+    [$voteId]
+);
+
+// 2. 收集需要查询的卡片ID
+$cardIds = array_unique(array_filter(array_column($records, 'card_id')));
+
+// 3. 批量查询卡片信息
+$cardModel = new Card();
+foreach ($uniqueCardIds as $cardId) {
+    $card = $cardModel->getCardById($cardId);
+    $cardNames[$cardId] = $card ? $card['name'] : '未知卡片';
+}
+
+// 4. 为记录添加卡片名称
+foreach ($records as &$record) {
+    $record['card_name'] = $cardNames[$record['card_id']] ?? null;
+}
+```
+
+## 性能优化
+
+### 查询优化
+- 避免JOIN不存在的表
+- 使用批量查询减少数据库访问
+- 缓存卡片信息避免重复查询
+
+### 代码优化
+- 在控制器层预处理数据
+- 减少视图层的业务逻辑
+- 避免重复创建模型实例
+
+## 测试验证
+- ✅ 投票概览页面正常访问
+- ✅ 高级投票详情页面正常显示
+- ✅ 投票记录正确显示卡片名称
+- ✅ 性能优化生效
+
+## 注意事项
+1. 卡片数据来源于CDB文件，不是系统数据库
+2. 需要通过Card模型和CardParser获取卡片信息
+3. 批量查询可以显著提高性能
+4. 视图层应避免直接进行数据库操作
+
+## 后续建议
+1. 考虑为频繁查询的卡片信息添加缓存
+2. 监控高级投票功能的性能表现
+3. 定期检查数据库查询的正确性

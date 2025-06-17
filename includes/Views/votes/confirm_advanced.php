@@ -30,6 +30,19 @@
 
                     <div class="cards-section">
                         <h4>涉及卡片列表 (共 <?php echo count($cards); ?> 张)</h4>
+
+                        <!-- 临时调试信息 -->
+                        <?php if (defined('DEBUG_MODE') && DEBUG_MODE): ?>
+                            <div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border: 1px solid #ccc;">
+                                <strong>调试信息 - $cards 数组内容:</strong>
+                                <pre><?php
+                                echo "数组长度: " . count($cards) . "\n";
+                                foreach ($cards as $index => $card) {
+                                    echo "索引 {$index}: ID={$card['id']}, 名称={$card['name']}\n";
+                                }
+                                ?></pre>
+                            </div>
+                        <?php endif; ?>
                         
                         <?php if (!empty($invalidCardIds)): ?>
                             <div class="alert alert-warning">

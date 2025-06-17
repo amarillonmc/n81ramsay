@@ -1,0 +1,180 @@
+高级投票统计显示修复
+时间：2025年6月17日 19:00
+
+## 问题描述
+用户反馈高级投票中存在多个问题：
+1. 批量为卡片设置状态时，哪怕全部设置禁止，投票出来的结果却是全部无限制
+2. 在高级投票中分别进行投票时，投票记录没有显示针对的卡片信息
+3. 即使没有批量设置，单独为每张卡片选择不同状态，仍然投出全部无限制的结果
+
+## 问题分析
+
+### 问题1：投票统计错误
+- `getVoteStats` 方法在处理高级投票时，没有正确区分不同卡片的投票
+- 当没有指定 `cardId` 时，会统计所有投票记录，导致统计结果混乱
+- 高级投票需要为每张卡片单独统计投票结果
+
+### 问题2：投票记录显示不完整
+- 投票记录中的卡片名称显示正常，但统计显示有问题
+- 需要为高级投票提供每张卡片的独立统计显示
+
+### 问题3：重复投票检查错误
+- `submitAdvanced` 方法中的重复投票检查逻辑错误
+- 使用了 `getVoteRecordByUserAndVote` 检查整个投票，而不是检查每张卡片
+- 导致高级投票的投票记录无法正确创建
+
+### 问题4：路由处理错误（根本原因）
+- `index.php` 中的特殊路由处理逻辑有缺陷
+- 当URL包含 `controller=vote&id=xxx` 时，会强制调用 `vote` 方法
+- 即使URL中指定了 `action=submitAdvanced`，也会被忽略
+- 导致高级投票表单提交后进入普通投票处理逻辑
+
+## 解决方案
+
+### 1. 修复投票统计逻辑
+在 `includes/Models/Vote.php` 的 `getVoteStats` 方法中：
+- 添加高级投票检测逻辑
+- 对于高级投票，必须指定 `cardId` 才进行统计
+- 对于普通投票，只统计 `card_id` 为 NULL 的记录
+
+### 2. 修改控制器逻辑
+在 `includes/Controllers/VoteController.php` 中：
+- 为高级投票的每张卡片添加独立的统计信息
+- 在 `$advancedCards` 数组中为每张卡片添加 `stats` 字段
+
+### 3. 修复重复投票检查
+在 `includes/Controllers/VoteController.php` 的 `submitAdvanced` 方法中：
+- 移除错误的整体投票检查逻辑
+- 添加针对每张卡片的重复投票检查
+- 确保高级投票能够正确提交
+
+### 4. 修复路由处理
+在 `index.php` 中：
+- 修改特殊路由处理逻辑，只有在没有指定action时才强制调用vote方法
+- 确保 `action=submitAdvanced` 能够正确路由到 `submitAdvanced` 方法
+- 保持其他投票链接的兼容性
+
+### 5. 优化视图显示
+在 `includes/Views/votes/vote.php` 中：
+- 为高级投票添加专门的统计显示区域
+- 显示每张卡片的独立统计信息
+- 保持普通投票的原有显示方式
+
+## 修改详情
+
+### 数据库查询优化
+```php
+// 修改前：可能统计所有记录
+$sql = 'SELECT status, COUNT(*) as count FROM vote_records WHERE vote_id = ?';
+
+// 修改后：区分投票类型
+if ($isAdvancedVote) {
+    if ($cardId !== null) {
+        $sql .= ' AND card_id = ?';
+    } else {
+        return $stats; // 不统计
+    }
+} else {
+    $sql .= ' AND card_id IS NULL';
+}
+```
+
+### 路由处理修复
+```php
+// 修改前：强制调用vote方法
+if ($controllerName === 'vote' && isset($_GET['id'])) {
+    $params = [$_GET['id']];
+    $methodName = 'vote';
+}
+
+// 修改后：只有在没有指定action时才强制调用vote方法
+if ($controllerName === 'vote' && isset($_GET['id']) && !isset($_GET['action'])) {
+    $params = [$_GET['id']];
+    $methodName = 'vote';
+}
+```
+
+### 重复投票检查修复
+```php
+// 修改前：错误的整体检查
+$existingRecord = $this->voteModel->getVoteRecordByUserAndVote($userId, $vote['id']);
+
+// 修改后：针对每张卡片的检查
+$cardIds = json_decode($vote['card_ids'], true);
+if (is_array($cardIds)) {
+    $db = Database::getInstance();
+    foreach ($cardIds as $cardId) {
+        $existingRecord = $db->getRow(
+            'SELECT id FROM vote_records WHERE vote_id = ? AND user_id = ? AND card_id = ?',
+            [$vote['id'], $userId, $cardId]
+        );
+        if ($existingRecord) {
+            // 阻止重复投票
+        }
+    }
+}
+```
+
+### 控制器数据准备
+```php
+// 为每张卡片添加统计信息
+for ($i = 0; $i < count($advancedCards); $i++) {
+    $advancedCards[$i]['current_limit_status'] = $this->cardModel->getCardLimitStatus($advancedCards[$i]['id'], $environment['header']);
+    $advancedCards[$i]['stats'] = $this->voteModel->getVoteStats($vote['id'], $advancedCards[$i]['id']);
+}
+```
+
+### 视图显示优化
+- 高级投票：显示每张卡片的独立统计
+- 普通投票：显示整体统计
+- 添加卡片缩略图和名称显示
+
+## 修改文件清单
+
+### 路由系统
+- `index.php`: 修复特殊路由处理逻辑
+
+### 后端逻辑
+- `includes/Models/Vote.php`: 修复getVoteStats方法
+- `includes/Controllers/VoteController.php`:
+  * 修复重复投票检查逻辑
+  * 添加每张卡片的统计信息
+
+### 前端显示
+- `includes/Views/votes/vote.php`:
+  * 修改统计显示逻辑
+  * 添加高级投票专用统计样式
+  * 优化CSS样式
+
+## 功能特点
+
+### 统计准确性
+- 高级投票：每张卡片独立统计，互不干扰
+- 普通投票：保持原有统计逻辑
+- 避免了统计数据混乱的问题
+
+### 用户体验
+- 清晰显示每张卡片的投票情况
+- 卡片缩略图和名称便于识别
+- 投票记录正确显示针对的卡片
+
+### 性能优化
+- 批量查询卡片信息，减少数据库访问
+- 只在需要时进行统计计算
+- 保持原有的缓存机制
+
+## 验证结果
+- 代码语法检查通过，无错误
+- 发现并修复了路由处理的根本问题
+- 逻辑修改正确，区分了高级投票和普通投票
+- 视图显示优化，提供更好的用户体验
+- 保持了向后兼容性
+- 高级投票现在应该能够正确提交和统计
+
+## 测试建议
+1. 测试高级投票的统计准确性
+2. 验证不同卡片的投票结果独立性
+3. 检查投票记录的卡片信息显示
+4. 确认普通投票功能不受影响
+5. 测试各种投票状态的统计显示
+6. 验证CSS样式在不同浏览器中的显示效果

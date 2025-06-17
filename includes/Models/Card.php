@@ -44,10 +44,11 @@ class Card {
      * 根据ID获取卡片
      *
      * @param int $cardId 卡片ID
+     * @param bool $forceNewConnection 是否强制使用新的数据库连接
      * @return array|null 卡片信息
      */
-    public function getCardById($cardId) {
-        return $this->cardParser->getCardById($cardId);
+    public function getCardById($cardId, $forceNewConnection = false) {
+        return $this->cardParser->getCardById($cardId, $forceNewConnection);
     }
 
     /**
@@ -100,5 +101,86 @@ class Card {
     public function getCardImageUrl($cardId) {
         $imagePath = $this->cardParser->getCardImagePath($cardId);
         return BASE_URL . $imagePath;
+    }
+
+    /**
+     * 根据ID列表批量获取卡片
+     *
+     * @param array $cardIds 卡片ID列表
+     * @return array 卡片信息列表
+     */
+    public function getCardsByIds($cardIds) {
+        if (empty($cardIds)) {
+            return [];
+        }
+
+        // 确保输入是数组并去重
+        if (!is_array($cardIds)) {
+            $cardIds = [$cardIds];
+        }
+
+        $cardIds = array_unique($cardIds);
+        $cards = [];
+
+        // 调试信息
+        Utils::debug('Card::getCardsByIds 开始', [
+            'inputCardIds' => $cardIds,
+            'count' => count($cardIds)
+        ]);
+
+        // 为每个卡片ID单独查询，确保不会出现重复
+        foreach ($cardIds as $index => $cardId) {
+            // 确保卡片ID是整数
+            $cardId = (int)$cardId;
+            if ($cardId <= 0) {
+                continue;
+            }
+
+            Utils::debug('Card::getCardsByIds 查询单个卡片', [
+                'index' => $index,
+                'cardId' => $cardId
+            ]);
+
+            // 强制使用新的数据库连接，避免缓存问题
+            $card = $this->getCardById($cardId, true);
+
+            // 额外验证：确保返回的卡片ID与请求的ID匹配
+            if ($card && (int)$card['id'] !== $cardId) {
+                Utils::debug('Card::getCardsByIds ID不匹配', [
+                    'requestedId' => $cardId,
+                    'returnedId' => $card['id'],
+                    'cardName' => $card['name']
+                ]);
+                // ID不匹配，跳过这张卡片
+                continue;
+            }
+
+            if ($card) {
+                // 确保卡片ID正确
+                $card['id'] = $cardId;
+                $cards[] = $card;
+
+                Utils::debug('Card::getCardsByIds 找到卡片', [
+                    'index' => $index,
+                    'cardId' => $cardId,
+                    'cardName' => $card['name'],
+                    'returnedId' => $card['id']
+                ]);
+            } else {
+                Utils::debug('Card::getCardsByIds 未找到卡片', [
+                    'index' => $index,
+                    'cardId' => $cardId
+                ]);
+            }
+        }
+
+        Utils::debug('Card::getCardsByIds 完成', [
+            'inputCount' => count($cardIds),
+            'resultCount' => count($cards),
+            'resultIds' => array_column($cards, 'id'),
+            'resultNames' => array_column($cards, 'name')
+        ]);
+
+        return $cards;
     }
 }

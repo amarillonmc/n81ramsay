@@ -81,7 +81,20 @@ class Vote {
         }
 
         // 添加发起人的投票记录
-        $this->addVoteRecord($voteId, $initiatorId, $status, '');
+        $voterIdentifier = Utils::generateVoterIdentifier(Utils::getClientIp(), $initiatorId);
+
+        if ($isAdvancedVote && !empty($cardIds)) {
+            // 高级投票：为每张卡片添加发起人的投票记录
+            $cardIdArray = json_decode($cardIds, true);
+            if (is_array($cardIdArray)) {
+                foreach ($cardIdArray as $cardId) {
+                    $this->addVoteRecord($voteId, $initiatorId, $status, '', $voterIdentifier, $cardId);
+                }
+            }
+        } else {
+            // 普通投票或系列投票
+            $this->addVoteRecord($voteId, $initiatorId, $status, '', $voterIdentifier);
+        }
 
         return $voteLink;
     }
@@ -93,30 +106,40 @@ class Vote {
      * @param string $userId 用户ID
      * @param int $status 禁限状态
      * @param string $comment 评论
-     * @return bool 是否成功
+     * @param string $voterIdentifier 投票者标识符
+     * @param int|null $cardId 卡片ID（高级投票时使用）
+     * @return int|false 记录ID或失败
      */
-    public function addVoteRecord($voteId, $userId, $status, $comment) {
+    public function addVoteRecord($voteId, $userId, $status, $comment, $voterIdentifier = '', $cardId = null) {
         // 检查内存使用情况
         Utils::checkMemoryUsage('添加投票记录开始');
 
         // 获取客户端IP
         $ipAddress = Utils::getClientIp();
 
-        // 检查是否已投票
-        $existingRecord = $this->db->getRow(
-            'SELECT id FROM vote_records WHERE vote_id = ? AND ip_address = ?',
-            [$voteId, $ipAddress]
-        );
+        // 使用传入的标识符或生成新的
+        $identifier = !empty($voterIdentifier) ? $voterIdentifier : Utils::generateVoterIdentifier($ipAddress, $userId);
+
+        // 对于高级投票，检查是否已对特定卡片投票
+        if ($cardId !== null) {
+            $existingRecord = $this->db->getRow(
+                'SELECT id FROM vote_records WHERE vote_id = ? AND user_id = ? AND card_id = ?',
+                [$voteId, $userId, $cardId]
+            );
+        } else {
+            // 普通投票检查IP
+            $existingRecord = $this->db->getRow(
+                'SELECT id FROM vote_records WHERE vote_id = ? AND ip_address = ?',
+                [$voteId, $ipAddress]
+            );
+        }
 
         if ($existingRecord) {
             return false;
         }
 
-        // 生成唯一标识符
-        $identifier = Utils::generateVoterIdentifier($ipAddress, $userId);
-
         // 插入投票记录
-        $recordId = $this->db->insert('vote_records', [
+        $recordData = [
             'vote_id' => $voteId,
             'user_id' => $userId,
             'ip_address' => $ipAddress,
@@ -124,10 +147,17 @@ class Vote {
             'comment' => $comment,
             'identifier' => $identifier,
             'created_at' => date('Y-m-d H:i:s')
-        ]);
+        ];
+
+        // 如果是高级投票，添加卡片ID
+        if ($cardId !== null) {
+            $recordData['card_id'] = $cardId;
+        }
+
+        $recordId = $this->db->insert('vote_records', $recordData);
 
         Utils::checkMemoryUsage('添加投票记录完成');
-        return $recordId !== false;
+        return $recordId;
     }
 
     /**
@@ -208,10 +238,40 @@ class Vote {
      * @return array 投票记录列表
      */
     public function getVoteRecords($voteId) {
-        return $this->db->getRows(
+        $records = $this->db->getRows(
             'SELECT * FROM vote_records WHERE vote_id = ? ORDER BY created_at ASC',
             [$voteId]
         );
+
+        // 收集需要查询的卡片ID
+        $cardIds = [];
+        foreach ($records as $record) {
+            if (!empty($record['card_id'])) {
+                $cardIds[] = $record['card_id'];
+            }
+        }
+
+        // 批量查询卡片信息
+        $cardNames = [];
+        if (!empty($cardIds)) {
+            $cardModel = new Card();
+            $uniqueCardIds = array_unique($cardIds);
+            foreach ($uniqueCardIds as $cardId) {
+                $card = $cardModel->getCardById($cardId);
+                $cardNames[$cardId] = $card ? $card['name'] : '未知卡片';
+            }
+        }
+
+        // 为记录添加卡片名称
+        foreach ($records as &$record) {
+            if (!empty($record['card_id']) && isset($cardNames[$record['card_id']])) {
+                $record['card_name'] = $cardNames[$record['card_id']];
+            } else {
+                $record['card_name'] = null;
+            }
+        }
+
+        return $records;
     }
 
     /**
@@ -251,12 +311,46 @@ class Vote {
     }
 
     /**
+     * 根据用户ID和投票ID获取投票记录
+     *
+     * @param string $userId 用户ID
+     * @param int $voteId 投票ID
+     * @return array|null 投票记录
+     */
+    public function getVoteRecordByUserAndVote($userId, $voteId) {
+        return $this->db->getRow(
+            'SELECT * FROM vote_records WHERE user_id = ? AND vote_id = ? LIMIT 1',
+            [$userId, $voteId]
+        );
+    }
+
+    /**
+     * 获取投票者封禁状态
+     *
+     * @param string $voterIdentifier 投票者标识符
+     * @return array|null 封禁信息
+     */
+    public function getVoterBanStatus($voterIdentifier) {
+        // 如果没有封禁功能相关的表，返回null
+        try {
+            return $this->db->getRow(
+                'SELECT * FROM voter_bans WHERE voter_identifier = ? AND is_active = 1',
+                [$voterIdentifier]
+            );
+        } catch (Exception $e) {
+            // 表不存在或其他错误，返回null（表示未封禁）
+            return null;
+        }
+    }
+
+    /**
      * 获取投票统计
      *
      * @param int $voteId 投票ID
+     * @param int|null $cardId 卡片ID（高级投票时使用）
      * @return array 投票统计
      */
-    public function getVoteStats($voteId) {
+    public function getVoteStats($voteId, $cardId = null) {
         $stats = [
             0 => 0, // 禁止
             1 => 0, // 限制
@@ -264,11 +358,32 @@ class Vote {
             3 => 0  // 无限制
         ];
 
+        // 检查是否为高级投票
+        $vote = $this->db->getRow('SELECT is_advanced_vote FROM votes WHERE id = ?', [$voteId]);
+        $isAdvancedVote = $vote && $vote['is_advanced_vote'];
+
+        // 构建SQL查询
+        $sql = 'SELECT status, COUNT(*) as count FROM vote_records WHERE vote_id = ?';
+        $params = [$voteId];
+
+        if ($isAdvancedVote) {
+            if ($cardId !== null) {
+                // 高级投票：只统计指定卡片的投票
+                $sql .= ' AND card_id = ?';
+                $params[] = $cardId;
+            } else {
+                // 高级投票：如果没有指定卡片ID，则不统计（避免重复计算）
+                return $stats;
+            }
+        } else {
+            // 普通投票：统计所有投票记录（card_id应该为NULL）
+            $sql .= ' AND card_id IS NULL';
+        }
+
+        $sql .= ' GROUP BY status';
+
         // 直接从数据库统计，避免加载所有记录到内存
-        $result = $this->db->getRows(
-            'SELECT status, COUNT(*) as count FROM vote_records WHERE vote_id = ? GROUP BY status',
-            [$voteId]
-        );
+        $result = $this->db->getRows($sql, $params);
 
         foreach ($result as $row) {
             $status = (int)$row['status'];

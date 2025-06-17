@@ -263,11 +263,28 @@ class VoteController {
         if ($vote['is_advanced_vote'] && !empty($vote['card_ids'])) {
             $cardIds = json_decode($vote['card_ids'], true);
             if (is_array($cardIds)) {
-                foreach ($cardIds as $cardId) {
-                    $advancedCard = $this->cardModel->getCardById($cardId);
-                    if ($advancedCard) {
-                        $advancedCards[] = $advancedCard;
-                    }
+                // 调试信息
+                Utils::debug('高级投票详情页面', [
+                    '投票ID' => $vote['id'],
+                    'JSON卡片ID' => $vote['card_ids'],
+                    '解析的卡片ID' => $cardIds
+                ]);
+
+                // 批量查询卡片信息以提高性能
+                $advancedCards = $this->cardModel->getCardsByIds($cardIds);
+
+                // 调试信息
+                Utils::debug('高级投票卡片查询结果', [
+                    '查询到的卡片数量' => count($advancedCards),
+                    '卡片ID列表' => array_column($advancedCards, 'id'),
+                    '卡片名称列表' => array_column($advancedCards, 'name')
+                ]);
+
+                // 为每张卡片添加当前禁限状态和投票统计
+                for ($i = 0; $i < count($advancedCards); $i++) {
+                    $advancedCards[$i]['current_limit_status'] = $this->cardModel->getCardLimitStatus($advancedCards[$i]['id'], $environment['header']);
+                    // 为每张卡片获取单独的投票统计
+                    $advancedCards[$i]['stats'] = $this->voteModel->getVoteStats($vote['id'], $advancedCards[$i]['id']);
                 }
             }
         }
@@ -294,7 +311,7 @@ class VoteController {
             if (empty($errors)) {
                 $currentIp = Utils::getClientIp();
                 $voterIdentifier = Utils::generateVoterIdentifier($currentIp, $userId);
-                $ban = $this->voterBanModel->checkBan($voterIdentifier);
+                $ban = $this->voteModel->getVoterBanStatus($voterIdentifier);
 
                 if ($ban) {
                     if ($ban['ban_level'] == 2) {
@@ -312,7 +329,9 @@ class VoteController {
 
             // 如果没有错误，则添加投票记录
             if (empty($errors)) {
-                $result = $this->voteModel->addVoteRecord($vote['id'], $userId, $status, $comment);
+                $currentIp = Utils::getClientIp();
+                $voterIdentifier = Utils::generateVoterIdentifier($currentIp, $userId);
+                $result = $this->voteModel->addVoteRecord($vote['id'], $userId, $status, $comment, $voterIdentifier);
 
                 if ($result) {
                     // 重定向到投票页面（刷新）
@@ -638,16 +657,28 @@ class VoteController {
         // 获取环境信息
         $environment = Utils::getEnvironmentById($environmentId);
 
-        // 获取卡片详细信息
-        $cards = [];
-        foreach ($validCardIds as $cardId) {
-            $card = $this->cardModel->getCardById($cardId);
-            if ($card) {
-                // 获取卡片在当前环境中的禁限状态
-                $card['current_limit_status'] = $this->cardModel->getCardLimitStatus($cardId, $environment['header']);
-                $cards[] = $card;
-            }
+        // 批量获取卡片详细信息
+        $cards = $this->cardModel->getCardsByIds($validCardIds);
+
+        // 调试信息
+        Utils::debug('高级投票确认页面', [
+            '输入的卡片ID' => $validCardIds,
+            '查询到的卡片数量' => count($cards),
+            '卡片ID列表' => array_column($cards, 'id')
+        ]);
+
+        for ($i = 0; $i < count($cards); $i++) {
+            // 获取卡片在当前环境中的禁限状态
+            $cards[$i]['current_limit_status'] = $this->cardModel->getCardLimitStatus($cards[$i]['id'], $environment['header']);
         }
+
+        // 额外调试：在视图渲染前再次检查数据
+        Utils::debug('渲染前最终检查', [
+            'cards_count' => count($cards),
+            'cards_data' => array_map(function($card) {
+                return ['id' => $card['id'], 'name' => $card['name']];
+            }, $cards)
+        ]);
 
         // 渲染确认页面
         include __DIR__ . '/../Views/layout.php';
@@ -732,6 +763,131 @@ class VoteController {
         sort($result);
 
         return $result;
+    }
+
+    /**
+     * 处理高级投票提交
+     */
+    public function submitAdvanced() {
+        $voteLink = isset($_GET['id']) ? $_GET['id'] : '';
+
+        if (empty($voteLink)) {
+            header('Location: ' . BASE_URL . '?controller=vote');
+            exit;
+        }
+
+        // 获取投票信息
+        $vote = $this->voteModel->getVoteByLink($voteLink);
+        if (!$vote || !$vote['is_advanced_vote']) {
+            header('Location: ' . BASE_URL . '?controller=vote');
+            exit;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink);
+            exit;
+        }
+
+        // 获取表单数据
+        $userId = isset($_POST['user_id']) ? trim($_POST['user_id']) : '';
+        $comment = isset($_POST['comment']) ? trim($_POST['comment']) : '';
+        $cardVotes = isset($_POST['card_votes']) ? $_POST['card_votes'] : [];
+
+        // 验证数据
+        $errors = [];
+
+        if (empty($userId)) {
+            $errors[] = '请输入您的ID';
+        }
+
+        if (empty($cardVotes)) {
+            $errors[] = '请为每张卡片选择投票状态';
+        }
+
+        // 验证卡片投票数据
+        $cardIds = json_decode($vote['card_ids'], true);
+        if (is_array($cardIds)) {
+            foreach ($cardIds as $cardId) {
+                if (!isset($cardVotes[$cardId]) || !in_array($cardVotes[$cardId], ['0', '1', '2', '3'])) {
+                    $errors[] = "卡片 {$cardId} 的投票状态无效";
+                }
+            }
+        }
+
+        if (!empty($errors)) {
+            // 重定向回投票页面并显示错误
+            $errorMsg = implode('; ', $errors);
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink . '&error=' . urlencode($errorMsg));
+            exit;
+        }
+
+        // 对于高级投票，检查是否已经对所有卡片投过票
+        $cardIds = json_decode($vote['card_ids'], true);
+        if (is_array($cardIds)) {
+            $db = Database::getInstance();
+            foreach ($cardIds as $cardId) {
+                $existingRecord = $db->getRow(
+                    'SELECT id FROM vote_records WHERE vote_id = ? AND user_id = ? AND card_id = ?',
+                    [$vote['id'], $userId, $cardId]
+                );
+                if ($existingRecord) {
+                    header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink . '&error=' . urlencode('您已经对部分卡片投过票了'));
+                    exit;
+                }
+            }
+        }
+
+        // 生成投票者标识符
+        $voterIdentifier = Utils::generateVoterIdentifier($_SERVER['REMOTE_ADDR'], $userId);
+
+        // 检查投票者是否被封禁
+        $banStatus = $this->voteModel->getVoterBanStatus($voterIdentifier);
+        if ($banStatus && $banStatus['ban_level'] >= 2) {
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink . '&error=' . urlencode('您已被禁止投票'));
+            exit;
+        }
+
+        try {
+            // 开始事务
+            $db = Database::getInstance();
+            $db->beginTransaction();
+
+            // 为每张卡片创建投票记录
+            foreach ($cardVotes as $cardId => $status) {
+                $recordId = $this->voteModel->addVoteRecord(
+                    $vote['id'],
+                    $userId,
+                    (int)$status,
+                    $comment,
+                    $voterIdentifier,
+                    (int)$cardId  // 添加卡片ID
+                );
+
+                if (!$recordId) {
+                    throw new Exception("为卡片 {$cardId} 创建投票记录失败");
+                }
+            }
+
+            // 提交事务
+            $db->commit();
+
+            // 重定向到投票页面
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink . '&success=' . urlencode('投票提交成功'));
+            exit;
+
+        } catch (Exception $e) {
+            // 回滚事务
+            $db->rollback();
+
+            Utils::debug('高级投票提交失败', [
+                '错误' => $e->getMessage(),
+                '投票ID' => $vote['id'],
+                '用户ID' => $userId
+            ]);
+
+            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink . '&error=' . urlencode('投票提交失败，请稍后重试'));
+            exit;
+        }
     }
 
     /**

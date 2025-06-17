@@ -91,6 +91,60 @@ class ApiController {
     }
 
     /**
+     * 获取卡片详细信息
+     */
+    public function getCardDetail() {
+        // 设置响应头
+        header('Content-Type: application/json');
+
+        // 获取卡片ID参数
+        $cardId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
+        if ($cardId <= 0) {
+            echo json_encode([
+                'success' => false,
+                'message' => '无效的卡片ID'
+            ]);
+            return;
+        }
+
+        try {
+            // 获取卡片详细信息
+            $card = $this->cardModel->getCardById($cardId);
+
+            if (!$card) {
+                echo json_encode([
+                    'success' => false,
+                    'message' => '卡片不存在'
+                ]);
+                return;
+            }
+
+            // 返回卡片信息
+            echo json_encode([
+                'success' => true,
+                'card' => [
+                    'id' => $card['id'],
+                    'name' => $card['name'],
+                    'desc' => $card['desc'],
+                    'type_text' => $card['type_text'],
+                    'race_text' => $card['race_text'],
+                    'attribute_text' => $card['attribute_text'],
+                    'level_text' => $card['level_text'],
+                    'atk' => $card['atk'],
+                    'def' => $card['def'],
+                    'image_path' => $card['image_path']
+                ]
+            ]);
+        } catch (Exception $e) {
+            echo json_encode([
+                'success' => false,
+                'message' => '获取卡片信息失败：' . $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
      * 测试方法
      */
     public function test() {

@@ -154,6 +154,24 @@ class Database {
             if (!$hasCardIds) {
                 $this->pdo->exec('ALTER TABLE votes ADD COLUMN card_ids TEXT');
             }
+
+            // 检查vote_records表是否需要添加card_id字段
+            $recordColumns = $this->pdo->query("PRAGMA table_info(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasRecordCardId = false;
+
+            foreach ($recordColumns as $column) {
+                if ($column['name'] === 'card_id') {
+                    $hasRecordCardId = true;
+                    break;
+                }
+            }
+
+            if (!$hasRecordCardId) {
+                $this->pdo->exec('ALTER TABLE vote_records ADD COLUMN card_id INTEGER DEFAULT NULL');
+            }
+
+            // 检查并修复唯一约束，支持高级投票
+            $this->fixVoteRecordsUniqueConstraint();
         } catch (PDOException $e) {
             Utils::debug('检查投票字段失败', ['错误' => $e->getMessage()]);
         }
@@ -364,6 +382,80 @@ class Database {
      */
     public function rollBack() {
         $this->pdo->rollBack();
+    }
+
+    /**
+     * 修复vote_records表的唯一约束，支持高级投票
+     */
+    private function fixVoteRecordsUniqueConstraint() {
+        try {
+            // 检查当前的索引
+            $indexes = $this->pdo->query("PRAGMA index_list(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
+            $hasOldUniqueIndex = false;
+            $hasNewUniqueIndex = false;
+
+            foreach ($indexes as $index) {
+                if ($index['unique'] == 1) {
+                    $indexInfo = $this->pdo->query("PRAGMA index_info('{$index['name']}')")->fetchAll(PDO::FETCH_ASSOC);
+                    $columns = array_column($indexInfo, 'name');
+
+                    if (count($columns) == 2 && in_array('vote_id', $columns) && in_array('ip_address', $columns)) {
+                        $hasOldUniqueIndex = true;
+                    } elseif (count($columns) == 3 && in_array('vote_id', $columns) && in_array('ip_address', $columns) && in_array('card_id', $columns)) {
+                        $hasNewUniqueIndex = true;
+                    }
+                }
+            }
+
+            // 如果有旧的约束但没有新的约束，需要重建表
+            if ($hasOldUniqueIndex && !$hasNewUniqueIndex) {
+                Utils::debug('修复vote_records唯一约束', ['开始重建表' => true]);
+
+                // 开始事务
+                $this->pdo->beginTransaction();
+
+                // 创建临时表
+                $this->pdo->exec('
+                    CREATE TABLE vote_records_temp (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        vote_id INTEGER NOT NULL,
+                        user_id TEXT NOT NULL,
+                        ip_address TEXT NOT NULL,
+                        status INTEGER NOT NULL,
+                        comment TEXT,
+                        identifier TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        card_id INTEGER DEFAULT NULL,
+                        FOREIGN KEY (vote_id) REFERENCES votes(id),
+                        UNIQUE (vote_id, ip_address, card_id)
+                    )
+                ');
+
+                // 复制数据
+                $this->pdo->exec('
+                    INSERT INTO vote_records_temp (id, vote_id, user_id, ip_address, status, comment, identifier, created_at, card_id)
+                    SELECT id, vote_id, user_id, ip_address, status, comment, identifier, created_at, card_id
+                    FROM vote_records
+                ');
+
+                // 删除旧表
+                $this->pdo->exec('DROP TABLE vote_records');
+
+                // 重命名新表
+                $this->pdo->exec('ALTER TABLE vote_records_temp RENAME TO vote_records');
+
+                // 提交事务
+                $this->pdo->commit();
+
+                Utils::debug('修复vote_records唯一约束', ['完成重建表' => true]);
+            }
+        } catch (PDOException $e) {
+            // 如果出错，回滚事务
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            Utils::debug('修复vote_records唯一约束失败', ['错误' => $e->getMessage()]);
+        }
     }
 
     /**

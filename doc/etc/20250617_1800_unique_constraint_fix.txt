@@ -1,0 +1,212 @@
+数据库唯一约束问题修复
+时间：2025年6月17日 18:00
+
+## 问题描述
+用户在提交高级投票时出现以下错误：
+SQL查询错误: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: vote_records.vote_id, vote_records.ip_address
+
+虽然投票被成功创建，但投票记录插入失败。
+
+## 问题根源分析
+
+### 数据库约束冲突
+vote_records表的原始结构包含唯一约束：
+```sql
+UNIQUE (vote_id, ip_address)
+```
+
+这个约束的设计目的是防止同一IP在同一投票中重复投票，适用于：
+- 普通投票：一个IP对一张卡片只能投一次票
+- 系列投票：一个IP对一个系列只能投一次票
+
+### 高级投票的需求冲突
+但在高级投票中：
+- 一个用户需要对多张卡片分别投票
+- 每张卡片需要独立的投票记录
+- 同一IP需要在同一投票中创建多条记录
+
+这就违反了原有的唯一约束。
+
+## 解决方案
+
+### 1. 修改唯一约束
+将原有的约束：
+```sql
+UNIQUE (vote_id, ip_address)
+```
+
+修改为：
+```sql
+UNIQUE (vote_id, ip_address, card_id)
+```
+
+这样允许：
+- 同一IP在同一投票中为不同卡片投票
+- 防止同一IP对同一卡片重复投票
+- 保持数据完整性
+
+### 2. 数据库结构重建
+由于SQLite不支持直接修改约束，需要重建表：
+1. 创建新的临时表（包含正确的约束）
+2. 复制现有数据到临时表
+3. 删除旧表
+4. 重命名临时表
+
+### 3. 自动化修复机制
+在Database类中添加fixVoteRecordsUniqueConstraint方法：
+- 检测当前的唯一约束
+- 如果发现旧约束，自动重建表
+- 使用事务确保数据安全
+
+## 修改文件
+
+### includes/Core/Database.php
+1. 添加fixVoteRecordsUniqueConstraint方法
+2. 在数据库初始化时调用修复方法
+3. 使用事务确保数据安全
+
+```php
+private function fixVoteRecordsUniqueConstraint() {
+    try {
+        // 检查当前的索引
+        $indexes = $this->pdo->query("PRAGMA index_list(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
+        $hasOldUniqueIndex = false;
+        $hasNewUniqueIndex = false;
+        
+        foreach ($indexes as $index) {
+            if ($index['unique'] == 1) {
+                $indexInfo = $this->pdo->query("PRAGMA index_info('{$index['name']}')")->fetchAll(PDO::FETCH_ASSOC);
+                $columns = array_column($indexInfo, 'name');
+                
+                if (count($columns) == 2 && in_array('vote_id', $columns) && in_array('ip_address', $columns)) {
+                    $hasOldUniqueIndex = true;
+                } elseif (count($columns) == 3 && in_array('vote_id', $columns) && in_array('ip_address', $columns) && in_array('card_id', $columns)) {
+                    $hasNewUniqueIndex = true;
+                }
+            }
+        }
+        
+        // 如果有旧的约束但没有新的约束，需要重建表
+        if ($hasOldUniqueIndex && !$hasNewUniqueIndex) {
+            // 开始事务
+            $this->pdo->beginTransaction();
+            
+            // 创建临时表
+            $this->pdo->exec('
+                CREATE TABLE vote_records_temp (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vote_id INTEGER NOT NULL,
+                    user_id TEXT NOT NULL,
+                    ip_address TEXT NOT NULL,
+                    status INTEGER NOT NULL,
+                    comment TEXT,
+                    identifier TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    card_id INTEGER DEFAULT NULL,
+                    FOREIGN KEY (vote_id) REFERENCES votes(id),
+                    UNIQUE (vote_id, ip_address, card_id)
+                )
+            ');
+            
+            // 复制数据
+            $this->pdo->exec('
+                INSERT INTO vote_records_temp (id, vote_id, user_id, ip_address, status, comment, identifier, created_at, card_id)
+                SELECT id, vote_id, user_id, ip_address, status, comment, identifier, created_at, card_id
+                FROM vote_records
+            ');
+            
+            // 删除旧表
+            $this->pdo->exec('DROP TABLE vote_records');
+            
+            // 重命名新表
+            $this->pdo->exec('ALTER TABLE vote_records_temp RENAME TO vote_records');
+            
+            // 提交事务
+            $this->pdo->commit();
+        }
+    } catch (PDOException $e) {
+        // 如果出错，回滚事务
+        if ($this->pdo->inTransaction()) {
+            $this->pdo->rollBack();
+        }
+        Utils::debug('修复vote_records唯一约束失败', ['错误' => $e->getMessage()]);
+    }
+}
+```
+
+## 技术细节
+
+### 约束检测逻辑
+使用SQLite的PRAGMA命令检测现有约束：
+- `PRAGMA index_list(table_name)`: 获取表的所有索引
+- `PRAGMA index_info(index_name)`: 获取索引的列信息
+- 通过列数量和列名判断约束类型
+
+### 数据迁移安全
+- 使用事务确保原子性操作
+- 复制所有现有数据到新表
+- 出错时自动回滚，保护数据安全
+
+### 向后兼容性
+- 新约束兼容现有的普通投票和系列投票
+- 现有数据的card_id字段为NULL，不影响唯一性
+- 高级投票的card_id字段有具体值，实现分别投票
+
+## 预期效果
+
+### 修复后的行为
+1. 普通投票：同一IP只能投一次票（card_id为NULL）
+2. 系列投票：同一IP只能投一次票（card_id为NULL）
+3. 高级投票：同一IP可以为不同卡片分别投票（不同的card_id）
+
+### 数据完整性
+- 防止同一IP对同一卡片重复投票
+- 允许同一IP对不同卡片投票
+- 保持现有投票记录的完整性
+
+## 测试验证
+
+### 测试步骤
+1. 访问任意页面触发数据库修复
+2. 创建高级投票（包含多张卡片）
+3. 提交投票，为每张卡片选择不同状态
+4. 验证投票记录是否正确创建
+
+### 预期结果
+- 不再出现唯一约束违反错误
+- 每张卡片都有独立的投票记录
+- 投票统计按卡片分别计算
+
+## 注意事项
+
+### 1. 数据库备份
+- 修复过程会重建表结构
+- 建议在生产环境部署前备份数据库
+- 修复过程使用事务，但仍建议谨慎操作
+
+### 2. 性能影响
+- 表重建过程可能需要一些时间
+- 重建过程中数据库会被锁定
+- 建议在低峰期进行部署
+
+### 3. 兼容性
+- 修复后的结构完全向后兼容
+- 现有的普通投票和系列投票不受影响
+- 新的约束更加灵活和准确
+
+## 后续监控
+
+### 1. 错误监控
+- 监控是否还有唯一约束违反错误
+- 检查高级投票的提交成功率
+- 关注数据库操作的性能
+
+### 2. 数据验证
+- 定期检查投票记录的完整性
+- 验证高级投票的统计数据正确性
+- 确保不同投票类型的数据隔离
+
+### 3. 用户反馈
+- 收集用户对高级投票功能的反馈
+- 监控投票提交的成功率
+- 关注是否有其他相关问题
