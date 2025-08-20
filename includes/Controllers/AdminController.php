@@ -876,4 +876,116 @@ class AdminController {
         }
         exit;
     }
+
+    /**
+     * 系统配置管理
+     */
+    public function config() {
+        // 要求管理员权限（等级2以上）
+        $this->userModel->requirePermission(2);
+
+        $canEdit = $this->userModel->getCurrentGroup() >= 3;
+        $message = '';
+
+        // 获取配置项
+        $configs = $this->getConfigItems();
+
+        // 处理保存请求
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
+            $newValues = isset($_POST['config']) ? $_POST['config'] : [];
+            $this->saveConfigItems($configs, $newValues);
+            $configs = $this->getConfigItems();
+            $message = '配置已保存';
+        }
+
+        // 渲染视图
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/config.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 从配置文件解析配置项
+     *
+     * @return array
+     */
+    private function getConfigItems() {
+        $configFile = dirname(__DIR__, 2) . '/config.php';
+        $lines = @file($configFile);
+        $items = [];
+        $description = '';
+
+        if ($lines) {
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || strpos($line, '/*') === 0 || strpos($line, '*') === 0) {
+                    continue;
+                }
+                if (strpos($line, '//') === 0) {
+                    $description = substr($line, 2);
+                    continue;
+                }
+                if (preg_match("/define\(['\"]([A-Z0-9_]+)['\"]/", $line, $matches)) {
+                    $name = $matches[1];
+                    if ($name === 'ADMIN_CONFIG') {
+                        $description = '';
+                        continue;
+                    }
+                    $value = defined($name) ? constant($name) : '';
+                    if (is_bool($value)) {
+                        $value = $value ? 'true' : 'false';
+                    } elseif (is_array($value) || is_object($value)) {
+                        $value = json_encode($value);
+                    }
+                    $items[$name] = [
+                        'value' => (string)$value,
+                        'description' => $description
+                    ];
+                    $description = '';
+                }
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * 保存配置到用户配置文件
+     *
+     * @param array $configItems
+     * @param array $newValues
+     * @return void
+     */
+    private function saveConfigItems($configItems, $newValues) {
+        $configPath = dirname(__DIR__, 2) . '/config.user.php';
+        $lines = [
+            '<?php',
+            '/**',
+            ' * RAMSAY 用户配置文件 - 由系统生成',
+            ' * 请勿手动修改此文件',
+            ' */',
+            ''
+        ];
+
+        foreach ($configItems as $name => $info) {
+            if ($name === 'ADMIN_CONFIG') {
+                continue;
+            }
+            if (!isset($newValues[$name]) || $newValues[$name] === '') {
+                continue;
+            }
+            $value = trim($newValues[$name]);
+            if (strtolower($value) === 'true' || strtolower($value) === 'false') {
+                $valueExpr = strtolower($value);
+            } elseif (is_numeric($value)) {
+                $valueExpr = $value;
+            } else {
+                $valueExpr = var_export($value, true);
+            }
+            $lines[] = "define('{$name}', {$valueExpr});";
+        }
+
+        $content = implode("\n", $lines) . "\n";
+        file_put_contents($configPath, $content);
+    }
 }
