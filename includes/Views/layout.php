@@ -46,6 +46,7 @@ $isLoggedIn = $auth->isLoggedIn();
                                         <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=authors">作者管理</a></li>
                                         <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=tips">服务器提示管理</a></li>
                                         <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=voterBans">投票者封禁管理</a></li>
+                                        <li><a href="<?php echo BASE_URL; ?>?controller=admin&action=config">系统配置管理</a></li>
                                     <?php endif; ?>
                                 </ul>
                             </li>
