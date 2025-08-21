@@ -20,7 +20,7 @@ $isLoggedIn = $auth->isLoggedIn();
             <h1><a href="<?php echo BASE_URL; ?>"><?php echo SITE_TITLE; ?></a></h1>
             <nav>
                 <ul>
-                    <li><a href="<?php echo BASE_URL; ?>">卡片检索</a></li>
+                    <li><a href="<?php echo BASE_URL; ?>?controller=card">卡片检索</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=vote">投票概览</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=dialogue">召唤词一览</a></li>
 

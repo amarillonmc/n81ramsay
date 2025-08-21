@@ -1474,4 +1474,62 @@ class CardParser {
 
         return $cards;
     }
+
+    /**
+     * 随机获取一张卡片
+     *
+     * @return array|null 卡片信息
+     */
+    public function getRandomCard() {
+        $dbFiles = $this->getCardDatabaseFiles();
+        if (empty($dbFiles)) {
+            return null;
+        }
+
+        // 随机选择数据库文件
+        $dbFile = $dbFiles[array_rand($dbFiles)];
+        try {
+            $db = $this->getCardDatabase($dbFile);
+            $stmt = $db->query('SELECT id FROM texts ORDER BY RANDOM() LIMIT 1');
+            $cardId = $stmt->fetchColumn();
+            if ($cardId) {
+                return $this->getCardById($cardId);
+            }
+        } catch (PDOException $e) {
+            Utils::debug('随机获取卡片失败', ['错误' => $e->getMessage(), '数据库' => $dbFile]);
+        }
+        return null;
+    }
+
+    /**
+     * 根据卡片前缀获取卡片列表
+     *
+     * @param int $prefix 卡片前缀（卡号前三位；若为7位卡号则取前两位）
+     * @return array 卡片列表
+     */
+    public function getCardsByPrefix($prefix) {
+        $cards = [];
+        $dbFiles = $this->getCardDatabaseFiles();
+        $start = $prefix * 100000;
+        $end = $start + 99999;
+
+        foreach ($dbFiles as $dbFile) {
+            try {
+                $db = $this->getCardDatabase($dbFile);
+                $stmt = $db->prepare('SELECT id FROM texts WHERE id BETWEEN :start AND :end');
+                $stmt->execute(['start' => $start, 'end' => $end]);
+                $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
+                foreach ($ids as $id) {
+                    $card = $this->getCardById($id);
+                    if ($card) {
+                        $cards[] = $card;
+                    }
+                }
+            } catch (PDOException $e) {
+                Utils::debug('根据前缀获取卡片失败', ['错误' => $e->getMessage(), '数据库' => $dbFile]);
+            }
+        }
+
+        return $cards;
+    }
 }

@@ -27,8 +27,24 @@ spl_autoload_register(function ($className) {
 });
 
 // 使用查询参数来确定控制器和方法
-$controllerName = isset($_GET['controller']) ? $_GET['controller'] : 'card';
-$methodName = isset($_GET['action']) ? $_GET['action'] : 'index';
+$defaultController = 'card';
+$defaultMethod = 'index';
+if (defined('HOME_PAGE')) {
+    switch (HOME_PAGE) {
+        case 'home':
+            $defaultController = 'home';
+            break;
+        case 'vote':
+            $defaultController = 'vote';
+            break;
+        case 'card':
+        default:
+            $defaultController = 'card';
+    }
+}
+
+$controllerName = isset($_GET['controller']) ? $_GET['controller'] : $defaultController;
+$methodName = isset($_GET['action']) ? $_GET['action'] : $defaultMethod;
 $params = [];
 
 // 调试信息
@@ -40,6 +56,7 @@ if (defined('DEBUG_MODE') && DEBUG_MODE) {
 $controllerMap = [
     'card' => 'CardController',
     'vote' => 'VoteController',
+    'home' => 'HomeController',
     'admin' => 'AdminController',
     'banlist' => 'BanlistController',
     'author' => 'AuthorController',

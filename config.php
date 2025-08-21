@@ -99,6 +99,11 @@ if (!defined('SITE_DESCRIPTION')) {
     define('SITE_DESCRIPTION', '管理no81游戏王DIY服务器的各种运营事务');
 }
 
+// 首页配置：home=主页, card=卡片检索, vote=卡片投票
+if (!defined('HOME_PAGE')) {
+    define('HOME_PAGE', 'home');
+}
+
 // 路径配置
 if (!defined('BASE_URL')) {
     define('BASE_URL', '/');

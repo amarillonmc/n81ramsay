@@ -104,6 +104,30 @@ class Card {
     }
 
     /**
+     * 随机获取一张卡片
+     *
+     * @return array|null 卡片信息
+     */
+    public function getRandomCard() {
+        return $this->cardParser->getRandomCard();
+    }
+
+    /**
+     * 根据卡片前缀获取卡片列表
+     *
+     * @param int $prefix 卡片前缀（卡号前三位；若为7位卡号则取前两位）
+     * @param int|null $excludeId 需要排除的卡片ID
+     * @return array 卡片列表
+     */
+    public function getCardsByPrefix($prefix, $excludeId = null) {
+        $cards = $this->cardParser->getCardsByPrefix($prefix);
+        if ($excludeId !== null) {
+            $cards = array_filter($cards, function($c) use ($excludeId) { return $c['id'] != $excludeId; });
+        }
+        return $cards;
+    }
+
+    /**
      * 根据ID列表批量获取卡片
      *
      * @param array $cardIds 卡片ID列表
