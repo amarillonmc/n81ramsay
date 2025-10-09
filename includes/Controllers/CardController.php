@@ -97,11 +97,37 @@ class CardController {
         // 获取搜索关键词
         $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
 
-        // 搜索卡片
-        $cards = [];
-        if (!empty($keyword)) {
-            $cards = $this->cardModel->searchCards($keyword);
+        // 获取分页参数
+        $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+        $perPage = isset($_GET['per_page']) ? intval($_GET['per_page']) : CARDS_PER_PAGE;
+
+        // 验证每页显示数量
+        $validPerPageOptions = [10, 20, 50, 100];
+        if (!in_array($perPage, $validPerPageOptions)) {
+            $perPage = CARDS_PER_PAGE; // 使用配置文件中的默认值
         }
+
+        // 搜索卡片（带分页）
+        $cards = [];
+        $pagination = [
+            'total' => 0,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => 0
+        ];
+        if (!empty($keyword)) {
+            $result = $this->cardModel->searchCards($keyword, $page, $perPage);
+            $cards = $result['cards'];
+            $pagination = [
+                'total' => $result['total'],
+                'page' => $result['page'],
+                'per_page' => $result['per_page'],
+                'total_pages' => $result['total_pages']
+            ];
+        }
+
+        // 设置每页显示选项
+        $perPageOptions = $validPerPageOptions;
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';

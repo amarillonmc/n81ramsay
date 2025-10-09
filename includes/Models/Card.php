@@ -52,13 +52,15 @@ class Card {
     }
 
     /**
-     * 搜索卡片
+     * 搜索卡片（支持分页）
      *
      * @param string $keyword 关键词
-     * @return array 卡片列表
+     * @param int $page 页码（从1开始）
+     * @param int $perPage 每页数量
+     * @return array {cards, total, page, per_page, total_pages}
      */
-    public function searchCards($keyword) {
-        return $this->cardParser->searchCards($keyword);
+    public function searchCards($keyword, $page = 1, $perPage = 20) {
+        return $this->cardParser->searchCardsPaginated($keyword, $page, $perPage);
     }
 
     /**

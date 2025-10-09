@@ -1,0 +1,56 @@
+卡片搜索分页功能
+时间：2025年6月17日 20:00
+
+## 需求
+- 在卡片搜索结果界面增加翻页功能（此前仅显示前100条）。
+
+## 实现概要
+- 新增跨数据库的分页搜索能力，支持统计总数与按页获取结果。
+- 搜索页面提供每页数量选择（10/20/50/100）与页码导航。
+
+## 技术实现
+
+### 1. Core/CardParser
+- 新增方法：`searchCardsPaginated($keyword, $page = 1, $perPage = 20)`
+  - 特性：
+    - ID搜索：精确返回（总数=1或0）。
+    - 关键词搜索：
+      - 先对各CDB执行COUNT统计总数，汇总得到`total`。
+      - 计算全局`offset`，按库分摊`OFFSET/LIMIT`分页提取。
+      - 统一按`d.id`排序，合并为当页结果。
+    - 返回结构：`{cards, total, page, per_page, total_pages}`。
+
+### 2. Models/Card
+- 修改 `searchCards($keyword, $page = 1, $perPage = 20)`
+  - 由原来的简单封装改为调用 `CardParser::searchCardsPaginated` 并返回分页结构。
+
+### 3. Controllers/CardController
+- `search()`：
+  - 读取并校验 `page`、`per_page`（默认使用 `CARDS_PER_PAGE`，可选10/20/50/100）。
+  - 调用模型获得 `{cards, pagination}` 并传给视图。
+  - 提供 `perPageOptions` 给视图选择。
+
+### 4. Views/cards/search.php
+- 增加顶部统计总数与“每页显示”选择器（提交后重置到第1页）。
+- 增加分页导航（首页/上一页/页码/下一页/末页），携带 `keyword` 与 `per_page` 参数。
+- 结果网格展示保持原样。
+
+## 兼容性
+- 原搜索接口仅用于本控制器，已完成对应视图与控制器的同步更新。
+- 与卡片检索首页（index.php）已有分页风格一致。
+
+## 文件改动
+- includes/Core/CardParser.php：新增 `searchCardsPaginated()`
+- includes/Models/Card.php：`searchCards()` 支持分页
+- includes/Controllers/CardController.php：`search()` 增加分页参数与返回
+- includes/Views/cards/search.php：新增分页与每页选择UI
+
+## 测试建议
+1. 使用关键词搜索（非数字）：检查总数显示、翻页是否正确（含首页/末页）。
+2. 使用卡片ID搜索（数字）：应直接返回1条或0条，页码为1/1。
+3. 切换每页数量（10/20/50/100）：应正确刷新并回到第1页。
+4. 关键词包含中文/特殊字符：确认分页与统计正常。
+
+## 结果
+- 搜索结果支持完整分页，不再限制前100条。
+

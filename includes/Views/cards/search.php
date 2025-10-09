@@ -15,20 +15,84 @@
 </div>
 
 <?php if (!empty($cards)): ?>
-    <h3>搜索结果 (<?php echo count($cards); ?>)</h3>
-
-    <div class="card-grid">
-        <?php foreach ($cards as $card): ?>
-            <div class="card-item">
-                <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['id']; ?>">
-                    <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>">
-                    <div class="card-item-body">
-                        <div class="card-item-title"><?php echo Utils::escapeHtml($card['name']); ?></div>
-                        <div>ID: <?php echo $card['id']; ?></div>
-                    </div>
-                </a>
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h3>搜索结果 (<?php echo $pagination['total']; ?>)</h3>
+                <div class="per-page-selector">
+                    <form id="per-page-form" action="<?php echo BASE_URL; ?>" method="get">
+                        <input type="hidden" name="controller" value="card">
+                        <input type="hidden" name="action" value="search">
+                        <input type="hidden" name="keyword" value="<?php echo isset($_GET['keyword']) ? Utils::escapeHtml($_GET['keyword']) : ''; ?>">
+                        <input type="hidden" name="page" value="1">
+                        <label for="per_page">每页显示：</label>
+                        <select id="per_page" name="per_page" onchange="document.getElementById('per-page-form').submit();">
+                            <?php foreach ($perPageOptions as $option): ?>
+                                <option value="<?php echo $option; ?>" <?php echo $pagination['per_page'] == $option ? 'selected' : ''; ?>>
+                                    <?php echo $option; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                </div>
             </div>
-        <?php endforeach; ?>
+        </div>
+        <div class="card-body">
+            <div class="card-grid">
+                <?php foreach ($cards as $card): ?>
+                    <div class="card-item">
+                        <a href="<?php echo BASE_URL; ?>?controller=card&action=detail&id=<?php echo $card['id']; ?>">
+                            <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>">
+                            <div class="card-item-body">
+                                <div class="card-item-title"><?php echo Utils::escapeHtml($card['name']); ?></div>
+                                <div>ID: <?php echo $card['id']; ?></div>
+                            </div>
+                        </a>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ($pagination['total_pages'] > 1): ?>
+                <div class="pagination">
+                    <ul>
+                        <?php if ($pagination['page'] > 1): ?>
+                            <li>
+                                <a href="<?php echo BASE_URL; ?>?controller=card&action=search&keyword=<?php echo urlencode(isset($_GET['keyword']) ? $_GET['keyword'] : ''); ?>&page=1&per_page=<?php echo $pagination['per_page']; ?>">首页</a>
+                            </li>
+                            <li>
+                                <a href="<?php echo BASE_URL; ?>?controller=card&action=search&keyword=<?php echo urlencode(isset($_GET['keyword']) ? $_GET['keyword'] : ''); ?>&page=<?php echo $pagination['page'] - 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">上一页</a>
+                            </li>
+                        <?php endif; ?>
+
+                        <?php
+                        $startPage = max(1, $pagination['page'] - 2);
+                        $endPage = min($pagination['total_pages'], $pagination['page'] + 2);
+                        if ($endPage - $startPage < 4 && $pagination['total_pages'] > 4) {
+                            if ($startPage == 1) {
+                                $endPage = min($pagination['total_pages'], 5);
+                            } elseif ($endPage == $pagination['total_pages']) {
+                                $startPage = max(1, $pagination['total_pages'] - 4);
+                            }
+                        }
+                        for ($i = $startPage; $i <= $endPage; $i++):
+                        ?>
+                            <li <?php echo $i == $pagination['page'] ? 'class="active"' : ''; ?>>
+                                <a href="<?php echo BASE_URL; ?>?controller=card&action=search&keyword=<?php echo urlencode(isset($_GET['keyword']) ? $_GET['keyword'] : ''); ?>&page=<?php echo $i; ?>&per_page=<?php echo $pagination['per_page']; ?>"><?php echo $i; ?></a>
+                            </li>
+                        <?php endfor; ?>
+
+                        <?php if ($pagination['page'] < $pagination['total_pages']): ?>
+                            <li>
+                                <a href="<?php echo BASE_URL; ?>?controller=card&action=search&keyword=<?php echo urlencode(isset($_GET['keyword']) ? $_GET['keyword'] : ''); ?>&page=<?php echo $pagination['page'] + 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">下一页</a>
+                            </li>
+                            <li>
+                                <a href="<?php echo BASE_URL; ?>?controller=card&action=search&keyword=<?php echo urlencode(isset($_GET['keyword']) ? $_GET['keyword'] : ''); ?>&page=<?php echo $pagination['total_pages']; ?>&per_page=<?php echo $pagination['per_page']; ?>">末页</a>
+                            </li>
+                        <?php endif; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+        </div>
     </div>
 <?php else: ?>
     <div class="alert alert-info">

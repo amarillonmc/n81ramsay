@@ -1111,6 +1111,172 @@ class CardParser {
     }
 
     /**
+     * 搜索卡片（带分页）
+     *
+     * @param string $keyword 关键词
+     * @param int $page 页码，从1开始
+     * @param int $perPage 每页数量
+     * @return array {cards, total, page, per_page, total_pages}
+     */
+    public function searchCardsPaginated($keyword, $page = 1, $perPage = 20) {
+        $keyword = trim($keyword);
+        $page = max(1, (int)$page);
+        $perPage = max(1, (int)$perPage);
+
+        if ($keyword === '') {
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'total_pages' => 0,
+            ];
+        }
+
+        $dbFiles = $this->getCardDatabaseFiles();
+        $isId = is_numeric($keyword);
+
+        // ID搜索：直接返回精确结果
+        if ($isId) {
+            foreach ($dbFiles as $dbFile) {
+                $db = $this->getCardDatabase($dbFile);
+                $sql = "
+                    SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                           t.name, t.desc
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE d.id = :keyword
+                    ORDER BY d.id
+                    LIMIT 1
+                ";
+                try {
+                    $stmt = $db->prepare($sql);
+                    $stmt->bindValue(':keyword', (int)$keyword, PDO::PARAM_INT);
+                    $stmt->execute();
+                    $card = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($card) {
+                        $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+                        $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
+                        $card['type_text'] = $this->getTypeText($card['type']);
+                        $card['race_text'] = $this->getRaceText($card['race']);
+                        $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                        $card['level_text'] = $this->getLevelText($card['level']);
+                        $card['image_path'] = $this->getCardImagePath($card['id']);
+                        $card['database_file'] = basename($dbFile);
+                        $card['author'] = $this->getCardAuthor($card);
+                        return [
+                            'cards' => [$card],
+                            'total' => 1,
+                            'page' => 1,
+                            'per_page' => $perPage,
+                            'total_pages' => 1,
+                        ];
+                    }
+                } catch (PDOException $e) {
+                    Utils::debug('ID搜索失败', ['错误' => $e->getMessage()]);
+                }
+            }
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'total_pages' => 0,
+            ];
+        }
+
+        // 非ID搜索：先统计总数
+        $counts = [];
+        $total = 0;
+        foreach ($dbFiles as $dbFile) {
+            try {
+                $db = $this->getCardDatabase($dbFile);
+                $countSql = "
+                    SELECT COUNT(*) AS cnt
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE t.name LIKE :keyword OR t.desc LIKE :keyword
+                ";
+                $stmt = $db->prepare($countSql);
+                $stmt->bindValue(':keyword', '%' . $keyword . '%', PDO::PARAM_STR);
+                $stmt->execute();
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $cnt = $row ? (int)$row['cnt'] : 0;
+                $counts[] = $cnt;
+                $total += $cnt;
+            } catch (PDOException $e) {
+                $counts[] = 0;
+                Utils::debug('搜索计数失败', ['错误' => $e->getMessage(), 'db' => basename($dbFile)]);
+            }
+        }
+
+        $totalPages = $total > 0 ? (int)ceil($total / $perPage) : 0;
+        if ($totalPages > 0 && $page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = ($page - 1) * $perPage;
+
+        // 获取当前页的数据，跨库合并
+        $cards = [];
+        $remaining = $perPage;
+        foreach ($dbFiles as $i => $dbFile) {
+            if ($remaining <= 0) break;
+            $dbCount = $counts[$i];
+            if ($offset >= $dbCount) {
+                $offset -= $dbCount;
+                continue;
+            }
+            $db = $this->getCardDatabase($dbFile);
+            $limit = $remaining;
+            try {
+                $sql = "
+                    SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                           t.name, t.desc
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE t.name LIKE :keyword OR t.desc LIKE :keyword
+                    ORDER BY d.id
+                    LIMIT :limit OFFSET :offset
+                ";
+                $stmt = $db->prepare($sql);
+                $stmt->bindValue(':keyword', '%' . $keyword . '%', PDO::PARAM_STR);
+                $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+                $stmt->execute();
+                $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($results as &$card) {
+                    $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
+                    $card['type_text'] = $this->getTypeText($card['type']);
+                    $card['race_text'] = $this->getRaceText($card['race']);
+                    $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                    $card['level_text'] = $this->getLevelText($card['level']);
+                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['database_file'] = basename($dbFile);
+                    $card['author'] = $this->getCardAuthor($card);
+                }
+
+                $cards = array_merge($cards, $results);
+                $remaining -= count($results);
+                $offset = 0; // 后续库从0偏移开始
+
+            } catch (PDOException $e) {
+                Utils::debug('分页查询失败', ['错误' => $e->getMessage(), 'db' => basename($dbFile)]);
+            }
+        }
+
+        return [
+            'cards' => $cards,
+            'total' => $total,
+            'page' => $totalPages > 0 ? $page : 1,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages,
+        ];
+    }
+
+
+    /**
      * 获取系列文本
      *
      * @param int $setcode 系列代码
