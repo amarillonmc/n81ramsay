@@ -1,0 +1,24 @@
+修改时间：2026-01-16
+修改内容：修复卡片检索/投票概览页面卡图大小不一致的问题
+
+问题描述：
+卡片检索和投票概览页面上的卡图显示大小不一致
+
+解决方案：
+修改 assets/css/style.css 中的卡图样式，将卡图统一使用 177x254 的固定尺寸显示
+
+具体修改：
+1. .card-item img 样式修改：
+   - 原来：width: 100%; height: auto;
+   - 现在：width: 177px; height: 254px; object-fit: cover; display: block;
+
+2. .card-item 样式修改：
+   - 设置固定宽度：width: 177px;（确保卡片容器宽度一致）
+
+3. .card-grid 样式修改：
+   - 使用固定列宽：grid-template-columns: repeat(auto-fill, 177px);
+   - 添加 justify-content: start; 使卡片左对齐
+   - 响应式样式同样使用固定列宽 177px
+
+这样确保每行卡片数量一致，布局更加整齐美观。
+
