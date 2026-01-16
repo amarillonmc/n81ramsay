@@ -1,0 +1,111 @@
+卡片检索页面分页BUG修复
+时间：2026年1月16日
+
+## BUG表现
+在卡片检索页面，点击分页后（如：?db=no42.cdb&page=2&per_page=20）没有正确转到对应的分页，而是转到了随机展示卡片页面。
+
+## 问题分析
+
+### 根本原因
+1. 在 `config.php` 第104行，`HOME_PAGE` 被设置为 `'home'`
+2. 在 `index.php` 第30-44行，当没有指定 `controller` 参数时，会根据 `HOME_PAGE` 设置默认控制器
+3. 当用户访问 `?db=no42.cdb&page=2&per_page=20` 时，由于**没有指定 `controller` 参数**，系统会使用默认控制器 `home`（而不是 `card`）
+4. `HomeController` 的 `index` 方法会显示随机卡片，而不是卡片列表
+
+### 路由逻辑
+```php
+// index.php 第30-44行
+$defaultController = 'card';
+$defaultMethod = 'index';
+if (defined('HOME_PAGE')) {
+    switch (HOME_PAGE) {
+        case 'home':
+            $defaultController = 'home';  // 当HOME_PAGE='home'时，默认控制器是home
+            break;
+        case 'vote':
+            $defaultController = 'vote';
+            break;
+        case 'card':
+        default:
+            $defaultController = 'card';
+    }
+}
+
+$controllerName = isset($_GET['controller']) ? $_GET['controller'] : $defaultController;
+```
+
+## 解决方案
+在卡片检索页面（`includes/Views/cards/index.php`）的所有分页链接中，添加 `controller=card` 和 `action=index` 参数，确保分页时不会跳转到首页。
+
+## 修改内容
+
+### 文件：includes/Views/cards/index.php
+
+#### 1. 修改"每页显示"表单（第42-56行）
+**修改前：**
+```php
+<form id="per-page-form" action="<?php echo BASE_URL; ?>" method="get">
+    <input type="hidden" name="db" value="<?php echo urlencode(basename($selectedDb)); ?>">
+    <label for="per_page">每页显示：</label>
+    ...
+</form>
+```
+
+**修改后：**
+```php
+<form id="per-page-form" action="<?php echo BASE_URL; ?>" method="get">
+    <input type="hidden" name="controller" value="card">
+    <input type="hidden" name="action" value="index">
+    <input type="hidden" name="db" value="<?php echo urlencode(basename($selectedDb)); ?>">
+    <label for="per_page">每页显示：</label>
+    ...
+</form>
+```
+
+#### 2. 修改"首页"和"上一页"链接（第77-84行）
+**修改前：**
+```php
+<a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=1&per_page=<?php echo $pagination['per_page']; ?>">首页</a>
+<a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] - 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">上一页</a>
+```
+
+**修改后：**
+```php
+<a href="<?php echo BASE_URL; ?>?controller=card&action=index&db=<?php echo urlencode(basename($selectedDb)); ?>&page=1&per_page=<?php echo $pagination['per_page']; ?>">首页</a>
+<a href="<?php echo BASE_URL; ?>?controller=card&action=index&db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] - 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">上一页</a>
+```
+
+#### 3. 修改页码链接（第102-104行）
+**修改前：**
+```php
+<a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $i; ?>&per_page=<?php echo $pagination['per_page']; ?>"><?php echo $i; ?></a>
+```
+
+**修改后：**
+```php
+<a href="<?php echo BASE_URL; ?>?controller=card&action=index&db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $i; ?>&per_page=<?php echo $pagination['per_page']; ?>"><?php echo $i; ?></a>
+```
+
+#### 4. 修改"下一页"和"末页"链接（第107-114行）
+**修改前：**
+```php
+<a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] + 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">下一页</a>
+<a href="<?php echo BASE_URL; ?>?db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['total_pages']; ?>&per_page=<?php echo $pagination['per_page']; ?>">末页</a>
+```
+
+**修改后：**
+```php
+<a href="<?php echo BASE_URL; ?>?controller=card&action=index&db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['page'] + 1; ?>&per_page=<?php echo $pagination['per_page']; ?>">下一页</a>
+<a href="<?php echo BASE_URL; ?>?controller=card&action=index&db=<?php echo urlencode(basename($selectedDb)); ?>&page=<?php echo $pagination['total_pages']; ?>&per_page=<?php echo $pagination['per_page']; ?>">末页</a>
+```
+
+## 测试建议
+1. 访问卡片检索页面，选择一个数据库
+2. 点击"下一页"、"上一页"、"首页"、"末页"等分页链接
+3. 修改"每页显示"数量
+4. 确认所有操作都能正确显示卡片列表，而不是跳转到随机卡片页面
+
+## 影响范围
+- 仅影响卡片检索页面（`includes/Views/cards/index.php`）的分页功能
+- 不影响其他页面的功能
+
