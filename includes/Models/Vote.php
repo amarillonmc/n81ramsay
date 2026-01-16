@@ -653,15 +653,9 @@ class Vote {
 
         foreach ($votes as $vote) {
             $voteId = $vote['id'];
-            $cardId = $vote['card_id'];
             $environmentId = $vote['environment_id'];
-
-            // 获取卡片信息
-            $card = $this->cardModel->getCardById($cardId);
-
-            if (!$card) {
-                continue;
-            }
+            $isAdvancedVote = $vote['is_advanced_vote'];
+            $isSeriesVote = $vote['is_series_vote'];
 
             // 获取环境信息
             $environment = Utils::getEnvironmentById($environmentId);
@@ -670,24 +664,60 @@ class Vote {
                 continue;
             }
 
-            // 获取投票统计
-            $stats = $this->getVoteStats($voteId);
+            // 确定需要处理的卡片ID列表
+            $cardIdsToProcess = [];
 
-            // 根据投票模式确定最终状态
-            $finalStatus = $this->determineFinalStatus($stats);
+            if ($isAdvancedVote && !empty($vote['card_ids'])) {
+                // 高级投票：处理card_ids字段中的所有卡片
+                $cardIdArray = json_decode($vote['card_ids'], true);
+                if (is_array($cardIdArray)) {
+                    $cardIdsToProcess = $cardIdArray;
+                }
+            } elseif ($isSeriesVote && !empty($vote['setcode'])) {
+                // 系列投票：获取该系列的所有卡片
+                $seriesCards = $this->cardModel->getCardsBySetcode($vote['setcode']);
+                $cardIdsToProcess = array_column($seriesCards, 'id');
+            } else {
+                // 普通投票：只处理card_id字段
+                $cardIdsToProcess = [$vote['card_id']];
+            }
 
-            // 添加到结果
-            $results[] = [
-                'vote_id' => $voteId,
-                'card_id' => $cardId,
-                'card_name' => $card['name'],
-                'environment_id' => $environmentId,
-                'environment_header' => $environment['header'],
-                'environment_text' => $environment['text'],
-                'final_status' => $finalStatus,
-                'stats' => $stats,
-                'total_votes' => array_sum($stats)
-            ];
+            // 为每张卡片生成投票结果
+            foreach ($cardIdsToProcess as $cardId) {
+                // 获取卡片信息
+                $card = $this->cardModel->getCardById($cardId);
+
+                if (!$card) {
+                    continue;
+                }
+
+                // 获取投票统计
+                // 对于高级投票，需要传入cardId以获取该卡片的单独统计
+                // 对于系列投票和普通投票，所有卡片共享同一个投票统计
+                if ($isAdvancedVote) {
+                    $stats = $this->getVoteStats($voteId, $cardId);
+                } else {
+                    $stats = $this->getVoteStats($voteId);
+                }
+
+                // 根据投票模式确定最终状态
+                $finalStatus = $this->determineFinalStatus($stats);
+
+                // 添加到结果
+                $results[] = [
+                    'vote_id' => $voteId,
+                    'card_id' => $cardId,
+                    'card_name' => $card['name'],
+                    'environment_id' => $environmentId,
+                    'environment_header' => $environment['header'],
+                    'environment_text' => $environment['text'],
+                    'final_status' => $finalStatus,
+                    'stats' => $stats,
+                    'total_votes' => array_sum($stats),
+                    'is_advanced_vote' => $isAdvancedVote,
+                    'is_series_vote' => $isSeriesVote
+                ];
+            }
         }
 
         return $results;
