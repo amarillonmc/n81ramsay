@@ -1,0 +1,47 @@
+TCG卡片图片显示支持
+====================
+时间: 2026-01-16
+功能: 卡片详情页TCG卡图显示
+
+一、修改内容
+-----------
+
+让卡片详情页使用config.php中配置的TCG_CARD_IMAGE_PATH路径来显示TCG卡片的卡图。
+
+二、修改的文件
+-------------
+
+1. includes/Core/CardParser.php
+   - 修改 getCardImagePath() 方法，增加 $isTcgCard 参数
+   - 当 $isTcgCard 为 true 时，优先从 TCG_CARD_IMAGE_PATH 目录查找卡图
+   - 更新所有调用 getCardImagePath() 的地方，传入 $isTcgCard 参数
+   - 共更新 9 处调用
+
+2. includes/Views/cards/detail.php
+   - 修改卡图显示逻辑
+   - 如果有有效的图片路径（非卡背），直接显示图片
+   - 如果是TCG卡片但没有配置图片路径，显示提示信息
+   - 如果是其他卡片没有图片，显示"暂无卡图"
+
+三、配置说明
+-----------
+
+在 config.php 中设置 TCG_CARD_IMAGE_PATH 指向TCG卡图目录：
+
+define('TCG_CARD_IMAGE_PATH', '/path/to/tcg/pics');
+
+支持的图片格式：
+- {卡片ID}.jpg
+- {卡片ID}.png
+- c{卡片ID}.jpg
+- c{卡片ID}.png
+
+图片将通过 tcg_pics/ 目录提供访问。
+
+四、注意事项
+-----------
+
+1. 需要确保 tcg_pics 目录可以通过web访问
+2. 可以通过符号链接或别名将 TCG_CARD_IMAGE_PATH 映射到 tcg_pics 目录
+3. 如果未配置路径或找不到图片，将显示卡背图片 (assets/images/card_back.jpg)
+

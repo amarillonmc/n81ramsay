@@ -4,11 +4,21 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-4">
-                <?php if (!$isTcgCard): // 只有非TCG卡片才显示卡图 ?>
+                <?php
+                // 检查是否有有效的图片路径（非卡背图片）
+                $hasValidImage = !empty($card['image_path']) &&
+                                 strpos($card['image_path'], 'card_back.jpg') === false;
+                ?>
+                <?php if ($hasValidImage): ?>
                     <img src="<?php echo $card['image_path']; ?>" alt="<?php echo Utils::escapeHtml($card['name']); ?>" class="img-fluid">
+                <?php elseif ($isTcgCard): ?>
+                    <div class="tcg-card-placeholder">
+                        <p>TCG卡片 - 未配置卡图路径</p>
+                        <p class="small">请在config.php中设置TCG_CARD_IMAGE_PATH</p>
+                    </div>
                 <?php else: ?>
                     <div class="tcg-card-placeholder">
-                        <p>TCG卡片 - 无图片显示</p>
+                        <p>暂无卡图</p>
                     </div>
                 <?php endif; ?>
             </div>

@@ -862,7 +862,7 @@ class CardParser {
                 $card['race_text'] = $this->getRaceText($card['race']);
                 $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                 $card['level_text'] = $this->getLevelText($card['level']);
-                $card['image_path'] = $this->getCardImagePath($card['id']);
+                $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                 $card['database_file'] = basename($dbFile);
                 $card['author'] = $this->getCardAuthor($card);
             }
@@ -931,7 +931,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
 
@@ -998,7 +998,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename(TCG_CARD_DATA_PATH);
                     // TCG卡片不设置作者
                     $card['author'] = '';
@@ -1084,7 +1084,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
                 }
@@ -1161,7 +1161,7 @@ class CardParser {
                         $card['race_text'] = $this->getRaceText($card['race']);
                         $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                         $card['level_text'] = $this->getLevelText($card['level']);
-                        $card['image_path'] = $this->getCardImagePath($card['id']);
+                        $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                         $card['database_file'] = basename($dbFile);
                         $card['author'] = $this->getCardAuthor($card);
                         return [
@@ -1252,7 +1252,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
                 }
@@ -1321,7 +1321,7 @@ class CardParser {
                         $card['race_text'] = $this->getRaceText($card['race']);
                         $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                         $card['level_text'] = $this->getLevelText($card['level']);
-                        $card['image_path'] = $this->getCardImagePath($card['id']);
+                        $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                         $card['database_file'] = basename($dbFile);
                         $card['author'] = $this->getCardAuthor($card);
                         return [
@@ -1582,7 +1582,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
                 }
@@ -1744,9 +1744,32 @@ class CardParser {
      * 获取卡片图片路径
      *
      * @param int $cardId 卡片ID
+     * @param bool $isTcgCard 是否为TCG卡片
      * @return string 图片路径
      */
-    public function getCardImagePath($cardId) {
+    public function getCardImagePath($cardId, $isTcgCard = false) {
+        // 如果是TCG卡片，优先使用TCG_CARD_IMAGE_PATH
+        if ($isTcgCard) {
+            $tcgImagePath = defined('TCG_CARD_IMAGE_PATH') ? TCG_CARD_IMAGE_PATH : '';
+            if (!empty($tcgImagePath) && is_dir($tcgImagePath)) {
+                // 尝试多种文件名格式
+                $formats = [
+                    $tcgImagePath . '/' . $cardId . '.jpg',
+                    $tcgImagePath . '/' . $cardId . '.png',
+                    $tcgImagePath . '/c' . $cardId . '.jpg',
+                    $tcgImagePath . '/c' . $cardId . '.png'
+                ];
+
+                foreach ($formats as $path) {
+                    if (file_exists($path)) {
+                        return BASE_URL . 'tcg_pics/' . basename($path);
+                    }
+                }
+            }
+            // TCG卡片没找到图片，返回卡背
+            return BASE_URL . 'assets/images/card_back.jpg';
+        }
+
         $cardDataPath = CARD_DATA_PATH;
         $cardDataDirName = basename($cardDataPath); // 获取卡片数据目录的名称（如 'example'）
 
@@ -1955,7 +1978,7 @@ class CardParser {
                     $card['race_text'] = $this->getRaceText($card['race']);
                     $card['attribute_text'] = $this->getAttributeText($card['attribute']);
                     $card['level_text'] = $this->getLevelText($card['level']);
-                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
                     $card['author'] = $this->getCardAuthor($card);
                 }
