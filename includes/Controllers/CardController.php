@@ -313,11 +313,11 @@ class CardController {
     /**
      * 搜索结果JSON API
      * 返回搜索结果的JSON格式数据，用于LLM等外部工具访问
+     * 支持三种输出格式：json（标准JSON）、pre（HTML+PRE标签）、html（完整HTML页面）
      */
     public function searchJson() {
-        // 设置JSON响应头
-        header('Content-Type: application/json; charset=utf-8');
-        header('Access-Control-Allow-Origin: *');
+        // 获取输出格式配置
+        $outputFormat = defined('JSON_API_OUTPUT_FORMAT') ? JSON_API_OUTPUT_FORMAT : 'json';
 
         // 获取搜索关键词
         $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
@@ -332,12 +332,13 @@ class CardController {
 
         // 如果没有任何搜索条件，返回错误
         if (empty($keyword) && !$hasAdvancedFilters) {
-            echo json_encode([
+            $errorData = [
                 'success' => false,
                 'error' => '请提供搜索关键词或高级检索条件',
                 'cards' => [],
                 'total' => 0
-            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            ];
+            $this->outputJsonResponse($errorData, $outputFormat);
             return;
         }
 
@@ -370,8 +371,8 @@ class CardController {
             ];
         }
 
-        // 返回JSON
-        echo json_encode([
+        // 构建响应数据
+        $responseData = [
             'success' => true,
             'keyword' => $keyword,
             'filters' => $advancedFilters,
@@ -379,6 +380,66 @@ class CardController {
             'returned' => count($cardsData),
             'max_results' => $maxResults,
             'cards' => $cardsData
-        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        ];
+
+        $this->outputJsonResponse($responseData, $outputFormat);
+    }
+
+    /**
+     * 输出JSON响应
+     * 根据配置的输出格式选择不同的输出方式
+     *
+     * @param array $data 响应数据
+     * @param string $format 输出格式 (json/pre/html)
+     */
+    private function outputJsonResponse($data, $format) {
+        $jsonString = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+
+        switch ($format) {
+            case 'pre':
+                // PRE标签模式：HTML页面 + <pre>包裹的JSON
+                header('Content-Type: text/html; charset=utf-8');
+                header('Access-Control-Allow-Origin: *');
+                echo '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>';
+                echo '<pre>' . htmlspecialchars($jsonString, ENT_QUOTES, 'UTF-8') . '</pre>';
+                echo '</body></html>';
+                break;
+
+            case 'html':
+                // 完整HTML模式：带有格式化样式的HTML页面
+                header('Content-Type: text/html; charset=utf-8');
+                header('Access-Control-Allow-Origin: *');
+                $siteName = defined('SITE_TITLE') ? SITE_TITLE : 'RAMSAY';
+                echo '<!DOCTYPE html>';
+                echo '<html lang="zh-CN"><head>';
+                echo '<meta charset="UTF-8">';
+                echo '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+                echo '<title>搜索结果 JSON - ' . htmlspecialchars($siteName) . '</title>';
+                echo '<style>';
+                echo 'body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 20px; margin: 0; }';
+                echo 'h1 { color: #569cd6; font-size: 18px; margin-bottom: 10px; }';
+                echo '.info { color: #6a9955; margin-bottom: 15px; font-size: 14px; }';
+                echo 'pre { background: #2d2d2d; padding: 15px; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }';
+                echo '.key { color: #9cdcfe; }';
+                echo '.string { color: #ce9178; }';
+                echo '.number { color: #b5cea8; }';
+                echo '.boolean { color: #569cd6; }';
+                echo '.null { color: #569cd6; }';
+                echo '</style>';
+                echo '</head><body>';
+                echo '<h1>Yu-Gi-Oh! DIY Card Search Results (JSON)</h1>';
+                echo '<div class="info">Total: ' . ($data['total'] ?? 0) . ' cards | Returned: ' . ($data['returned'] ?? 0) . ' cards</div>';
+                echo '<pre>' . htmlspecialchars($jsonString, ENT_QUOTES, 'UTF-8') . '</pre>';
+                echo '</body></html>';
+                break;
+
+            case 'json':
+            default:
+                // 标准JSON模式
+                header('Content-Type: application/json; charset=utf-8');
+                header('Access-Control-Allow-Origin: *');
+                echo $jsonString;
+                break;
+        }
     }
 }

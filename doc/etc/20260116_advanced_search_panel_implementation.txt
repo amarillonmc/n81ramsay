@@ -197,3 +197,39 @@ GET /?controller=card&action=searchJson&keyword=...&其他筛选参数
 }
 ```
 
+## Bug修复与增强 (2026-01-16 第四次更新)
+
+### 修复问题
+1. **复制链接缺少域名**：复制的链接只有相对路径，现在会包含完整域名
+2. **Google Gemini兼容性**：Gemini的浏览工具无法解析纯JSON响应
+
+### 新增配置项 (config.php)
+
+1. **SITE_FULL_URL**
+   - 网站完整URL，包含协议和域名
+   - 例如: `https://example.com` 或 `http://localhost:8080`
+   - 用于生成JSON API的完整链接
+
+2. **JSON_API_OUTPUT_FORMAT**
+   - 控制JSON API的输出格式
+   - 可选值:
+     - `json`: 标准JSON格式（Content-Type: application/json）
+     - `pre`: HTML页面 + <pre>标签包裹JSON（兼容部分LLM）
+     - `html`: 完整HTML页面，带格式化样式（最大兼容性，推荐）
+   - 默认值: `html`
+
+### 三种输出格式说明
+
+| 格式 | Content-Type | 特点 | 适用场景 |
+|------|--------------|------|----------|
+| json | application/json | 标准JSON | API调用、编程访问 |
+| pre | text/html | 简单HTML+PRE | 基本浏览器兼容 |
+| html | text/html | 完整HTML页面 | LLM浏览工具（推荐） |
+
+### 配置示例
+```php
+// config.user.php
+define('SITE_FULL_URL', 'https://your-domain.com');
+define('JSON_API_OUTPUT_FORMAT', 'html'); // 推荐用于LLM兼容
+```
+

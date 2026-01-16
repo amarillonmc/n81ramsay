@@ -14,7 +14,12 @@
         $jsonApiParams = $_GET;
         $jsonApiParams['controller'] = 'card';
         $jsonApiParams['action'] = 'searchJson';
-        $jsonApiUrl = BASE_URL . '?' . http_build_query($jsonApiParams);
+        // 移除分页参数，API始终返回第一页
+        unset($jsonApiParams['page']);
+
+        // 构建完整URL（包含域名）
+        $siteFullUrl = defined('SITE_FULL_URL') && SITE_FULL_URL !== '' ? rtrim(SITE_FULL_URL, '/') : '';
+        $jsonApiUrl = $siteFullUrl . BASE_URL . '?' . http_build_query($jsonApiParams);
     ?>
     <span class="json-api-wrapper">
         <button type="button" class="btn-json-api" id="copy-json-api-btn" data-url="<?php echo Utils::escapeHtml($jsonApiUrl); ?>" title="复制JSON API链接">

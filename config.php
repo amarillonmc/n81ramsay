@@ -161,6 +161,20 @@ if (!defined('CARDS_PER_PAGE')) {
     define('CARDS_PER_PAGE', 20); // 默认每页显示卡片数量
 }
 
+// JSON API输出格式配置
+// json: 标准JSON格式（Content-Type: application/json）
+// pre: HTML页面内<pre>标签包裹JSON（兼容部分LLM浏览工具）
+// html: 完整HTML页面包含JSON数据（最大兼容性）
+if (!defined('JSON_API_OUTPUT_FORMAT')) {
+    define('JSON_API_OUTPUT_FORMAT', 'html');
+}
+
+// 网站完整URL（用于JSON API链接复制，需包含协议和域名）
+// 例如: https://example.com 或 http://localhost:8080
+if (!defined('SITE_FULL_URL')) {
+    define('SITE_FULL_URL', '');
+}
+
 // 作者光荣榜配置
 if (!defined('AUTHOR_HALL_OF_FAME_ENABLED')) {
     define('AUTHOR_HALL_OF_FAME_ENABLED', true); // 是否启用作者光荣榜功能
