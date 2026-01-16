@@ -24,6 +24,10 @@ $isLoggedIn = $auth->isLoggedIn();
                     <li><a href="<?php echo BASE_URL; ?>?controller=vote">投票概览</a></li>
                     <li><a href="<?php echo BASE_URL; ?>?controller=dialogue">召唤词一览</a></li>
 
+                    <?php if (defined('DECK_SHARING_ENABLED') && DECK_SHARING_ENABLED): ?>
+                        <li><a href="<?php echo BASE_URL; ?>?controller=deck">卡组分享</a></li>
+                    <?php endif; ?>
+
                     <?php if (defined('CARD_RANKING_ENABLED') && CARD_RANKING_ENABLED): ?>
                         <li><a href="<?php echo BASE_URL; ?>?controller=card_ranking">卡片排行榜</a></li>
                     <?php endif; ?>

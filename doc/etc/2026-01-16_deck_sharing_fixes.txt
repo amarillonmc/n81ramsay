@@ -1,0 +1,40 @@
+卡组分享功能修复记录
+====================
+时间: 2026-01-16
+功能: 卡组分享系统 - 问题修复
+
+一、修复内容
+-----------
+
+1. 灰色按钮提示功能
+   - 对于不满足上传条件的用户，显示灰色的"上传卡组"按钮
+   - 悬浮时显示无法上传的原因（如"需要先参与投票才能上传卡组"）
+   - 新增 getUploadPermissionInfo() 方法返回详细权限信息
+
+2. 放宽卡组验证规则
+   - 允许上传主卡组少于40张的卡组
+   - 只要有卡片（主卡组或额外卡组）即可上传
+   - 仍然限制：主卡组不超过60张，额外和副卡组不超过15张
+
+3. 管理员批量上传卡组名称添加时间戳
+   - 卡组名称格式改为：更新卡展示 YYYY-MM-DD #序号
+   - 例如：更新卡展示 2026-01-16 #1
+
+二、修改的文件
+-------------
+
+1. includes/Models/Deck.php
+   - 新增 getUploadPermissionInfo() 方法
+   - 修改 parseYdkContent() 放宽验证规则
+
+2. includes/Controllers/DeckController.php
+   - 修改 index() 传递上传权限详细信息
+   - 修改 saveSingleDeck() 添加时间戳参数
+   - 修改 storeBatch() 传递时间戳
+
+3. includes/Views/decks/index.php
+   - 添加灰色按钮显示逻辑
+
+4. assets/css/style.css
+   - 添加 .btn-disabled 样式
+

@@ -1,0 +1,86 @@
+卡组分享功能实现记录
+====================
+时间: 2026-01-16
+功能: 卡组分享系统
+
+一、功能概述
+-----------
+实现了一个完整的卡组分享系统，支持：
+1. 用户上传YDK格式卡组
+2. 管理员批量上传卡组（用于更新卡展示）
+3. 卡组详情页展示（卡图+文字卡名）
+4. 评论功能
+5. 卡组下载（YDK格式）
+6. 支持TCG卡图显示
+
+二、修改的文件
+-------------
+1. includes/config.php
+   - 添加 DECK_SHARING_ENABLED 配置项
+   - 添加 DECK_UPLOAD_LIMIT_PER_DAY 配置项
+   - 添加 TCG_CARD_IMAGE_PATH 配置项
+
+2. includes/Database.php
+   - 添加 decks 表结构
+   - 添加 deck_comments 表结构
+
+3. index.php
+   - 添加 deck 控制器路由映射
+
+4. includes/Views/layout.php
+   - 添加卡组分享导航链接
+
+5. assets/css/style.css
+   - 添加卡组相关CSS样式
+
+三、新增的文件
+-------------
+1. includes/Models/Deck.php
+   - 卡组数据模型
+   - 包含CRUD操作、评论操作、YDK解析等
+
+2. includes/Controllers/DeckController.php
+   - 卡组控制器
+   - 处理列表、创建、详情、删除、评论、下载等请求
+
+3. includes/Views/decks/index.php
+   - 卡组列表页面
+
+4. includes/Views/decks/create.php
+   - 卡组上传页面（支持单个和批量上传）
+
+5. includes/Views/decks/detail.php
+   - 卡组详情页面
+   - 左侧卡图展示，右侧文字卡名列表
+   - 评论区
+
+四、数据库表结构
+---------------
+decks表:
+- id: 主键
+- name: 卡组名称
+- main_deck: 主卡组（JSON数组）
+- extra_deck: 额外卡组（JSON数组）
+- side_deck: 副卡组（JSON数组）
+- uploader_id: 上传者标识
+- uploader_name: 上传者名称
+- is_admin_deck: 是否管理员卡组
+- deck_group: 批量上传分组标识
+- created_at: 创建时间
+
+deck_comments表:
+- id: 主键
+- deck_id: 关联卡组ID
+- user_id: 评论者标识
+- user_name: 评论者名称
+- comment: 评论内容
+- created_at: 创建时间
+
+五、使用说明
+-----------
+1. 在config.php中设置 DECK_SHARING_ENABLED = true 启用功能
+2. 设置 TCG_CARD_IMAGE_PATH 指向TCG卡图目录
+3. 普通用户每天可上传的卡组数量由 DECK_UPLOAD_LIMIT_PER_DAY 控制
+4. 管理员可批量上传卡组，用于更新卡展示
+5. 批量上传的卡组会自动分组，在详情页显示为标签页
+

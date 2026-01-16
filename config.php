@@ -245,6 +245,23 @@ if (!defined('DIALOGUE_SUBMISSION_STRICTNESS')) {
     define('DIALOGUE_SUBMISSION_STRICTNESS', 2); // 召唤词投稿严格度：0=无限制，1=仅验证作者存在，2=验证作者和卡片前缀匹配
 }
 
+// 卡组分享功能配置
+if (!defined('DECK_SHARING_ENABLED')) {
+    define('DECK_SHARING_ENABLED', true); // 是否启用卡组分享功能
+}
+if (!defined('DECK_UPLOAD_PERMISSION')) {
+    // 卡组上传权限：0=所有用户可上传, 1=仅参与过投票的用户可上传（默认）, 2=仅管理员可上传
+    define('DECK_UPLOAD_PERMISSION', 1);
+}
+if (!defined('TCG_CARD_IMAGE_PATH')) {
+    // TCG卡图存储位置（用于卡组展示）
+    // 如果为空或无法读取，使用assets/images/card_back.jpg作为卡图
+    define('TCG_CARD_IMAGE_PATH', '');
+}
+if (!defined('DECKS_PER_PAGE')) {
+    define('DECKS_PER_PAGE', 20); // 卡组列表每页显示数量
+}
+
 // 错误处理配置
 if (defined('DEBUG_MODE') && DEBUG_MODE) {
     ini_set('display_errors', 1);

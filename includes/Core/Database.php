@@ -229,6 +229,36 @@ class Database {
             )
         ');
 
+        // 创建卡组表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS decks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                main_deck TEXT NOT NULL,
+                extra_deck TEXT,
+                side_deck TEXT,
+                uploader_id TEXT NOT NULL,
+                uploader_name TEXT,
+                is_admin_deck INTEGER DEFAULT 0,
+                deck_group TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ');
+
+        // 创建卡组评论表
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS deck_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_id INTEGER NOT NULL,
+                user_id TEXT NOT NULL,
+                user_name TEXT,
+                comment TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (deck_id) REFERENCES decks(id)
+            )
+        ');
+
         // 检查投票周期表是否有数据，如果没有则插入初始数据
         $stmt = $this->pdo->query('SELECT COUNT(*) FROM vote_cycles');
         $count = $stmt->fetchColumn();
