@@ -297,4 +297,60 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation();
         });
     });
+
+    // JSON API链接复制按钮
+    const copyJsonApiBtn = document.getElementById('copy-json-api-btn');
+    if (copyJsonApiBtn) {
+        copyJsonApiBtn.addEventListener('click', function() {
+            const url = this.getAttribute('data-url');
+
+            // 使用现代剪贴板API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(function() {
+                    showCopySuccess(copyJsonApiBtn);
+                }).catch(function(err) {
+                    fallbackCopyToClipboard(url, copyJsonApiBtn);
+                });
+            } else {
+                fallbackCopyToClipboard(url, copyJsonApiBtn);
+            }
+        });
+    }
+
+    // 复制成功反馈
+    function showCopySuccess(btn) {
+        const originalText = btn.innerHTML;
+        btn.classList.add('copied');
+        btn.innerHTML = '<span class="json-api-icon">✓</span> 已复制';
+
+        setTimeout(function() {
+            btn.classList.remove('copied');
+            btn.innerHTML = originalText;
+        }, 2000);
+    }
+
+    // 降级复制方法（用于不支持Clipboard API的浏览器）
+    function fallbackCopyToClipboard(text, btn) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        textArea.style.top = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            const successful = document.execCommand('copy');
+            if (successful) {
+                showCopySuccess(btn);
+            } else {
+                alert('复制失败，请手动复制链接');
+            }
+        } catch (err) {
+            alert('复制失败，请手动复制链接');
+        }
+
+        document.body.removeChild(textArea);
+    }
 });

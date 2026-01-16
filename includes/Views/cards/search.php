@@ -1,4 +1,34 @@
-<h2>搜索结果</h2>
+<h2 class="search-result-header">
+    搜索结果
+    <?php
+    // 检查是否有搜索条件
+    $hasSearchCondition = !empty($_GET['keyword']) || !empty($_GET['card_type']) || !empty($_GET['attribute']) ||
+        !empty($_GET['spell_trap_type']) || !empty($_GET['race']) || !empty($_GET['type_include']) ||
+        !empty($_GET['type_exclude']) || !empty($_GET['level']) || !empty($_GET['scale']) ||
+        !empty($_GET['link_value']) || !empty($_GET['link_markers']) ||
+        isset($_GET['atk_min']) && $_GET['atk_min'] !== '' || isset($_GET['atk_max']) && $_GET['atk_max'] !== '' ||
+        isset($_GET['def_min']) && $_GET['def_min'] !== '' || isset($_GET['def_max']) && $_GET['def_max'] !== '';
+
+    if ($hasSearchCondition && !empty($cards)):
+        // 构建JSON API链接
+        $jsonApiParams = $_GET;
+        $jsonApiParams['controller'] = 'card';
+        $jsonApiParams['action'] = 'searchJson';
+        $jsonApiUrl = BASE_URL . '?' . http_build_query($jsonApiParams);
+    ?>
+    <span class="json-api-wrapper">
+        <button type="button" class="btn-json-api" id="copy-json-api-btn" data-url="<?php echo Utils::escapeHtml($jsonApiUrl); ?>" title="复制JSON API链接">
+            <span class="json-api-icon">📋</span> 复制LLM链接
+        </button>
+        <span class="json-api-tooltip">
+            点击复制JSON格式的搜索结果链接。<br>
+            该链接可直接粘贴给LLM（如ChatGPT、Claude等），<br>
+            让AI分析卡片效果并提供评价。<br>
+            <small>（适用于仅支持单层网页访问的LLM工具）</small>
+        </span>
+    </span>
+    <?php endif; ?>
+</h2>
 
 <div class="card">
     <div class="card-body">

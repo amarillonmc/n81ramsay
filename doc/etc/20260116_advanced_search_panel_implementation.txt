@@ -126,3 +126,74 @@
 3. **卡片类型过滤**: 将十六进制改为十进制，如 `(d.type & 1) = 1` 而非 `(d.type & 0x1) = 0x1`
 4. **灵摆/连接过滤**: 同样使用十进制值，如 `16777216` 代替 `0x1000000`
 
+## 新增功能: JSON API搜索结果导出 (2026-01-16 第三次更新)
+
+### 功能描述
+在搜索结果旁边添加"复制LLM链接"按钮，点击后将JSON格式搜索结果的API链接复制到剪贴板。
+
+### 使用场景
+- 用户将链接粘贴给LLM（如ChatGPT、Claude等）
+- LLM可直接访问该链接获取卡片数据的JSON格式
+- 适用于仅支持单层网页访问的LLM工具
+
+### 实现文件
+
+1. **includes/Controllers/CardController.php**
+   - 新增 `searchJson()` 方法
+   - 返回JSON格式的搜索结果
+   - 限制最大返回100张卡片
+   - 排除卡图路径，包含所有文本信息
+
+2. **includes/Views/cards/search.php**
+   - 在"搜索结果"标题旁添加"复制LLM链接"按钮
+   - 悬浮tooltip说明按钮用途
+   - 仅在有搜索结果时显示
+
+3. **assets/css/style.css**
+   - `.search-result-header` - 搜索结果标题容器
+   - `.btn-json-api` - 复制按钮样式
+   - `.json-api-tooltip` - 悬浮提示样式
+   - 响应式适配
+
+4. **assets/js/script.js**
+   - 复制到剪贴板功能
+   - 支持现代Clipboard API和降级方案
+   - 复制成功视觉反馈
+
+### API端点
+```
+GET /?controller=card&action=searchJson&keyword=...&其他筛选参数
+```
+
+### 返回格式
+```json
+{
+  "success": true,
+  "keyword": "搜索关键词",
+  "filters": {...},
+  "total": 总数,
+  "returned": 返回数量,
+  "max_results": 100,
+  "cards": [
+    {
+      "id": 卡片ID,
+      "name": "卡名",
+      "desc": "效果描述",
+      "type": 类型代码,
+      "type_text": "类型文本",
+      "attribute": 属性代码,
+      "attribute_text": "属性文本",
+      "race": 种族代码,
+      "race_text": "种族文本",
+      "level": 等级,
+      "level_text": "等级文本",
+      "atk": 攻击力,
+      "def": 守备力,
+      "setcode": 系列代码,
+      "setcode_text": "系列名称",
+      "author": "作者"
+    }
+  ]
+}
+```
+

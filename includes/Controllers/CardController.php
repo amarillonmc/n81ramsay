@@ -309,4 +309,76 @@ class CardController {
         include __DIR__ . '/../Views/cards/detail.php';
         include __DIR__ . '/../Views/footer.php';
     }
+
+    /**
+     * 搜索结果JSON API
+     * 返回搜索结果的JSON格式数据，用于LLM等外部工具访问
+     */
+    public function searchJson() {
+        // 设置JSON响应头
+        header('Content-Type: application/json; charset=utf-8');
+        header('Access-Control-Allow-Origin: *');
+
+        // 获取搜索关键词
+        $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
+
+        // 获取高级检索参数
+        $advancedFilters = $this->getAdvancedSearchFilters();
+
+        // 检查是否有任何搜索条件
+        $hasAdvancedFilters = !empty(array_filter($advancedFilters, function($v) {
+            return $v !== null && $v !== '' && $v !== [];
+        }));
+
+        // 如果没有任何搜索条件，返回错误
+        if (empty($keyword) && !$hasAdvancedFilters) {
+            echo json_encode([
+                'success' => false,
+                'error' => '请提供搜索关键词或高级检索条件',
+                'cards' => [],
+                'total' => 0
+            ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+            return;
+        }
+
+        // 限制最大返回数量，防止数据过大
+        $maxResults = 100;
+
+        // 搜索卡片
+        $result = $this->cardModel->advancedSearchCards($keyword, $advancedFilters, 1, $maxResults);
+
+        // 构建精简的卡片数据（排除图片路径）
+        $cardsData = [];
+        foreach ($result['cards'] as $card) {
+            $cardsData[] = [
+                'id' => (int)$card['id'],
+                'name' => $card['name'],
+                'desc' => $card['desc'],
+                'type' => (int)$card['type'],
+                'type_text' => $card['type_text'],
+                'attribute' => (int)$card['attribute'],
+                'attribute_text' => $card['attribute_text'],
+                'race' => (int)$card['race'],
+                'race_text' => $card['race_text'],
+                'level' => (int)$card['level'],
+                'level_text' => $card['level_text'],
+                'atk' => (int)$card['atk'],
+                'def' => (int)$card['def'],
+                'setcode' => (int)$card['setcode'],
+                'setcode_text' => $card['setcode_text'],
+                'author' => $card['author'] ?? ''
+            ];
+        }
+
+        // 返回JSON
+        echo json_encode([
+            'success' => true,
+            'keyword' => $keyword,
+            'filters' => $advancedFilters,
+            'total' => $result['total'],
+            'returned' => count($cardsData),
+            'max_results' => $maxResults,
+            'cards' => $cardsData
+        ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
 }
