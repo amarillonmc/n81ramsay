@@ -1,0 +1,128 @@
+# 高级检索面板实现
+
+日期: 2026-01-16
+
+## 变更概述
+
+在卡片检索功能中添加了高级检索面板，允许用户精确选择卡片属性进行检索。
+
+## 修改的文件
+
+### 1. assets/css/style.css
+添加了高级检索面板的样式，包括：
+- 折叠面板样式 (.advanced-search, .advanced-search-toggle, .advanced-search-panel)
+- 卡片类型标签栏样式 (.search-tabs, .search-tab)
+- 检索行样式 (.search-row, .search-row-label, .search-row-content)
+- 筛选按钮样式 (.search-btn, .search-btn.selected)
+- AND/OR逻辑选择器样式 (.logic-selector)
+- 等级/阶级选择器样式 (.level-grid, .level-btn)
+- 连接标记图表样式 (.link-marker-diagram, .link-marker)
+- ATK/DEF范围输入样式 (.stat-range, .stat-range-input)
+- 响应式样式适配
+
+### 2. includes/Views/cards/index.php
+在搜索框下方添加了高级检索面板HTML结构，包括：
+- 折叠切换按钮
+- 卡片类型标签（所有卡/怪兽卡/魔法卡/陷阱卡）
+- 属性筛选（暗/光/地/水/炎/风/神）
+- 效果筛选（装备/场地/速攻/仪式/永续/反击/通常）
+- 种族筛选（26个种族）
+- 其他项目筛选（通常/效果/仪式/融合/同步/超量等）
+- 除外项目筛选
+- 等级/阶级选择（0-13）
+- 灵摆刻度选择（0-13）
+- 连接选择（连接值1-6，8向连接标记图）
+- 攻击力/守备力范围输入
+
+### 3. includes/Views/cards/search.php
+添加了与index.php相同的高级检索面板，并增加了：
+- URL参数回显功能，保持搜索状态
+- 已选择的筛选条件恢复显示
+
+### 4. assets/js/script.js
+添加了高级检索相关的JavaScript功能：
+- 面板展开/折叠切换
+- 卡片类型标签切换
+- 筛选按钮选择/取消选择
+- 清除行按钮功能
+- 连接标记选择
+- URL参数检测自动展开面板
+- 已选状态恢复
+
+## 用户界面说明
+
+高级检索面板设计参考了官方游戏王卡片数据库的界面风格：
+- 深色背景主题 (#2c3e50)
+- 类似官方数据库的按钮网格布局
+- 支持AND/OR逻辑选择
+- 8向连接标记可视化选择器
+- 默认折叠，点击"高级检索"展开
+
+## 后端实现 (第二阶段更新)
+
+### 5. includes/Controllers/CardController.php
+更新了`search()`方法以处理高级搜索参数：
+- 添加了`getAdvancedSearchFilters()`方法，收集所有高级搜索参数
+- 添加了`parseHexValues()`方法，解析十六进制值字符串
+- 添加了`parseIntValues()`方法，解析整数值字符串
+- 修改搜索逻辑，当有关键词或高级筛选条件时执行搜索
+
+### 6. includes/Models/Card.php
+添加了新方法：
+- `advancedSearchCards($keyword, $filters, $page, $perPage)` - 高级搜索卡片的包装方法
+
+### 7. includes/Core/CardParser.php
+添加了核心搜索方法`advancedSearchCardsPaginated()`，支持以下过滤条件：
+- **card_type**: 卡片类型 (monster/spell/trap)
+- **attribute**: 属性过滤 (使用位运算OR逻辑)
+- **spell_trap_type**: 魔法/陷阱类型
+- **race**: 种族过滤 (OR逻辑)
+- **type_include**: 包含的类型标记 (支持AND/OR逻辑)
+- **type_exclude**: 排除的类型标记
+- **level**: 等级/阶级 (OR逻辑)
+- **scale**: 灵摆刻度 (从level字段高位提取)
+- **link_value**: 连接值
+- **link_markers**: 连接标记 (从def字段提取，支持AND/OR逻辑)
+- **atk_min/atk_max**: 攻击力范围
+- **def_min/def_max**: 守备力范围
+
+## 技术细节
+
+### 位运算说明
+- 怪兽卡: `type & 0x1 = 0x1`
+- 魔法卡: `type & 0x2 = 0x2`
+- 陷阱卡: `type & 0x4 = 0x4`
+- 连接怪兽: `type & 0x4000000 = 0x4000000`
+- 灵摆怪兽: `type & 0x1000000 = 0x1000000`
+
+### 等级/刻度存储格式
+- 等级: `level & 0xFF`
+- 左灵摆刻度: `(level >> 24) & 0xF`
+- 右灵摆刻度: `(level >> 16) & 0xF`
+
+### 连接标记存储
+连接怪兽的连接标记存储在def字段中，使用位掩码：
+- 左上: 0x40
+- 上: 0x80
+- 右上: 0x100
+- 左: 0x8
+- 右: 0x20
+- 左下: 0x1
+- 下: 0x2
+- 右下: 0x4
+
+## Bug修复 (2026-01-16 第二次更新)
+
+### 问题描述
+高级搜索选择任何选项后无法返回任何结果。
+
+### 根本原因
+1. SQLite不支持在预处理语句参数绑定中使用十六进制字面量 (如 `0x1`)
+2. 属性(attribute)字段是单一整数值，不是位掩码，应使用直接比较而非位运算
+
+### 修复内容
+1. **属性过滤**: 改为使用直接比较 `d.attribute = :attr` 而非位运算
+2. **种族/类型过滤**: 改为使用内联十进制整数值，如 `(d.type & 16) = 16` 而非 `(d.type & :param) = :param`
+3. **卡片类型过滤**: 将十六进制改为十进制，如 `(d.type & 1) = 1` 而非 `(d.type & 0x1) = 0x1`
+4. **灵摆/连接过滤**: 同样使用十进制值，如 `16777216` 代替 `0x1000000`
+

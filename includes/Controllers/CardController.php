@@ -107,6 +107,9 @@ class CardController {
             $perPage = CARDS_PER_PAGE; // 使用配置文件中的默认值
         }
 
+        // 获取高级检索参数
+        $advancedFilters = $this->getAdvancedSearchFilters();
+
         // 搜索卡片（带分页）
         $cards = [];
         $pagination = [
@@ -115,8 +118,14 @@ class CardController {
             'per_page' => $perPage,
             'total_pages' => 0
         ];
-        if (!empty($keyword)) {
-            $result = $this->cardModel->searchCards($keyword, $page, $perPage);
+
+        // 检查是否有任何搜索条件
+        $hasAdvancedFilters = !empty(array_filter($advancedFilters, function($v) {
+            return $v !== null && $v !== '' && $v !== [];
+        }));
+
+        if (!empty($keyword) || $hasAdvancedFilters) {
+            $result = $this->cardModel->advancedSearchCards($keyword, $advancedFilters, $page, $perPage);
             $cards = $result['cards'];
             $pagination = [
                 'total' => $result['total'],
@@ -133,6 +142,131 @@ class CardController {
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/cards/search.php';
         include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 获取高级检索过滤参数
+     *
+     * @return array 过滤参数数组
+     */
+    private function getAdvancedSearchFilters() {
+        $filters = [];
+
+        // 卡片类型 (monster, spell, trap)
+        $cardType = isset($_GET['card_type']) ? trim($_GET['card_type']) : '';
+        if (in_array($cardType, ['monster', 'spell', 'trap'])) {
+            $filters['card_type'] = $cardType;
+        }
+
+        // 属性 (多选，逗号分隔的十六进制值)
+        if (!empty($_GET['attribute'])) {
+            $filters['attribute'] = $this->parseHexValues($_GET['attribute']);
+        }
+
+        // 魔法/陷阱类型 (多选)
+        if (!empty($_GET['spell_trap_type'])) {
+            $filters['spell_trap_type'] = $this->parseHexValues($_GET['spell_trap_type']);
+        }
+
+        // 种族 (多选)
+        if (!empty($_GET['race'])) {
+            $filters['race'] = $this->parseHexValues($_GET['race']);
+        }
+
+        // 其他项目 - 包含的类型 (多选)
+        if (!empty($_GET['type_include'])) {
+            $filters['type_include'] = $this->parseHexValues($_GET['type_include']);
+        }
+
+        // 其他项目 - 排除的类型 (多选)
+        if (!empty($_GET['type_exclude'])) {
+            $filters['type_exclude'] = $this->parseHexValues($_GET['type_exclude']);
+        }
+
+        // 类型逻辑 (and/or)
+        $filters['type_logic'] = isset($_GET['type_logic']) && $_GET['type_logic'] === 'or' ? 'or' : 'and';
+
+        // 等级/阶级 (多选)
+        if (!empty($_GET['level'])) {
+            $filters['level'] = $this->parseIntValues($_GET['level']);
+        }
+
+        // 灵摆刻度 (多选)
+        if (!empty($_GET['scale'])) {
+            $filters['scale'] = $this->parseIntValues($_GET['scale']);
+        }
+
+        // 连接值 (多选)
+        if (!empty($_GET['link_value'])) {
+            $filters['link_value'] = $this->parseIntValues($_GET['link_value']);
+        }
+
+        // 连接标记 (多选，十六进制值)
+        if (!empty($_GET['link_markers'])) {
+            $filters['link_markers'] = $this->parseHexValues($_GET['link_markers']);
+        }
+
+        // 连接标记逻辑 (and/or)
+        $filters['link_logic'] = isset($_GET['link_logic']) && $_GET['link_logic'] === 'and' ? 'and' : 'or';
+
+        // 攻击力范围
+        if (isset($_GET['atk_min']) && $_GET['atk_min'] !== '') {
+            $filters['atk_min'] = intval($_GET['atk_min']);
+        }
+        if (isset($_GET['atk_max']) && $_GET['atk_max'] !== '') {
+            $filters['atk_max'] = intval($_GET['atk_max']);
+        }
+
+        // 守备力范围
+        if (isset($_GET['def_min']) && $_GET['def_min'] !== '') {
+            $filters['def_min'] = intval($_GET['def_min']);
+        }
+        if (isset($_GET['def_max']) && $_GET['def_max'] !== '') {
+            $filters['def_max'] = intval($_GET['def_max']);
+        }
+
+        return $filters;
+    }
+
+    /**
+     * 解析十六进制值字符串
+     *
+     * @param string $input 逗号分隔的十六进制值字符串
+     * @return array 整数数组
+     */
+    private function parseHexValues($input) {
+        $values = [];
+        $parts = explode(',', $input);
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part !== '') {
+                // 支持 0x 前缀和纯十六进制
+                if (strpos($part, '0x') === 0) {
+                    $values[] = hexdec($part);
+                } else {
+                    $values[] = hexdec($part);
+                }
+            }
+        }
+        return array_unique(array_filter($values, function($v) { return $v > 0; }));
+    }
+
+    /**
+     * 解析整数值字符串
+     *
+     * @param string $input 逗号分隔的整数值字符串
+     * @return array 整数数组
+     */
+    private function parseIntValues($input) {
+        $values = [];
+        $parts = explode(',', $input);
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part !== '' && is_numeric($part)) {
+                $values[] = intval($part);
+            }
+        }
+        return array_unique($values);
     }
 
     /**

@@ -19,12 +19,173 @@ document.addEventListener('DOMContentLoaded', function() {
     if (searchForm) {
         searchForm.addEventListener('submit', function(e) {
             const keyword = document.getElementById('keyword').value.trim();
-            if (keyword === '') {
+            const advancedPanel = document.getElementById('advanced-search-panel');
+            const hasAdvancedFilters = advancedPanel && advancedPanel.classList.contains('active') && hasAnyAdvancedFilter();
+
+            // 如果没有关键词且没有高级筛选条件，则阻止提交
+            if (keyword === '' && !hasAdvancedFilters) {
                 e.preventDefault();
-                alert('请输入搜索关键词');
+                alert('请输入搜索关键词或使用高级检索');
             }
         });
     }
+
+    // 检查是否有任何高级筛选条件
+    function hasAnyAdvancedFilter() {
+        const filterFields = ['card_type', 'attribute', 'spell_trap_type', 'race', 'type_include', 'type_exclude', 'level', 'scale', 'link_value', 'link_markers', 'atk_min', 'atk_max', 'def_min', 'def_max'];
+        for (const field of filterFields) {
+            const input = document.getElementById(field);
+            if (input && input.value.trim() !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // 高级检索面板切换
+    const advancedSearchToggle = document.getElementById('advanced-search-toggle');
+    const advancedSearchPanel = document.getElementById('advanced-search-panel');
+
+    if (advancedSearchToggle && advancedSearchPanel) {
+        // 检查URL参数，如果有高级筛选参数则自动展开
+        const urlParams = new URLSearchParams(window.location.search);
+        const advancedParams = ['card_type', 'attribute', 'spell_trap_type', 'race', 'type_include', 'type_exclude', 'level', 'scale', 'link_value', 'link_markers', 'atk_min', 'atk_max', 'def_min', 'def_max'];
+        let hasAdvancedParams = false;
+        for (const param of advancedParams) {
+            if (urlParams.has(param) && urlParams.get(param) !== '') {
+                hasAdvancedParams = true;
+                break;
+            }
+        }
+
+        if (hasAdvancedParams) {
+            advancedSearchToggle.classList.add('active');
+            advancedSearchPanel.classList.add('active');
+        }
+
+        advancedSearchToggle.addEventListener('click', function() {
+            this.classList.toggle('active');
+            advancedSearchPanel.classList.toggle('active');
+        });
+    }
+
+    // 卡片类型标签切换
+    const searchTabs = document.querySelectorAll('.search-tab');
+    const cardTypeInput = document.getElementById('card_type');
+
+    searchTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            searchTabs.forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+
+            const tabType = this.getAttribute('data-tab');
+            if (cardTypeInput) {
+                cardTypeInput.value = tabType === 'all' ? '' : tabType;
+            }
+
+            // 根据标签类型显示/隐藏相关筛选行
+            updateFilterRowsVisibility(tabType);
+        });
+    });
+
+    // 根据URL参数恢复标签状态
+    if (cardTypeInput && cardTypeInput.value) {
+        const activeTab = document.querySelector('.search-tab[data-tab="' + cardTypeInput.value + '"]');
+        if (activeTab) {
+            searchTabs.forEach(t => t.classList.remove('active'));
+            activeTab.classList.add('active');
+            updateFilterRowsVisibility(cardTypeInput.value);
+        }
+    }
+
+    function updateFilterRowsVisibility(tabType) {
+        const allRows = document.querySelectorAll('.search-row[data-filter]');
+        allRows.forEach(function(row) {
+            const filters = row.getAttribute('data-filter').split(',');
+            if (tabType === 'all' || filters.includes(tabType)) {
+                row.style.display = 'flex';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    // 筛选按钮点击处理
+    document.querySelectorAll('.search-btn[data-field]').forEach(function(btn) {
+        const field = btn.getAttribute('data-field');
+        const value = btn.getAttribute('data-value');
+        const hiddenInput = document.getElementById(field);
+
+        // 恢复已选中状态
+        if (hiddenInput) {
+            const currentValues = hiddenInput.value.split(',').filter(v => v !== '');
+            if (currentValues.includes(value)) {
+                btn.classList.add('selected');
+            }
+        }
+
+        btn.addEventListener('click', function() {
+            if (!hiddenInput) return;
+
+            this.classList.toggle('selected');
+
+            // 更新隐藏输入框的值
+            const selectedBtns = document.querySelectorAll('.search-btn[data-field="' + field + '"].selected');
+            const values = Array.from(selectedBtns).map(b => b.getAttribute('data-value'));
+            hiddenInput.value = values.join(',');
+        });
+    });
+
+    // 清除行按钮处理
+    document.querySelectorAll('.clear-row-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const row = this.closest('.search-row');
+            if (!row) return;
+
+            // 清除该行所有选中的按钮
+            row.querySelectorAll('.search-btn.selected').forEach(function(selectedBtn) {
+                selectedBtn.classList.remove('selected');
+                const field = selectedBtn.getAttribute('data-field');
+                const hiddenInput = document.getElementById(field);
+                if (hiddenInput) {
+                    hiddenInput.value = '';
+                }
+            });
+
+            // 清除输入框
+            row.querySelectorAll('.stat-range-input').forEach(function(input) {
+                input.value = '';
+            });
+        });
+    });
+
+    // 连接标记处理
+    const linkMarkers = document.querySelectorAll('.link-marker[data-marker]');
+    const linkMarkersInput = document.getElementById('link_markers');
+
+    if (linkMarkersInput) {
+        // 恢复已选中状态
+        const currentMarkers = linkMarkersInput.value.split(',').filter(v => v !== '');
+        linkMarkers.forEach(function(marker) {
+            const markerValue = marker.getAttribute('data-marker');
+            if (currentMarkers.includes(markerValue)) {
+                marker.classList.add('selected');
+            }
+        });
+    }
+
+    linkMarkers.forEach(function(marker) {
+        marker.addEventListener('click', function() {
+            this.classList.toggle('selected');
+
+            // 更新隐藏输入框
+            if (linkMarkersInput) {
+                const selectedMarkers = document.querySelectorAll('.link-marker.selected[data-marker]');
+                const values = Array.from(selectedMarkers).map(m => m.getAttribute('data-marker'));
+                linkMarkersInput.value = values.join(',');
+            }
+        });
+    });
     
     // 投票表单
     const voteForm = document.getElementById('vote-form');

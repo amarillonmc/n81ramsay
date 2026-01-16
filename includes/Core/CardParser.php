@@ -1275,6 +1275,335 @@ class CardParser {
         ];
     }
 
+    /**
+     * 高级搜索卡片（带分页）
+     *
+     * @param string $keyword 关键词
+     * @param array $filters 过滤条件
+     * @param int $page 页码，从1开始
+     * @param int $perPage 每页数量
+     * @return array {cards, total, page, per_page, total_pages}
+     */
+    public function advancedSearchCardsPaginated($keyword, $filters = [], $page = 1, $perPage = 20) {
+        $keyword = trim($keyword);
+        $page = max(1, (int)$page);
+        $perPage = max(1, (int)$perPage);
+
+        $dbFiles = $this->getCardDatabaseFiles();
+
+        // 检查是否只有ID搜索
+        $isId = is_numeric($keyword) && empty(array_filter($filters, function($v) {
+            return $v !== null && $v !== '' && $v !== [] && $v !== 'and' && $v !== 'or';
+        }));
+
+        // ID搜索：直接返回精确结果
+        if ($isId && !empty($keyword)) {
+            foreach ($dbFiles as $dbFile) {
+                $db = $this->getCardDatabase($dbFile);
+                $sql = "
+                    SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                           t.name, t.desc
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE d.id = :keyword
+                    ORDER BY d.id
+                    LIMIT 1
+                ";
+                try {
+                    $stmt = $db->prepare($sql);
+                    $stmt->bindValue(':keyword', (int)$keyword, PDO::PARAM_INT);
+                    $stmt->execute();
+                    $card = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($card) {
+                        $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+                        $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
+                        $card['type_text'] = $this->getTypeText($card['type']);
+                        $card['race_text'] = $this->getRaceText($card['race']);
+                        $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                        $card['level_text'] = $this->getLevelText($card['level']);
+                        $card['image_path'] = $this->getCardImagePath($card['id']);
+                        $card['database_file'] = basename($dbFile);
+                        $card['author'] = $this->getCardAuthor($card);
+                        return [
+                            'cards' => [$card],
+                            'total' => 1,
+                            'page' => 1,
+                            'per_page' => $perPage,
+                            'total_pages' => 1,
+                        ];
+                    }
+                } catch (PDOException $e) {
+                    Utils::debug('ID搜索失败', ['错误' => $e->getMessage()]);
+                }
+            }
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'total_pages' => 0,
+            ];
+        }
+
+        // 构建WHERE条件
+        $whereConditions = [];
+        $params = [];
+
+        // 关键词搜索
+        if (!empty($keyword)) {
+            $whereConditions[] = "(t.name LIKE :keyword OR t.desc LIKE :keyword)";
+            $params[':keyword'] = '%' . $keyword . '%';
+        }
+
+        // 卡片类型过滤 - 使用十进制值
+        if (!empty($filters['card_type'])) {
+            switch ($filters['card_type']) {
+                case 'monster':
+                    $whereConditions[] = "(d.type & 1) = 1"; // 怪兽卡
+                    break;
+                case 'spell':
+                    $whereConditions[] = "(d.type & 2) = 2"; // 魔法卡
+                    break;
+                case 'trap':
+                    $whereConditions[] = "(d.type & 4) = 4"; // 陷阱卡
+                    break;
+            }
+        }
+
+        // 属性过滤 (OR逻辑) - 属性是单一值，使用直接比较
+        if (!empty($filters['attribute']) && is_array($filters['attribute'])) {
+            $attrConditions = [];
+            foreach ($filters['attribute'] as $i => $attr) {
+                $attrConditions[] = "d.attribute = :attr{$i}";
+                $params[":attr{$i}"] = $attr;
+            }
+            if (!empty($attrConditions)) {
+                $whereConditions[] = "(" . implode(" OR ", $attrConditions) . ")";
+            }
+        }
+
+        // 魔法/陷阱类型过滤 (OR逻辑) - 类型是位掩码，使用位运算
+        if (!empty($filters['spell_trap_type']) && is_array($filters['spell_trap_type'])) {
+            $stConditions = [];
+            foreach ($filters['spell_trap_type'] as $i => $stType) {
+                $stConditions[] = "(d.type & " . intval($stType) . ") = " . intval($stType);
+            }
+            if (!empty($stConditions)) {
+                $whereConditions[] = "(" . implode(" OR ", $stConditions) . ")";
+            }
+        }
+
+        // 种族过滤 (OR逻辑) - 种族是位掩码，使用位运算
+        if (!empty($filters['race']) && is_array($filters['race'])) {
+            $raceConditions = [];
+            foreach ($filters['race'] as $i => $race) {
+                $raceConditions[] = "(d.race & " . intval($race) . ") = " . intval($race);
+            }
+            if (!empty($raceConditions)) {
+                $whereConditions[] = "(" . implode(" OR ", $raceConditions) . ")";
+            }
+        }
+
+        // 包含类型过滤 - 使用内联整数值避免SQLite位运算绑定问题
+        if (!empty($filters['type_include']) && is_array($filters['type_include'])) {
+            $logic = isset($filters['type_logic']) && $filters['type_logic'] === 'or' ? 'OR' : 'AND';
+            $typeConditions = [];
+            foreach ($filters['type_include'] as $type) {
+                $typeVal = intval($type);
+                $typeConditions[] = "(d.type & {$typeVal}) = {$typeVal}";
+            }
+            if (!empty($typeConditions)) {
+                $whereConditions[] = "(" . implode(" {$logic} ", $typeConditions) . ")";
+            }
+        }
+
+        // 排除类型过滤
+        if (!empty($filters['type_exclude']) && is_array($filters['type_exclude'])) {
+            foreach ($filters['type_exclude'] as $type) {
+                $typeVal = intval($type);
+                $whereConditions[] = "(d.type & {$typeVal}) = 0";
+            }
+        }
+
+        // 等级/阶级过滤 (OR逻辑)
+        if (!empty($filters['level']) && is_array($filters['level'])) {
+            $levelConditions = [];
+            foreach ($filters['level'] as $level) {
+                $levelVal = intval($level);
+                $levelConditions[] = "(d.level & 255) = {$levelVal}";
+            }
+            if (!empty($levelConditions)) {
+                $whereConditions[] = "(" . implode(" OR ", $levelConditions) . ")";
+            }
+        }
+
+        // 灵摆刻度过滤 (OR逻辑) - 刻度存储在level的高位
+        if (!empty($filters['scale']) && is_array($filters['scale'])) {
+            $scaleConditions = [];
+            foreach ($filters['scale'] as $scale) {
+                $scaleVal = intval($scale);
+                // 灵摆刻度存储在level字段的第24-27位（左刻度）或第16-19位（右刻度）
+                $scaleConditions[] = "(((d.level >> 24) & 15) = {$scaleVal} OR ((d.level >> 16) & 15) = {$scaleVal})";
+            }
+            if (!empty($scaleConditions)) {
+                // 同时确保是灵摆怪兽 (0x1000000 = 16777216)
+                $whereConditions[] = "((d.type & 16777216) = 16777216 AND (" . implode(" OR ", $scaleConditions) . "))";
+            }
+        }
+
+        // 连接值过滤 (连接数 = level & 0xFF，对于连接怪兽)
+        if (!empty($filters['link_value']) && is_array($filters['link_value'])) {
+            $linkConditions = [];
+            foreach ($filters['link_value'] as $linkVal) {
+                $linkValInt = intval($linkVal);
+                $linkConditions[] = "(d.level & 255) = {$linkValInt}";
+            }
+            if (!empty($linkConditions)) {
+                // 确保是连接怪兽 (0x4000000 = 67108864)
+                $whereConditions[] = "((d.type & 67108864) = 67108864 AND (" . implode(" OR ", $linkConditions) . "))";
+            }
+        }
+
+        // 连接标记过滤 (连接标记存储在def字段)
+        if (!empty($filters['link_markers']) && is_array($filters['link_markers'])) {
+            $logic = isset($filters['link_logic']) && $filters['link_logic'] === 'and' ? 'AND' : 'OR';
+            $markerConditions = [];
+            foreach ($filters['link_markers'] as $marker) {
+                $markerVal = intval($marker);
+                $markerConditions[] = "(d.def & {$markerVal}) = {$markerVal}";
+            }
+            if (!empty($markerConditions)) {
+                // 确保是连接怪兽 (0x4000000 = 67108864)
+                $whereConditions[] = "((d.type & 67108864) = 67108864 AND (" . implode(" {$logic} ", $markerConditions) . "))";
+            }
+        }
+
+        // 攻击力范围
+        if (isset($filters['atk_min'])) {
+            $whereConditions[] = "d.atk >= :atk_min";
+            $params[':atk_min'] = $filters['atk_min'];
+        }
+        if (isset($filters['atk_max'])) {
+            $whereConditions[] = "d.atk <= :atk_max";
+            $params[':atk_max'] = $filters['atk_max'];
+        }
+
+        // 守备力范围
+        if (isset($filters['def_min'])) {
+            $whereConditions[] = "d.def >= :def_min";
+            $params[':def_min'] = $filters['def_min'];
+        }
+        if (isset($filters['def_max'])) {
+            $whereConditions[] = "d.def <= :def_max";
+            $params[':def_max'] = $filters['def_max'];
+        }
+
+        // 如果没有任何条件，返回空结果
+        if (empty($whereConditions)) {
+            return [
+                'cards' => [],
+                'total' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'total_pages' => 0,
+            ];
+        }
+
+        $whereClause = implode(" AND ", $whereConditions);
+
+        // 先统计总数
+        $counts = [];
+        $total = 0;
+        foreach ($dbFiles as $dbFile) {
+            try {
+                $db = $this->getCardDatabase($dbFile);
+                $countSql = "
+                    SELECT COUNT(*) AS cnt
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE {$whereClause}
+                ";
+                $stmt = $db->prepare($countSql);
+                foreach ($params as $key => $value) {
+                    $stmt->bindValue($key, $value);
+                }
+                $stmt->execute();
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $cnt = $row ? (int)$row['cnt'] : 0;
+                $counts[] = $cnt;
+                $total += $cnt;
+            } catch (PDOException $e) {
+                $counts[] = 0;
+                Utils::debug('高级搜索计数失败', ['错误' => $e->getMessage(), 'db' => basename($dbFile)]);
+            }
+        }
+
+        $totalPages = $total > 0 ? (int)ceil($total / $perPage) : 0;
+        if ($totalPages > 0 && $page > $totalPages) {
+            $page = $totalPages;
+        }
+        $offset = ($page - 1) * $perPage;
+
+        // 获取当前页的数据
+        $cards = [];
+        $remaining = $perPage;
+        foreach ($dbFiles as $i => $dbFile) {
+            if ($remaining <= 0) break;
+            $dbCount = $counts[$i];
+            if ($offset >= $dbCount) {
+                $offset -= $dbCount;
+                continue;
+            }
+            $db = $this->getCardDatabase($dbFile);
+            $limit = $remaining;
+            try {
+                $sql = "
+                    SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
+                           t.name, t.desc
+                    FROM datas d
+                    JOIN texts t ON d.id = t.id
+                    WHERE {$whereClause}
+                    ORDER BY d.id
+                    LIMIT :limit OFFSET :offset
+                ";
+                $stmt = $db->prepare($sql);
+                foreach ($params as $key => $value) {
+                    $stmt->bindValue($key, $value);
+                }
+                $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+                $stmt->execute();
+                $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                foreach ($results as &$card) {
+                    $isTcgCard = (basename($dbFile) === basename(TCG_CARD_DATA_PATH));
+                    $card['setcode_text'] = $this->getSetcodeText($card['setcode'], $isTcgCard);
+                    $card['type_text'] = $this->getTypeText($card['type']);
+                    $card['race_text'] = $this->getRaceText($card['race']);
+                    $card['attribute_text'] = $this->getAttributeText($card['attribute']);
+                    $card['level_text'] = $this->getLevelText($card['level']);
+                    $card['image_path'] = $this->getCardImagePath($card['id']);
+                    $card['database_file'] = basename($dbFile);
+                    $card['author'] = $this->getCardAuthor($card);
+                }
+
+                $cards = array_merge($cards, $results);
+                $remaining -= count($results);
+                $offset = 0;
+
+            } catch (PDOException $e) {
+                Utils::debug('高级搜索分页查询失败', ['错误' => $e->getMessage(), 'db' => basename($dbFile)]);
+            }
+        }
+
+        return [
+            'cards' => $cards,
+            'total' => $total,
+            'page' => $totalPages > 0 ? $page : 1,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages,
+        ];
+    }
 
     /**
      * 获取系列文本

@@ -64,6 +64,19 @@ class Card {
     }
 
     /**
+     * 高级搜索卡片（支持分页和多种过滤条件）
+     *
+     * @param string $keyword 关键词
+     * @param array $filters 过滤条件数组
+     * @param int $page 页码（从1开始）
+     * @param int $perPage 每页数量
+     * @return array {cards, total, page, per_page, total_pages}
+     */
+    public function advancedSearchCards($keyword, $filters = [], $page = 1, $perPage = 20) {
+        return $this->cardParser->advancedSearchCardsPaginated($keyword, $filters, $page, $perPage);
+    }
+
+    /**
      * 获取卡片禁限状态
      *
      * @param int $cardId 卡片ID
