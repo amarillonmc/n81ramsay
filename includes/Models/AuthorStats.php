@@ -317,7 +317,8 @@ class AuthorStats {
      * @return array 卡片列表
      */
     private function getAllCardsFromDatabase($dbFile) {
-        $result = $this->cardParser->getAllCards($dbFile, 1, 10000, false);
+        // 4294967296 是 32 位无符号整数的最大值，确保能获取到所有卡片，杜绝单作者出现多个中间差值较大的区间时丢卡的情况。
+        $result = $this->cardParser->getAllCards($dbFile, 1, 4294967296, false);
         return $result['cards'] ?? [];
     }
 
