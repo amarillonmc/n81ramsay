@@ -1,0 +1,240 @@
+注意：此文件涉及到SrvPRO项目（https://github.com/purerosefallen/srvpro），其中的实体文件仅指该项目中的文件，和RAMSAY项目无关。
+————————————————————
+
+根据代码分析，以下是SrvPro的API使用方式和可用信息：
+
+---
+
+## SrvPro HTTP API
+
+### 基础配置
+
+| 配置项 | 说明 |
+|-------|------|
+| 服务端口 | 由 `settings.modules.http.port` 配置 |
+| 认证方式 | 通过 `./config/admin_user.json` 管理用户和权限 |
+| CORS | 已启用，支持跨域请求 |
+
+---
+
+### API 端点列表
+
+| 端点 | 方法 | 所需权限 | 说明 |
+|-----|------|---------|------|
+| `/api/getrooms` | GET | `get_rooms` | 获取在线房间列表 |
+| `/api/duellog` | GET | `duel_log` | 获取对战日志 |
+| `/api/replay/{filename}` | GET | `download_replay` | 下载录像文件 |
+| `/api/archive.zip` | GET | `download_replay` | 批量下载录像压缩包 |
+| `/api/clearlog` | GET | `clear_duel_log` | 清空对战日志 |
+| `/api/getkeys` | GET | `vip` | 获取VIP激活码 |
+| `/api/message` | GET | 多种 | 消息/管理功能 |
+
+---
+
+### 1. `/api/getrooms` - 在线房间列表
+
+**请求参数：**
+```
+?username=xxx&pass=xxx&callback=xxx
+```
+
+**返回数据：**
+```json
+{
+  "rooms": [{
+    "roomid": "12345",
+    "roomname": "房间名",
+    "roommode": 0,
+    "needpass": "false",
+    "users": [{
+      "id": "-1",
+      "name": "Player1",
+      "ip": "192.168.1.1",
+      "pos": 0,
+      "status": {
+        "score": 0,
+        "lp": 8000,
+        "cards": 5
+      }
+    }],
+    "istart": "Duel:1 Turn:5"
+  }]
+}
+```
+
+---
+
+### 2. `/api/duellog` - 对战日志（最常用）
+
+**请求参数：**
+```
+?username=xxx&pass=xxx
+&roomname=房间名          (可选)
+&duelcount=1             (可选)
+&playername=玩家名        (可选)
+&score=分数              (可选)
+&callback=xxx            (可选，JSONP)
+```
+
+**返回数据：**
+```json
+[{
+  "id": 1,
+  "time": "2026-02-13 18:30:45",
+  "name": "房间名",
+  "roomid": 12345,
+  "cloud_replay_id": "R#123456789",
+  "replay_filename": "2026-02-13 18-30-45 P1 VS P2.yrp",
+  "roommode": 0,
+  "duelCount": 1,
+  "players": [{
+    "pos": 0,
+    "is_first": true,
+    "name": "Player1",
+    "winner": true,
+    "ip": "(IP: 192.168.1.1)",
+    "score": 0,
+    "lp": 8000,
+    "cardCount": 40
+  }, {
+    "pos": 1,
+    "is_first": false,
+    "name": "Player2",
+    "winner": false
+  }]
+}]
+```
+
+---
+
+### 3. `/api/replay/{filename}` - 下载录像
+
+**请求：**
+```
+GET /api/replay/2026-02-13%2018-30-45%20P1%20VS%20P2.yrp?username=xxx&pass=xxx
+```
+
+**返回：** YRP录像文件（二进制流）
+
+---
+
+### 4. `/api/archive.zip` - 批量下载录像
+
+**请求参数：**
+```
+?username=xxx&pass=xxx
+&roomname=xxx&playername=xxx&duelcount=xxx&score=xxx
+```
+
+**返回：** ZIP压缩包（包含符合条件的YRP文件）
+
+---
+
+## PHP 调用示例
+
+```php
+<?php
+class SrvProAPI {
+    private $baseUrl;
+    private $username;
+    private $password;
+    
+    public function __construct($host, $port, $username, $password) {
+        $this->baseUrl = "http://{$host}:{$port}";
+        $this->username = $username;
+        $this->password = $password;
+    }
+    
+    private function request($endpoint, $params = []) {
+        $params = array_merge([
+            'username' => $this->username,
+            'pass' => $this->password
+        ], $params);
+        
+        $url = $this->baseUrl . $endpoint . '?' . http_build_query($params);
+        return json_decode(file_get_contents($url), true);
+    }
+    
+    // 获取对战日志
+    public function getDuelLog($filters = []) {
+        return $this->request('/api/duellog', $filters);
+    }
+    
+    // 获取在线房间
+    public function getRooms() {
+        return $this->request('/api/getrooms');
+    }
+    
+    // 下载录像
+    public function downloadReplay($filename) {
+        $url = $this->baseUrl . '/api/replay/' . urlencode($filename) . 
+               '?username=' . $this->username . '&pass=' . $this->password;
+        return file_get_contents($url);
+    }
+    
+    // 查询某玩家的胜负记录
+    public function getPlayerRecord($playerName) {
+        $logs = $this->request('/api/duellog', ['playername' => $playerName]);
+        $wins = 0;
+        $losses = 0;
+        foreach ($logs as $log) {
+            foreach ($log['players'] as $player) {
+                if ($player['name'] === $playerName) {
+                    $player['winner'] ? $wins++ : $losses++;
+                }
+            }
+        }
+        return ['wins' => $wins, 'losses' => $losses];
+    }
+}
+
+// 使用示例
+$api = new SrvProAPI('localhost', 7922, 'admin', 'your_password');
+
+// 获取所有对战日志
+$logs = $api->getDuelLog();
+
+// 按玩家名查询
+$playerLogs = $api->getDuelLog(['playername' => 'Player1']);
+
+// 统计胜负
+$record = $api->getPlayerRecord('Player1');
+echo "胜: {$record['wins']}, 负: {$record['losses']}";
+?>
+```
+
+---
+
+## 可利用的信息总结
+
+| 信息类别 | 来源 | 字段 |
+|---------|------|------|
+| **玩家身份** | duel_log_player | name, realName, ip, pos |
+| **对局信息** | duel_log | time, name, roomMode, duelCount |
+| **胜负结果** | duel_log_player | **winner** (1=胜, 0=负) |
+| **对局状态** | duel_log_player | lp, cardCount, score, isFirst |
+| **卡组数据** | duel_log_player | startDeckBuffer, currentDeckBuffer |
+| **录像信息** | duel_log | cloudReplayId, replayFileName |
+| **在线状态** | /api/getrooms | 当前在线玩家、房间、回合数 |
+
+---
+
+## 权限配置
+
+编辑 `./config/admin_user.json`：
+
+```json
+{
+  "users": {
+    "php_app": {
+      "password": "secure_password",
+      "enabled": true,
+      "permissions": {
+        "get_rooms": true,
+        "duel_log": true,
+        "download_replay": true
+      }
+    }
+  }
+}
+```

@@ -1,0 +1,246 @@
+注意：此文件涉及到SrvPRO项目（https://github.com/purerosefallen/srvpro），其中的实体文件仅指该项目中的文件，和RAMSAY项目无关。
+————————————————————
+
+根据SrvPRO代码分析，云录像功能涉及以下MySQL数据库表：
+
+云录像相关数据库表
+1. cloud_replay 表 (云录像主表)
+字段	类型	说明
+id	bigint/integer	主键，录像ID（随机生成）
+data	text	录像数据（base64编码，zlib压缩）
+date	datetime	录像日期（有索引）
+createTime	datetime	创建时间
+updateTime	datetime	更新时间
+实体文件: data-manager/entities/CloudReplay.ts
+
+2. cloud_replay_player 表 (云录像玩家表)
+字段	类型	说明
+id	bigint/integer	主键
+key	varchar(128)	玩家授权key（有索引，用于查询玩家的录像）
+name	varchar(20)	玩家名称
+pos	tinyint	玩家位置(0-3)
+cloudReplayId	bigint	外键，关联cloud_replay.id
+createTime	datetime	创建时间
+updateTime	datetime	更新时间
+实体文件: data-manager/entities/CloudReplayPlayer.ts
+
+3. duel_log 表 (对战日志，与云录像关联)
+字段	类型	说明
+id	bigint/integer	主键
+time	datetime	对战时间（有索引）
+name	varchar(20)	房间名（有索引）
+roomId	int	房间ID
+cloudReplayId	bigint	关联的云录像ID
+replayFileName	varchar(256)	本地录像文件名
+roomMode	tinyint	房间模式
+duelCount	tinyint	对战局数（有索引）
+实体文件: data-manager/entities/DuelLog.ts
+
+4. duel_log_player 表 (对战日志玩家)
+字段	类型	说明
+id	bigint/integer	主键
+name	varchar(20)	玩家显示名
+realName	varchar(20)	玩家真名（有索引）
+pos	tinyint	玩家位置
+ip	varchar(64)	IP地址
+isFirst	tinyint	是否先攻
+score	tinyint	得分（有索引）
+lp	int	剩余生命值
+cardCount	smallint	剩余卡数
+startDeckBuffer	text	初始卡组
+currentDeckBuffer	text	当前卡组
+winner	tinyint	是否获胜
+实体文件: data-manager/entities/DuelLogPlayer.ts
+
+表关系图
+cloud_replay 1 <---> N cloud_replay_player
+     |
+     | (cloudReplayId)
+     v
+ duel_log 1 <---> N duel_log_player
+核心功能调用关系
+功能	方法位置	操作的表
+保存云录像	DataManager.saveCloudReplay()	cloud_replay + cloud_replay_player
+按key查询录像	DataManager.getCloudReplaysFromKey()	cloud_replay + cloud_replay_player
+按ID查询录像	DataManager.getCloudReplayFromId()	cloud_replay + cloud_replay_player
+随机获取录像	DataManager.getRandomCloudReplay()	cloud_replay
+保存对战日志	DataManager.saveDuelLog()	duel_log + duel_log_player
+
+
+---
+
+## 1. YRP文件名与数据库字段对应关系
+
+### 文件名格式 (ygopro-server.js:5612-5626)
+
+```
+YYYY-MM-DD HH-mm-ss 玩家1 VS 玩家2 [VS 玩家3 & 玩家4].yrp
+```
+
+**示例**: `2026-02-13 18-30-45 PlayerA VS PlayerB.yrp`
+
+| 文件名部分 | 来源 | 对应数据库字段 |
+|-----------|------|---------------|
+| `YYYY-MM-DD HH-mm-ss` | `moment_now.format("YYYY-MM-DD HH-mm-ss")` | `duel_log.time` |
+| `玩家1` | `room.dueling_players[0].name` | `duel_log_player.name` (pos=0) |
+| `玩家2` | `room.dueling_players[1].name` | `duel_log_player.name` (pos=1) |
+| `玩家3` (双打) | `room.dueling_players[2].name` | `duel_log_player.name` (pos=2) |
+| `玩家4` (双打) | `room.dueling_players[3].name` | `duel_log_player.name` (pos=3) |
+| 整个文件名 | `replay_filename` | `duel_log.replayFileName` |
+| 分隔符 `VS` | `room.hostinfo.mode !== 2` 时 | 由 `duel_log.roomMode` 决定格式 |
+| 分隔符 `&` | `room.hostinfo.mode === 2` (双打) | `duel_log.roomMode = 2` |
+
+### 数据库保存时的关联
+
+```javascript
+dataManager.saveDuelLog(room.name, room.process_pid, room.cloud_replay_id, replay_filename, room.hostinfo.mode, room.duel_count, playerInfos)
+```
+
+| 参数 | 对应字段 |
+|------|---------|
+| `room.name` | `duel_log.name` |
+| `room.process_pid` | `duel_log.roomId` |
+| `room.cloud_replay_id` | `duel_log.cloudReplayId` |
+| `replay_filename` | `duel_log.replayFileName` |
+| `room.hostinfo.mode` | `duel_log.roomMode` |
+| `room.duel_count` | `duel_log.duelCount` |
+
+---
+
+## 2. YDK文件名与数据库字段对应关系
+
+### 文件名格式 (ygopro-server.js:4660)
+
+```
+YYYY-MM-DD HH-mm-ss process_pid pos IP 玩家名.ydk
+```
+
+**示例**: `2026-02-13 18-30-45 12345 0 192.168.1.100 PlayerA.ydk`
+
+| 文件名部分 | 来源 | 对应数据库字段 |
+|-----------|------|---------------|
+| `YYYY-MM-DD HH-mm-ss` | `moment_now.format('YYYY-MM-DD HH-mm-ss')` | `duel_log.time` |
+| `process_pid` | `room.process_pid` | `duel_log.roomId` |
+| `pos` | `client.pos` (玩家位置 0-3) | `duel_log_player.pos` |
+| `IP` | `toIpv4(client.ip)` | `duel_log_player.ip` |
+| `玩家名` | `client.name` | `duel_log_player.name` |
+
+### 注意事项
+
+- **ydk文件名并未直接保存到数据库**，它只是本地日志文件
+- 但文件名中的各部分可在 `duel_log` 和 `duel_log_player` 表中找到对应字段
+- ydk文件内容（卡组）保存到 `duel_log_player.startDeckBuffer` 和 `currentDeckBuffer`
+
+---
+
+## 3. 完整关系图
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    YRP录像文件                                    │
+│  文件名: 2026-02-13 18-30-45 P1 VS P2.yrp                        │
+├─────────────────────────────────────────────────────────────────┤
+│  对应数据库:                                                      │
+│  duel_log.replayFileName = "2026-02-13 18-30-45 P1 VS P2.yrp"   │
+│  duel_log.time          = "2026-02-13 18:30:45"                 │
+│  duel_log.roomMode      = 0/1 (单打) 或 2 (双打)                 │
+│  duel_log_player.name   = P1, P2 (按pos排序)                     │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                    YDK卡组文件                                    │
+│  文件名: 2026-02-13 18-30-45 12345 0 192.168.1.1 P1.ydk         │
+├─────────────────────────────────────────────────────────────────┤
+│  对应数据库 (文件名不存储，但各部分可对应):                         │
+│  duel_log.time          = "2026-02-13 18:30:45"                 │
+│  duel_log.roomId        = 12345                                  │
+│  duel_log_player.pos    = 0                                      │
+│  duel_log_player.ip     = "::ffff:192.168.1.1"                   │
+│  duel_log_player.name   = "P1"                                   │
+│  duel_log_player.startDeckBuffer = 卡组内容(base64)              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 4. 关键代码位置
+
+| 功能 | 代码位置 |
+|------|---------|
+| YRP文件名生成 | `ygopro-server.js:5612-5626` |
+| YRP文件保存 | `ygopro-server.js:5627` |
+| DuelLog保存 | `ygopro-server.js:5651` |
+| YDK文件名生成 | `ygopro-server.js:4660` |
+| YDK文件保存 | `ygopro-server.js:4661` |
+
+---
+
+## 胜负判定
+
+### 文件名：❌ 无法判定
+
+| 文件类型 | 文件名示例 | 包含胜负信息 |
+|---------|-----------|-------------|
+| YRP | `2026-02-13 18-30-45 P1 VS P2.yrp` | ❌ 无 |
+| YDK | `2026-02-13 18-30-45 12345 0 192.168.1.1 P1.ydk` | ❌ 无 |
+
+---
+
+### 数据库：✅ 可以判定
+
+**`duel_log_player.winner` 字段**
+
+| 属性 | 值 |
+|-----|-----|
+| 类型 | `tinyint` |
+| 0 | 该玩家**败** |
+| 1 | 该玩家**胜** |
+
+---
+
+### 胜负判定逻辑
+
+```javascript
+// ygopro-server.js:5644
+winner: player.pos === room.winner
+
+// DuelLogPlayer.ts:75
+p.winner = info.winner ? 1 : 0;
+
+// DuelLog.ts:64 (API返回)
+winner: player.winner === 1
+```
+
+---
+
+### 判定方法
+
+查询某个对战日志的所有玩家，`winner = 1` 的玩家即为胜者：
+
+```sql
+-- 查询某场对战的胜者
+SELECT name, pos, winner 
+FROM duel_log_player 
+WHERE duelLogId = ? AND winner = 1;
+```
+
+或者通过 API 获取时，`players` 数组中 `winner: true` 的玩家获胜：
+
+```json
+{
+  "players": [
+    {"pos": 0, "name": "PlayerA", "winner": true},   // 胜者
+    {"pos": 1, "name": "PlayerB", "winner": false}   // 败者
+  ]
+}
+```
+
+---
+
+### 总结
+
+| 信息来源 | 能否判定胜负 |
+|---------|------------|
+| YRP文件名 | ❌ |
+| YDK文件名 | ❌ |
+| `duel_log_player.winner` | ✅ |
