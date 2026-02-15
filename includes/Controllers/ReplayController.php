@@ -172,9 +172,12 @@ class ReplayController {
             $db['url'] = $baseUrl . '?controller=replay&action=database&name=' . urlencode($db['name']);
         }
 
+        $scriptUrl = $baseUrl . '?controller=replay&action=script&path=';
+
         echo json_encode([
             'databases' => $dbs,
-            'image_url' => $this->replayModel->getCardImageUrls()
+            'image_url' => $this->replayModel->getCardImageUrls(),
+            'script_url' => $scriptUrl
         ], JSON_UNESCAPED_UNICODE);
     }
 
@@ -206,6 +209,69 @@ class ReplayController {
         }
 
         header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . strlen($content));
+        header('Cache-Control: public, max-age=86400');
+
+        echo $content;
+    }
+
+    /**
+     * API: 获取脚本文件
+     */
+    public function script() {
+        $path = isset($_GET['path']) ? $_GET['path'] : null;
+
+        if (!$path) {
+            header('HTTP/1.0 400 Bad Request');
+            echo json_encode(['error' => '缺少脚本路径参数']);
+            return;
+        }
+
+        // 安全检查：防止目录遍历攻击
+        $path = str_replace(['../', '..\\', "\0"], '', $path);
+        
+        // 验证路径格式
+        if (!preg_match('#^(script/|single/|patch/|patches/)[\w/\-\.]+\.lua$#i', $path)) {
+            header('HTTP/1.0 400 Bad Request');
+            echo json_encode(['error' => '无效的脚本路径']);
+            return;
+        }
+
+        $scriptPath = null;
+
+        // 先在 DIY 脚本目录查找
+        if (defined('CARD_DATA_PATH')) {
+            $diyPath = CARD_DATA_PATH . '/' . $path;
+            if (file_exists($diyPath) && is_file($diyPath)) {
+                $scriptPath = $diyPath;
+            }
+        }
+
+        // 找不到则查找 TCG 脚本目录
+        if (!$scriptPath && defined('TCG_SCRIPT_PATH') && TCG_SCRIPT_PATH) {
+            $tcgPath = TCG_SCRIPT_PATH . '/' . $path;
+            if (file_exists($tcgPath) && is_file($tcgPath)) {
+                $scriptPath = $tcgPath;
+            }
+        }
+
+        // 也支持直接从 TCG_SCRIPT_PATH 根目录查找
+        if (!$scriptPath && defined('TCG_SCRIPT_PATH') && TCG_SCRIPT_PATH) {
+            $tcgPath = TCG_SCRIPT_PATH . '/' . basename($path);
+            if (file_exists($tcgPath) && is_file($tcgPath)) {
+                $scriptPath = $tcgPath;
+            }
+        }
+
+        if (!$scriptPath) {
+            header('HTTP/1.0 404 Not Found');
+            echo json_encode(['error' => '脚本文件不存在']);
+            return;
+        }
+
+        $content = file_get_contents($scriptPath);
+
+        header('Content-Type: text/plain; charset=utf-8');
         header('Content-Length: ' . strlen($content));
         header('Cache-Control: public, max-age=86400');
 

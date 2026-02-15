@@ -120,6 +120,9 @@ RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自�
    
    // TCG卡图路径（可选）
    define('TCG_CARD_IMAGE_PATH', '/path/to/ygopro/pics');
+   
+   // TCG脚本路径（录像回放需要，用于加载卡片效果脚本）
+   define('TCG_SCRIPT_PATH', '/path/to/ygopro/script');
    ```
 
 4. 访问 `?controller=replay` 即可使用录像回放功能。

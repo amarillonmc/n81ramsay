@@ -20613,11 +20613,17 @@ class ReplayPlayer {
   async load() {
     try {
       this.setLoadingProgress(5, "初始化 SQL.js...");
-      const SQL = await initSqlJs({
+      this.SQL = await initSqlJs({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/sql-wasm.wasm`
       });
       this.setLoadingProgress(15, "加载卡片数据库...");
-      await this.loadCardDatabases(SQL);
+      this.cardDatabases = [];
+      this.scriptCache = /* @__PURE__ */ new Map();
+      await this.loadCardDatabases(this.SQL);
+      if (this.cardDatabases.length === 0) {
+        console.warn("没有加载卡片数据库，使用空数据库");
+        this.cardDatabases.push(new this.SQL.Database());
+      }
       this.setLoadingProgress(35, "下载 OCGcore WASM...");
       const wasmResponse = await fetch("https://cdn.jsdelivr.net/npm/koishipro-core.js@1.3.4/dist/vendor/wasm_esm/libocgcore.wasm");
       if (!wasmResponse.ok) {
@@ -20626,15 +20632,22 @@ class ReplayPlayer {
       const wasmBinary = new Uint8Array(await wasmResponse.arrayBuffer());
       this.setLoadingProgress(45, "初始化 OCGcore...");
       this.wrapper = await createOcgcoreWrapper({
-        scriptBufferSize: 2097152,
-        logBufferSize: 2048,
+        scriptBufferSize: 6291456,
+        logBufferSize: 8192,
         wasmBinary
       });
       this.setLoadingProgress(55, "配置卡片读取器...");
-      this.wrapper.setCardReader(SqljsCardReader(this.cardDatabase));
+      try {
+        this.wrapper.setCardReader(SqljsCardReader(this.SQL, ...this.cardDatabases));
+      } catch (e) {
+        console.warn("配置卡片读取器失败:", e);
+      }
       this.setLoadingProgress(60, "配置脚本读取器...");
-      const emptyScriptReader = () => null;
-      this.wrapper.setScriptReader(emptyScriptReader);
+      try {
+        this.wrapper.setScriptReader((scriptPath) => this.loadScript(scriptPath));
+      } catch (e) {
+        console.warn("配置脚本读取器失败:", e);
+      }
       this.setLoadingProgress(65, "下载录像文件...");
       const yrpResponse = await fetch(this.config.replayUrl);
       if (!yrpResponse.ok) {
@@ -20654,6 +20667,30 @@ class ReplayPlayer {
       this.showError(`加载失败: ${error.message}`);
     }
   }
+  loadScript(scriptPath) {
+    if (this.scriptCache.has(scriptPath)) {
+      return this.scriptCache.get(scriptPath);
+    }
+    let normalizedPath = scriptPath;
+    if (normalizedPath.startsWith("./")) {
+      normalizedPath = normalizedPath.substring(2);
+    }
+    if (this.scriptUrlBase) {
+      const scriptUrl = this.scriptUrlBase + encodeURIComponent(normalizedPath);
+      const xhr = new XMLHttpRequest();
+      xhr.open("GET", scriptUrl, false);
+      xhr.send(null);
+      if (xhr.status === 200) {
+        const content = xhr.responseText;
+        this.scriptCache.set(scriptPath, content);
+        console.log(`已加载脚本: ${scriptPath}`);
+        return content;
+      } else {
+        console.warn(`加载脚本失败: ${scriptPath} (HTTP ${xhr.status})`);
+      }
+    }
+    return "";
+  }
   getBaseUrl() {
     let basePath = window.location.pathname;
     const lastSlash = basePath.lastIndexOf("/");
@@ -20672,8 +20709,10 @@ class ReplayPlayer {
     }
     const data = await response.json();
     const databases = data.databases;
-    this.cardDatabase = null;
+    this.cardDatabases = [];
     this.imageUrlBase = data.image_url;
+    this.scriptUrlBase = data.script_url || null;
+    console.log("脚本URL基础路径:", this.scriptUrlBase);
     if (!databases || databases.length === 0) {
       console.warn("没有找到卡片数据库");
       return;
@@ -20690,58 +20729,40 @@ class ReplayPlayer {
         }
         const dbData = new Uint8Array(await dbResponse.arrayBuffer());
         const db = new SQL.Database(dbData);
-        if (this.cardDatabase === null) {
-          this.cardDatabase = db;
-        } else {
-          await this.mergeDatabases(this.cardDatabase, db);
-        }
+        this.cardDatabases.push(db);
+        console.log(`已加载数据库: ${dbInfo.name}`);
       } catch (e) {
         console.warn(`加载数据库 ${dbInfo.name} 失败:`, e);
       }
     }
   }
-  async mergeDatabases(mainDb, additionalDb) {
-    try {
-      const tables = additionalDb.exec(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-      );
-      if (tables.length === 0) return;
-      for (const table of tables[0].values) {
-        const tableName = table[0];
-        if (tableName === "datas" || tableName === "texts") {
-          const rows = additionalDb.exec(`SELECT * FROM ${tableName}`);
-          if (rows.length > 0) {
-            const columns = rows[0].columns;
-            const placeholders = columns.map(() => "?").join(",");
-            const insertSql = `INSERT OR IGNORE INTO ${tableName} (${columns.join(",")}) VALUES (${placeholders})`;
-            for (const row of rows[0].values) {
-              try {
-                mainDb.run(insertSql, row);
-              } catch (e) {
-              }
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("合并数据库失败:", e);
-    }
-  }
   async parseReplay() {
     this.messages = [];
+    if (!this.yrpData || this.yrpData.length === 0) {
+      throw new Error("录像数据为空");
+    }
+    console.log(`开始解析录像，数据大小: ${this.yrpData.length} 字节`);
     try {
       const generator = playYrpStep(this.wrapper, this.yrpData);
+      let stepCount = 0;
       for (const { duel, result } of generator) {
         this.duel = duel;
         this.messages.push({
           duel,
           result
         });
+        stepCount++;
+        if (stepCount % 1e3 === 0) {
+          console.log(`已解析 ${stepCount} 条消息`);
+        }
       }
+      console.log(`解析完成，共 ${stepCount} 条消息`);
     } catch (e) {
       console.error("解析录像错误:", e);
       if (e.message && e.message.includes("MSG_RETRY")) {
         console.warn("录像包含 MSG_RETRY，可能不完整");
+      } else if (e.message && e.message.includes("Aborted")) {
+        throw new Error("OCGcore WASM 崩溃，可能是录像文件损坏或格式不兼容");
       } else {
         throw e;
       }

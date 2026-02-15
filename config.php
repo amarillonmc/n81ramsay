@@ -262,6 +262,13 @@ if (!defined('DECKS_PER_PAGE')) {
     define('DECKS_PER_PAGE', 20); // 卡组列表每页显示数量
 }
 
+// TCG 脚本路径配置（录像回放功能需要）
+if (!defined('TCG_SCRIPT_PATH')) {
+    // TCG 卡片脚本目录路径
+    // 在生产环境中，这应该指向 YGOPro 服务器的 script 目录
+    define('TCG_SCRIPT_PATH', '');
+}
+
 // 录像回放功能配置
 if (!defined('REPLAY_ENABLED')) {
     define('REPLAY_ENABLED', true); // 是否启用录像回放功能
