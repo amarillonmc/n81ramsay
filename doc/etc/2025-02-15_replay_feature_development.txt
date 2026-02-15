@@ -1,0 +1,245 @@
+================================================================================
+RAMSAY 录像回放功能开发日志
+================================================================================
+日期: 2025-02-14 ~ 2025-02-15
+开发者: AI Assistant (Claude)
+================================================================================
+
+## 一、项目概述
+
+为 RAMSAY 系统添加录像回放功能，使用 koishipro-core.js（OCGcore WASM 封装）
+实现 YRP/YRP2 录像文件的网页端播放。
+
+目标环境：
+- DIY 卡服务器（no81）
+- 多 CDB 数据库支持（DIY + TCG）
+- 双卡图路径支持
+- 脚本文件加载支持
+
+
+## 二、创建的文件列表
+
+### 后端 PHP 文件
+1. includes/Models/Replay.php - 录像模型
+2. includes/Controllers/ReplayController.php - 录像控制器
+3. includes/Views/replays/index.php - 录像列表视图
+4. includes/Views/replays/player.php - 播放器视图
+
+### 前端 JavaScript 文件
+5. assets/js/replay-player.js - 前端播放器源码
+6. assets/js/replay-player.bundle.js - 构建后的播放器（Vite 打包）
+7. assets/js/shims/empty.js - Node.js fs 模块空 shim
+8. assets/js/shims/buffer.js - Buffer polyfill
+9. assets/js/shims/process.js - Process polyfill
+
+### 配置文件
+10. vite.config.js - Vite 构建配置
+11. package.json - Node.js 依赖配置（更新）
+
+### 文档文件
+12. docs/REPLAY_SETUP.md - 录像功能设置指南
+
+### 修改的现有文件
+- config.php - 添加 REPLAY_ENABLED, REPLAY_PATH, REPLAYS_PER_PAGE, TCG_SCRIPT_PATH
+- index.php - 添加 replay 路由
+- includes/Views/layout.php - 添加导航链接
+- README.md - 更新安装说明
+
+
+## 三、遇到的问题及解决方案
+
+### 问题 1: 录像列表加载极慢，PHP-CGI CPU 占用高
+原因: 原实现对每个录像文件都解析头部获取信息，33000+ 文件导致性能问题
+解决: 改用 FilesystemIterator，仅从文件名提取信息，不解析文件内容
+关键代码: parseReplayInfoFromFilename() 方法，正则匹配文件名格式
+
+### 问题 2: 玩家名显示乱码
+原因: YRP 头部使用 UTF-16LE 编码，mb_convert_encoding 转换失败
+解决: 
+1. 优先从文件名提取玩家名（格式: "日期 时间 玩家1 VS 玩家2.yrp"）
+2. 备用从 YRP 头部解析，直接按字节读取 UTF-16LE
+
+### 问题 3: 模块 specifier 错误
+错误信息: "Failed to resolve module specifier 'buffer'"
+原因: koishipro-core.js 依赖 Node.js 模块，浏览器无法直接加载
+解决: 使用 Vite 构建，将所有依赖打包为单个 bundle 文件
+
+### 问题 4: fs.readFileSync is not implemented
+错误信息: "[unenv] fs.readFileSync is not implemented yet!"
+原因: OCGcore WASM 尝试调用 fs 模块读取脚本文件
+解决: 创建 shim 文件提供空的 polyfill，通过 Vite alias 配置替换
+
+### 问题 5: SqljsCardReader 参数错误
+错误信息: WASM Aborted()
+原因: SqljsCardReader 第一个参数应为 SQL.js 静态类，而非数据库实例
+正确用法: SqljsCardReader(SQL, db1, db2, ...)
+错误用法: SqljsCardReader(db)
+
+### 问题 6: 脚本加载器返回空字符串导致崩溃
+原因: 脚本读取器返回 null 会导致 WASM 崩溃
+解决: 实现实际的脚本加载器，通过同步 XHR 从服务器获取脚本文件
+API 端点: ?controller=replay&action=script&path={path}
+
+### 问题 7: 同步 XHR timeout 错误
+错误信息: "Timeouts cannot be set for synchronous requests"
+原因: 同步 XMLHttpRequest 不支持 timeout 属性
+解决: 移除 xhr.timeout 设置
+
+### 问题 8: 500 Internal Server Error（语法错误）
+原因: PHP 文件中存在重复代码片段导致语法错误
+位置: includes/Models/Replay.php 第 266-271 行
+解决: 删除重复代码
+
+### 问题 9: CDB 合并失败 "Cannot read properties of undefined (reading 'map')"
+原因: sql.js exec() 返回结果可能不包含 columns 属性
+解决: 添加空值检查
+
+
+## 四、API 端点
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| ?controller=replay | GET | 录像列表页面 |
+| ?controller=replay&action=play&file={filename} | GET | 播放器页面 |
+| ?controller=replay&action=list | GET | JSON: 录像列表 |
+| ?controller=replay&action=file&file={filename} | GET | 下载 YRP 文件 |
+| ?controller=replay&action=databases | GET | 获取 CDB 数据库和脚本 URL |
+| ?controller=replay&action=database&name={name} | GET | 下载单个 CDB 文件 |
+| ?controller=replay&action=script&path={path} | GET | 获取脚本文件 |
+| ?controller=replay&action=cardimage&id={id} | GET | 获取卡图 |
+
+
+## 五、配置项（config.php 或 config.user.php）
+
+```php
+// 启用录像功能
+define('REPLAY_ENABLED', true);
+
+// 录像文件目录
+define('REPLAY_PATH', '/path/to/ygopro/replay');
+
+// TCG 卡图路径
+define('TCG_CARD_IMAGE_PATH', '/path/to/ygopro/pics');
+
+// TCG 脚本路径（录像回放需要）
+define('TCG_SCRIPT_PATH', '/path/to/ygopro/script');
+
+// 每页显示数量
+define('REPLAYS_PER_PAGE', 20);
+```
+
+
+## 六、部署步骤
+
+1. 运行 npm install 安装依赖
+2. 运行 npm run build 构建前端资源
+3. 配置 config.user.php
+4. 确保 Web 服务器可访问脚本目录
+
+
+## 七、待解决问题（截至会话结束）
+
+### 消息解析问题
+1. 回合数显示为 "?" - YGOProMsgNewTurn 结构为 {_Ca {player: 0}}，
+   未包含 turn 属性，需要从其他消息或 raw 数据获取
+
+2. 攻击卡片显示为 "???" - YGOProMsgAttack 的 code 属性未正确解析
+
+3. 伤害值显示为 "?" - YGOProMsgDamage 的 damage 属性未正确解析
+
+4. YGOProMsgDraw 消息未被解析 - 应显示抽卡信息
+
+### 建议的后续调试方向
+1. 在 Console 中输出完整消息结构，分析 raw 数据
+2. 检查 ygopro-msg-encode 库的消息定义
+3. 可能需要直接解析 result.raw 字节数据
+
+
+## 八、技术架构
+
+```
+前端 (replay-player.js)
+    │
+    ├── koishipro-core.js (CDN/Bundle)
+    │   ├── createOcgcoreWrapper() - OCGcore WASM 封装
+    │   ├── playYrpStep() - 录像解析生成器
+    │   └── SqljsCardReader() - 卡片数据读取器
+    │
+    ├── sql.js (CDN)
+    │   └── SQLite WASM - 读取 CDB 数据库
+    │
+    └── XMLHttpRequest (同步)
+        └── 加载 Lua 脚本文件
+
+后端 (PHP)
+    │
+    ├── ReplayController
+    │   ├── index() - 列表页
+    │   ├── play() - 播放页
+    │   ├── file() - YRP 文件下载
+    │   ├── databases() - CDB 列表 API
+    │   ├── database() - CDB 文件下载
+    │   ├── script() - 脚本文件下载
+    │   └── cardimage() - 卡图
+    │
+    └── Replay Model
+        ├── getReplayList() - 扫描目录
+        ├── parseReplayInfoFromFilename() - 文件名解析
+        └── parseReplayHeader() - YRP 头部解析
+```
+
+
+## 九、关键代码片段
+
+### 前端加载流程
+```javascript
+async load() {
+    // 1. 初始化 SQL.js
+    const SQL = await initSqlJs({...});
+    
+    // 2. 加载 CDB 数据库
+    await this.loadCardDatabases(SQL);
+    
+    // 3. 下载 OCGcore WASM
+    const wasmBinary = await fetch(...);
+    
+    // 4. 初始化 OCGcore
+    this.wrapper = await createOcgcoreWrapper({
+        wasmBinary: wasmBinary
+    });
+    
+    // 5. 配置卡片读取器
+    this.wrapper.setCardReader(SqljsCardReader(SQL, ...databases));
+    
+    // 6. 配置脚本读取器
+    this.wrapper.setScriptReader((path) => this.loadScript(path));
+    
+    // 7. 下载并解析录像
+    this.yrpData = await fetch(replayUrl);
+    for (const {duel, result} of playYrpStep(wrapper, yrpData)) {
+        messages.push({duel, result});
+    }
+}
+```
+
+### 脚本加载器（同步 XHR）
+```javascript
+loadScript(scriptPath) {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', scriptUrl, false);  // 同步请求
+    xhr.send(null);
+    return xhr.status === 200 ? xhr.responseText : '';
+}
+```
+
+
+## 十、参考资料
+
+- koishipro-core.js: https://github.com/NaoModas/koishipro-core.js
+- sql.js: https://sql.js.org
+- YRP 文件格式: 参考 koishipro-core.js 源码
+- Vite: https://vitejs.dev
+
+================================================================================
+文档结束
+================================================================================
