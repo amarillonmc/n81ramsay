@@ -226,6 +226,10 @@ window.RAMSAY_REPLAY_CONFIG = {
     padding: 4px 0;
 }
 
+.log-draw {
+    color: #80deea;
+}
+
 .log-lp {
     color: #ef5350;
 }

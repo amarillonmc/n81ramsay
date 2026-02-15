@@ -63,6 +63,7 @@ class ReplayPlayer {
         this.duel = null;
         this.playerNames = ['玩家0', '玩家1'];
         this.playerLP = [8000, 8000];
+        this.currentTurn = 0;
         
         this.playInterval = null;
         
@@ -436,21 +437,28 @@ class ReplayPlayer {
     replayToCurrent() {
         this.clearLog();
         this.playerLP = [8000, 8000];
+        this.currentTurn = 0;
         
         for (let i = 0; i < this.currentIndex; i++) {
             const msg = this.messages[i];
-            this.updateLPFromMessage(msg);
+            this.updateStateFromMessage(msg);
         }
     }
 
-    updateLPFromMessage(msgData) {
+    updateStateFromMessage(msgData) {
         const { result } = msgData;
         const message = result.message;
         if (!message) return;
         
         const msgType = message.constructor?.name;
-        if (msgType === 'YGOProMsgChangeLp' && message.player !== undefined) {
+        if (msgType === 'YGOProMsgNewTurn') {
+            this.currentTurn++;
+        } else if (msgType === 'YGOProMsgChangeLp' && message.player !== undefined) {
             this.playerLP[message.player] = message.lp;
+        } else if (msgType === 'YGOProMsgDamage' && message.player !== undefined) {
+            this.playerLP[message.player] = Math.max(0, (this.playerLP[message.player] || 8000) - (message.value ?? 0));
+        } else if (msgType === 'YGOProMsgRecover' && message.player !== undefined) {
+            this.playerLP[message.player] = (this.playerLP[message.player] || 8000) + (message.value ?? 0);
         }
     }
 
@@ -502,6 +510,9 @@ class ReplayPlayer {
             case 'YGOProMsgNewPhase':
                 this.handleNewPhase(message);
                 break;
+            case 'YGOProMsgDraw':
+                this.handleDraw(message);
+                break;
             case 'YGOProMsgChangeLp':
                 this.handleChangeLp(message);
                 break;
@@ -534,16 +545,21 @@ class ReplayPlayer {
                 this.handleBattle(message);
                 break;
             case 'YGOProMsgHint':
+            case 'YGOProMsgCardHint':
+            case 'YGOProMsgPlayerHint':
                 this.handleHint(message);
                 break;
             case 'YGOProMsgSelectCard':
             case 'YGOProMsgSelectChain':
             case 'YGOProMsgSelectPlace':
             case 'YGOProMsgSelectPosition':
-                // 选择类消息，不记录
+            case 'YGOProMsgSelectBattleCmd':
+            case 'YGOProMsgSelectIdleCmd':
+            case 'YGOProMsgSelectYesNo':
+            case 'YGOProMsgSelectOption':
+            case 'YGOProMsgSelectEffectYn':
                 break;
             default:
-                // 其他消息类型
                 break;
         }
     }
@@ -557,17 +573,30 @@ class ReplayPlayer {
     }
 
     handleNewTurn(message) {
-        // message 可能是对象或包含 raw 属性
-        const turn = message.turn ?? message.Turn ?? message.raw?.[0] ?? '?';
-        const player = message.player ?? message.Player ?? 0;
+        this.currentTurn++;
+        const player = message.player ?? 0;
         const playerName = this.getPlayerName(player);
-        this.logMessage(`<div class="log-turn">=== 回合 ${turn} - ${playerName} ===</div>`);
+        this.logMessage(`<div class="log-turn">=== 回合 ${this.currentTurn} - ${playerName} ===</div>`);
     }
 
     handleNewPhase(message) {
-        const phase = message.phase ?? message.Phase ?? message.raw?.[0] ?? 0;
+        const phase = message.phase ?? 0;
         const phaseName = PHASE_NAMES[phase] || `阶段(${phase})`;
         this.logMessage(`<div class="log-phase">【${phaseName}】</div>`);
+    }
+
+    handleDraw(message) {
+        const player = message.player ?? 0;
+        const count = message.count ?? 0;
+        const cards = message.cards ?? [];
+        const playerName = this.getPlayerName(player);
+        
+        if (count > 0 && cards.length > 0) {
+            const cardNames = cards.slice(0, count).map(code => this.getCardName(code));
+            this.logMessage(`<div class="log-draw">${playerName} 抽了 ${count} 张卡: <span class="card-name">${cardNames.join(', ')}</span></div>`);
+        } else if (count > 0) {
+            this.logMessage(`<div class="log-draw">${playerName} 抽了 ${count} 张卡</div>`);
+        }
     }
 
     handleChangeLp(message) {
@@ -591,33 +620,36 @@ class ReplayPlayer {
     }
 
     handleDamage(message) {
-        const player = message.player ?? message.Player ?? 0;
-        const damage = message.damage ?? message.Damage ?? message.raw?.[1] ?? '?';
+        const player = message.player ?? 0;
+        const value = message.value ?? 0;
         const playerName = this.getPlayerName(player);
-        this.logMessage(`<div class="log-damage">${playerName} 受到 ${damage} 点伤害</div>`);
+        this.playerLP[player] = Math.max(0, (this.playerLP[player] || 8000) - value);
+        this.logMessage(`<div class="log-damage">${playerName} 受到 ${value} 点伤害 (LP: ${this.playerLP[player]})</div>`);
     }
 
     handleRecover(message) {
-        const player = message.player ?? message.Player ?? 0;
-        const recover = message.recover ?? message.Recover ?? message.raw?.[1] ?? '?';
+        const player = message.player ?? 0;
+        const value = message.value ?? 0;
         const playerName = this.getPlayerName(player);
-        this.logMessage(`<div class="log-recover">${playerName} 回复 ${recover} LP</div>`);
+        this.playerLP[player] = (this.playerLP[player] || 8000) + value;
+        this.logMessage(`<div class="log-recover">${playerName} 回复 ${value} LP (LP: ${this.playerLP[player]})</div>`);
     }
 
     handleSummoning(message) {
-        const code = message.code ?? message.Code ?? message.raw?.[1] ?? 0;
-        const player = message.player ?? message.Player ?? 0;
+        const code = message.code ?? 0;
+        const player = message.controller ?? 0;
         const cardName = this.getCardName(code);
         const playerName = this.getPlayerName(player);
         this.logMessage(`<div class="log-summon">${playerName} 召唤: <span class="card-name">${cardName}</span></div>`);
     }
 
     handleChaining(message) {
-        const code = message.code ?? message.Code ?? 0;
-        const player = message.player ?? message.Player ?? 0;
+        const code = message.code ?? 0;
+        const player = message.controller ?? 0;
         const cardName = this.getCardName(code);
         const playerName = this.getPlayerName(player);
-        this.logMessage(`<div class="log-chain">${playerName} 发动: <span class="card-name">${cardName}</span></div>`);
+        const chainCount = message.chainCount ?? 0;
+        this.logMessage(`<div class="log-chain">[连锁 ${chainCount}] ${playerName} 发动: <span class="card-name">${cardName}</span></div>`);
     }
 
     handleChainEnd(message) {
@@ -629,12 +661,32 @@ class ReplayPlayer {
     }
 
     handleAttack(message) {
-        const code = message.code ?? message.Code ?? 0;
-        const player = message.player ?? message.Player ?? 0;
-        const attackerName = this.getCardName(code);
-        const playerName = this.getPlayerName(player);
-        const targetPlayer = this.getPlayerName(1 - player);
-        this.logMessage(`<div class="log-attack">${playerName} 的 <span class="card-name">${attackerName}</span> 攻击 ${targetPlayer}</div>`);
+        const attacker = message.attacker;
+        const defender = message.defender;
+        
+        if (!attacker) return;
+        
+        const attackerPlayer = attacker.controller ?? 0;
+        const attackerLocation = LOCATION_NAMES[attacker.location] ?? '未知区域';
+        const attackerSeq = attacker.sequence ?? 0;
+        
+        const playerName = this.getPlayerName(attackerPlayer);
+        
+        if (defender && defender.location > 0) {
+            const defPlayer = defender.controller ?? 0;
+            const defLocation = LOCATION_NAMES[defender.location] ?? '未知区域';
+            const defSeq = defender.sequence ?? 0;
+            const defPlayerName = this.getPlayerName(defPlayer);
+            
+            if (defender.location === LOCATION.MZONE) {
+                this.logMessage(`<div class="log-attack">${playerName} 的 [${attackerLocation}${attackerSeq + 1}] 攻击 ${defPlayerName} 的 [${defLocation}${defSeq + 1}]</div>`);
+            } else {
+                this.logMessage(`<div class="log-attack">${playerName} 的 [${attackerLocation}${attackerSeq + 1}] 直接攻击 ${defPlayerName}</div>`);
+            }
+        } else {
+            const targetPlayer = this.getPlayerName(1 - attackerPlayer);
+            this.logMessage(`<div class="log-attack">${playerName} 的 [${attackerLocation}${attackerSeq + 1}] 直接攻击 ${targetPlayer}</div>`);
+        }
     }
 
     handleBattle(message) {

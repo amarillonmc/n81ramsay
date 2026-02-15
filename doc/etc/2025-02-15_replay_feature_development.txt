@@ -139,20 +139,49 @@ define('REPLAYS_PER_PAGE', 20);
 
 ## 七、待解决问题（截至会话结束）
 
-### 消息解析问题
-1. 回合数显示为 "?" - YGOProMsgNewTurn 结构为 {_Ca {player: 0}}，
-   未包含 turn 属性，需要从其他消息或 raw 数据获取
+### ~~消息解析问题~~ (已解决 2025-02-15)
 
-2. 攻击卡片显示为 "???" - YGOProMsgAttack 的 code 属性未正确解析
+经检查 ygopro-msg-encode 库的类型定义，发现消息属性名称与代码中使用的不一致：
 
-3. 伤害值显示为 "?" - YGOProMsgDamage 的 damage 属性未正确解析
+1. ~~回合数显示为 "?"~~ 
+   - 原因: YGOProMsgNewTurn 没有 `turn` 属性，只有 `player`
+   - 解决: 在 ReplayPlayer 中添加 `currentTurn` 计数器，每次收到 NewTurn 消息时递增
 
-4. YGOProMsgDraw 消息未被解析 - 应显示抽卡信息
+2. ~~伤害值显示为 "?"~~
+   - 原因: YGOProMsgDamage 使用 `value` 属性，而非 `damage`
+   - 解决: 更新 handleDamage() 使用 `message.value`
 
-### 建议的后续调试方向
-1. 在 Console 中输出完整消息结构，分析 raw 数据
-2. 检查 ygopro-msg-encode 库的消息定义
-3. 可能需要直接解析 result.raw 字节数据
+3. ~~回复值显示为 "?"~~
+   - 原因: YGOProMsgRecover 使用 `value` 属性，而非 `recover`
+   - 解决: 更新 handleRecover() 使用 `message.value`
+
+4. ~~攻击卡片显示为 "???"~~
+   - 原因: YGOProMsgAttack 没有 `code` 属性，只有 `attacker`/`defender` (CardLocation)
+   - 解决: 更新 handleAttack() 显示攻击者和防御者的位置信息
+
+5. ~~YGOProMsgDraw 消息未被解析~~
+   - 原因: switch 语句中没有 case 处理此消息
+   - 解决: 添加 handleDraw() 方法，显示抽卡信息（玩家、数量、卡名）
+
+6. ~~召唤/连锁时玩家名显示错误~~
+   - 原因: YGOProMsgSummoning/Chaining 使用 `controller` 属性，而非 `player`
+   - 解决: 更新使用 `message.controller`
+
+### 消息类型属性对照表
+
+| 消息类型 | 属性 |
+|---------|------|
+| YGOProMsgNewTurn | player |
+| YGOProMsgNewPhase | phase |
+| YGOProMsgDraw | player, count, cards[] |
+| YGOProMsgDamage | player, value |
+| YGOProMsgRecover | player, value |
+| YGOProMsgSummoning | code, controller, location, sequence, position |
+| YGOProMsgSpSummoning | code, controller, location, sequence, position |
+| YGOProMsgChaining | code, controller, location, sequence, chainCount |
+| YGOProMsgAttack | attacker{controller,location,sequence}, defender{...} |
+| YGOProMsgPayLpCost | player, cost |
+| YGOProMsgChangeLp | player, lp |
 
 
 ## 八、技术架构
