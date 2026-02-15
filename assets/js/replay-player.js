@@ -1,8 +1,6 @@
 /**
  * RAMSAY 录像播放器
- * 使用 koishipro-core.js 实现 YRP/YRP2 回放功能
- * 
- * 依赖通过 importmap 在 HTML 中配置
+ * 纯文本日志模式
  */
 
 import {
@@ -24,41 +22,27 @@ const LOCATION = {
     OVERLAY: 0x80
 };
 
-const QUERY = {
-    CODE: 0x1,
-    POSITION: 0x2,
-    ALIAS: 0x4,
-    TYPE: 0x8,
-    LEVEL: 0x10,
-    RANK: 0x20,
-    ATTRIBUTE: 0x40,
-    RACE: 0x80,
-    ATTACK: 0x100,
-    DEFENSE: 0x200,
-    BASE_ATTACK: 0x400,
-    BASE_DEFENSE: 0x800,
-    REASON: 0x1000,
-    REASON_CARD: 0x4000,
-    EQUIP_CARD: 0x8000,
-    TARGET_CARD: 0x10000,
-    OVERLAY_CARD: 0x20000,
-    COUNTERS: 0x40000,
-    OWNER: 0x80000,
-    STATUS: 0x100000,
-    LSCALE: 0x200000,
-    RSCALE: 0x400000,
-    LINK: 0x800000
+const LOCATION_NAMES = {
+    0x01: '卡组',
+    0x02: '手牌',
+    0x04: '怪兽区',
+    0x08: '魔陷区',
+    0x10: '墓地',
+    0x20: '除外区',
+    0x40: '额外卡组',
+    0x80: '超量素材'
 };
 
-const POS = {
-    FACEUP_ATTACK: 0x1,
-    FACEDOWN_ATTACK: 0x2,
-    FACEUP_DEFENSE: 0x4,
-    FACEDOWN_DEFENSE: 0x8,
-    FACEUP: 0x5,
-    FACEDOWN: 0xA,
-    ATTACK: 0x3,
-    DEFENSE: 0xC
+const PHASE_NAMES = {
+    0x01: '抽卡阶段',
+    0x02: '准备阶段',
+    0x04: '主要阶段1',
+    0x08: '战斗阶段',
+    0x10: '伤害步骤',
+    0x20: '伤害计算',
+    0x40: '战斗结束',
+    0x80: '主要阶段2',
+    0x100: '结束阶段'
 };
 
 class ReplayPlayer {
@@ -70,12 +54,15 @@ class ReplayPlayer {
         this.currentIndex = 0;
         this.isPlaying = false;
         this.playSpeed = 1;
-        this.speedOptions = [0.5, 1, 2, 5, 10];
+        this.speedOptions = [0.5, 1, 2, 5, 10, 50];
         this.speedIndex = 1;
-        this.cardDatabase = null;
+        this.cardDatabases = [];
         this.cardCache = new Map();
+        this.scriptCache = new Map();
+        this.scriptUrlBase = null;
         this.duel = null;
-        this.fieldInfo = null;
+        this.playerNames = ['玩家0', '玩家1'];
+        this.playerLP = [8000, 8000];
         
         this.playInterval = null;
         
@@ -101,17 +88,8 @@ class ReplayPlayer {
             playbackProgress: document.getElementById('playbackProgress'),
             progressFill: document.getElementById('progressFill'),
             progressText: document.getElementById('progressText'),
-            messageLog: document.getElementById('messageLog'),
-            player0Name: document.getElementById('player0Name'),
-            player1Name: document.getElementById('player1Name'),
-            player0Lp: document.getElementById('player0Lp'),
-            player1Lp: document.getElementById('player1Lp')
+            messageLog: document.getElementById('messageLog')
         };
-
-        if (this.config.playerNames && this.config.playerNames.length >= 2) {
-            this.elements.player0Name.textContent = this.config.playerNames[0] || '玩家 0';
-            this.elements.player1Name.textContent = this.config.playerNames[1] || '玩家 1';
-        }
 
         this.elements.btnPlay.addEventListener('click', () => this.togglePlay());
         this.elements.btnStepBack.addEventListener('click', () => this.stepBack());
@@ -142,11 +120,8 @@ class ReplayPlayer {
             });
             
             this.setLoadingProgress(15, '加载卡片数据库...');
-            this.cardDatabases = [];
-            this.scriptCache = new Map();
             await this.loadCardDatabases(this.SQL);
             
-            // 如果没有加载数据库，创建一个空的
             if (this.cardDatabases.length === 0) {
                 console.warn('没有加载卡片数据库，使用空数据库');
                 this.cardDatabases.push(new this.SQL.Database());
@@ -167,20 +142,10 @@ class ReplayPlayer {
             });
 
             this.setLoadingProgress(55, '配置卡片读取器...');
-            try {
-                // SqljsCardReader(SQL, db1, db2, ...) - 第一个参数是 SQL.js 静态类
-                this.wrapper.setCardReader(SqljsCardReader(this.SQL, ...this.cardDatabases));
-            } catch (e) {
-                console.warn('配置卡片读取器失败:', e);
-            }
+            this.wrapper.setCardReader(SqljsCardReader(this.SQL, ...this.cardDatabases));
 
-            // 配置脚本读取器 - 通过 HTTP 加载脚本文件
             this.setLoadingProgress(60, '配置脚本读取器...');
-            try {
-                this.wrapper.setScriptReader((scriptPath) => this.loadScript(scriptPath));
-            } catch (e) {
-                console.warn('配置脚本读取器失败:', e);
-            }
+            this.wrapper.setScriptReader((scriptPath) => this.loadScript(scriptPath));
 
             this.setLoadingProgress(65, '下载录像文件...');
             const yrpResponse = await fetch(this.config.replayUrl);
@@ -198,6 +163,7 @@ class ReplayPlayer {
                 this.elements.loadingOverlay.style.display = 'none';
                 this.elements.playerMain.style.display = 'block';
                 this.updateProgress();
+                this.logMessage(`录像加载完成，共 ${this.messages.length} 条消息`);
             }, 300);
 
         } catch (error) {
@@ -207,50 +173,34 @@ class ReplayPlayer {
     }
 
     loadScript(scriptPath) {
-        // 检查缓存
         if (this.scriptCache.has(scriptPath)) {
             return this.scriptCache.get(scriptPath);
         }
 
-        // 标准化路径 - 移除 ./
         let normalizedPath = scriptPath;
         if (normalizedPath.startsWith('./')) {
             normalizedPath = normalizedPath.substring(2);
         }
 
-        // 通过 HTTP API 加载脚本
         if (this.scriptUrlBase) {
             const scriptUrl = this.scriptUrlBase + encodeURIComponent(normalizedPath);
             
-            // 使用同步 XMLHttpRequest（脚本读取器必须是同步的）
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', scriptUrl, false);
-            xhr.send(null);
-            
-            if (xhr.status === 200) {
-                const content = xhr.responseText;
-                this.scriptCache.set(scriptPath, content);
-                console.log(`已加载脚本: ${scriptPath}`);
-                return content;
-            } else {
-                console.warn(`加载脚本失败: ${scriptPath} (HTTP ${xhr.status})`);
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', scriptUrl, false);
+                xhr.send(null);
+                
+                if (xhr.status === 200) {
+                    const content = xhr.responseText;
+                    this.scriptCache.set(scriptPath, content);
+                    return content;
+                }
+            } catch (e) {
+                console.warn(`加载脚本失败: ${scriptPath}`, e.message);
             }
         }
 
-        // 返回空脚本（避免 WASM 崩溃）
         return '';
-    }
-
-    getBaseUrl() {
-        let basePath = window.location.pathname;
-        const lastSlash = basePath.lastIndexOf('/');
-        if (lastSlash > 0) {
-            basePath = basePath.substring(0, lastSlash + 1);
-        }
-        if (!basePath.endsWith('/')) {
-            basePath += '/';
-        }
-        return basePath;
     }
 
     async loadCardDatabases(SQL) {
@@ -263,10 +213,7 @@ class ReplayPlayer {
         const databases = data.databases;
         
         this.cardDatabases = [];
-        this.imageUrlBase = data.image_url;
         this.scriptUrlBase = data.script_url || null;
-        
-        console.log('脚本URL基础路径:', this.scriptUrlBase);
         
         if (!databases || databases.length === 0) {
             console.warn('没有找到卡片数据库');
@@ -280,10 +227,7 @@ class ReplayPlayer {
             
             try {
                 const dbResponse = await fetch(dbInfo.url);
-                if (!dbResponse.ok) {
-                    console.warn(`加载数据库 ${dbInfo.name} 失败: HTTP ${dbResponse.status}`);
-                    continue;
-                }
+                if (!dbResponse.ok) continue;
                 
                 const dbData = new Uint8Array(await dbResponse.arrayBuffer());
                 const db = new SQL.Database(dbData);
@@ -302,6 +246,9 @@ class ReplayPlayer {
             throw new Error('录像数据为空');
         }
         
+        // 先解析录像头部获取玩家名
+        this.parseYrpHeader();
+        
         console.log(`开始解析录像，数据大小: ${this.yrpData.length} 字节`);
         
         try {
@@ -315,20 +262,17 @@ class ReplayPlayer {
                     result: result
                 });
                 stepCount++;
-                
-                if (stepCount % 1000 === 0) {
-                    console.log(`已解析 ${stepCount} 条消息`);
-                }
             }
             
             console.log(`解析完成，共 ${stepCount} 条消息`);
         } catch (e) {
             console.error('解析录像错误:', e);
-            if (e.message && e.message.includes('MSG_RETRY')) {
-                console.warn('录像包含 MSG_RETRY，可能不完整');
-            } else if (e.message && e.message.includes('Aborted')) {
-                throw new Error('OCGcore WASM 崩溃，可能是录像文件损坏或格式不兼容');
-            } else {
+            if (e.message && e.message.includes('Aborted')) {
+                // 即使崩溃也保留已解析的消息
+                if (this.messages.length === 0) {
+                    throw new Error('OCGcore WASM 崩溃，无法解析录像');
+                }
+            } else if (!e.message || !e.message.includes('MSG_RETRY')) {
                 throw e;
             }
         }
@@ -336,8 +280,93 @@ class ReplayPlayer {
         if (this.messages.length === 0) {
             throw new Error('录像中没有有效消息');
         }
+    }
+
+    parseYrpHeader() {
+        // 优先使用从配置传入的玩家名（来自文件名解析）
+        if (this.config.playerNames && this.config.playerNames.length >= 2) {
+            this.playerNames = this.config.playerNames;
+            console.log('从配置获取玩家名:', this.playerNames);
+            return;
+        }
         
-        this.logMessage(`解析完成，共 ${this.messages.length} 条消息`);
+        try {
+            const data = this.yrpData;
+            let offset = 0;
+            
+            // 检查是否为 YRP2
+            const isYrp2 = data[0] === 0x87;
+            offset = 1;
+            
+            // 跳过 ID (4 bytes) 和 version (4 bytes)
+            offset += 8;
+            
+            // 读取 flag (4 bytes)
+            offset += 4;
+            
+            // 读取玩家名
+            const names = [];
+            for (let i = 0; i < 4; i++) {
+                if (offset >= data.length) break;
+                
+                const nameLen = data[offset];
+                offset++;
+                
+                if (nameLen > 0 && offset + nameLen * 2 <= data.length) {
+                    const nameBytes = data.slice(offset, offset + nameLen * 2);
+                    let name = '';
+                    
+                    // 直接解析 UTF-16LE
+                    for (let j = 0; j < nameBytes.length; j += 2) {
+                        const charCode = nameBytes[j] | (nameBytes[j + 1] << 8);
+                        if (charCode > 0 && charCode < 0x10000) {
+                            name += String.fromCharCode(charCode);
+                        }
+                    }
+                    
+                    name = name.trim();
+                    if (name && name !== ' ' && !/^\s*$/.test(name)) {
+                        names.push(name);
+                    }
+                    offset += nameLen * 2;
+                } else {
+                    offset += nameLen * 2;
+                }
+            }
+            
+            if (names.length >= 2) {
+                this.playerNames = [names[0], names[1]];
+                console.log('从YRP头部解析到玩家名:', this.playerNames);
+            }
+        } catch (e) {
+            console.warn('解析YRP头部失败:', e);
+        }
+    }
+
+    getCardName(code) {
+        if (!code) return '???';
+        
+        if (this.cardCache.has(code)) {
+            return this.cardCache.get(code);
+        }
+        
+        // 从数据库查询
+        for (const db of this.cardDatabases) {
+            try {
+                const result = db.exec(`SELECT name FROM texts WHERE id = ${code}`);
+                if (result && result.length > 0 && result[0].values && result[0].values.length > 0) {
+                    const name = result[0].values[0][0];
+                    if (name) {
+                        this.cardCache.set(code, name);
+                        return name;
+                    }
+                }
+            } catch (e) {
+                // 继续尝试下一个数据库
+            }
+        }
+        
+        return `#${code}`;
     }
 
     togglePlay() {
@@ -351,6 +380,7 @@ class ReplayPlayer {
     play() {
         if (this.currentIndex >= this.messages.length) {
             this.currentIndex = 0;
+            this.clearLog();
         }
         
         this.isPlaying = true;
@@ -382,14 +412,14 @@ class ReplayPlayer {
                 this.scheduleNextStep();
             } else {
                 this.pause();
-                this.logMessage('播放完成');
+                this.logMessage('=== 录像播放完成 ===');
             }
         }, delay);
     }
 
     stepBack() {
         if (this.currentIndex > 0) {
-            this.currentIndex = Math.max(0, this.currentIndex - 10);
+            this.currentIndex = Math.max(0, this.currentIndex - 20);
             this.replayToCurrent();
             this.updateProgress();
         }
@@ -404,10 +434,23 @@ class ReplayPlayer {
     }
 
     replayToCurrent() {
-        this.clearField();
+        this.clearLog();
+        this.playerLP = [8000, 8000];
         
         for (let i = 0; i < this.currentIndex; i++) {
-            this.processMessage(this.messages[i]);
+            const msg = this.messages[i];
+            this.updateLPFromMessage(msg);
+        }
+    }
+
+    updateLPFromMessage(msgData) {
+        const { result } = msgData;
+        const message = result.message;
+        if (!message) return;
+        
+        const msgType = message.constructor?.name;
+        if (msgType === 'YGOProMsgChangeLp' && message.player !== undefined) {
+            this.playerLP[message.player] = message.lp;
         }
     }
 
@@ -435,13 +478,22 @@ class ReplayPlayer {
         this.elements.progressText.textContent = `${this.currentIndex} / ${this.messages.length}`;
     }
 
+    clearLog() {
+        this.elements.messageLog.innerHTML = '';
+    }
+
     processMessage(msgData) {
-        const { duel, result } = msgData;
+        const { result } = msgData;
         const message = result.message;
         
         if (!message) return;
 
-        const msgType = message.constructor ? message.constructor.name : 'Unknown';
+        const msgType = message.constructor?.name || 'Unknown';
+        
+        // 调试：输出前10条消息的详细结构
+        if (this.currentIndex < 10) {
+            console.log(`消息 #${this.currentIndex} [${msgType}]:`, message);
+        }
         
         switch (msgType) {
             case 'YGOProMsgNewTurn':
@@ -450,235 +502,159 @@ class ReplayPlayer {
             case 'YGOProMsgNewPhase':
                 this.handleNewPhase(message);
                 break;
-            case 'YGOProMsgFieldFinish':
-                this.updateFieldInfo(duel);
-                break;
             case 'YGOProMsgChangeLp':
                 this.handleChangeLp(message);
-                this.updateFieldInfo(duel);
                 break;
             case 'YGOProMsgPayLpCost':
+                this.handlePayLpCost(message);
+                break;
             case 'YGOProMsgDamage':
+                this.handleDamage(message);
+                break;
             case 'YGOProMsgRecover':
-                this.updateFieldInfo(duel);
+                this.handleRecover(message);
                 break;
             case 'YGOProMsgSummoning':
             case 'YGOProMsgSpSummoning':
                 this.handleSummoning(message);
-                this.updateFieldInfo(duel);
+                break;
+            case 'YGOProMsgChaining':
+                this.handleChaining(message);
+                break;
+            case 'YGOProMsgChainEnd':
+                this.handleChainEnd(message);
                 break;
             case 'YGOProMsgMove':
-            case 'YGOProMsgSet':
-            case 'YGOProMsgSwap':
-                this.updateFieldInfo(duel);
+                this.handleMove(message);
+                break;
+            case 'YGOProMsgAttack':
+                this.handleAttack(message);
+                break;
+            case 'YGOProMsgBattle':
+                this.handleBattle(message);
+                break;
+            case 'YGOProMsgHint':
+                this.handleHint(message);
+                break;
+            case 'YGOProMsgSelectCard':
+            case 'YGOProMsgSelectChain':
+            case 'YGOProMsgSelectPlace':
+            case 'YGOProMsgSelectPosition':
+                // 选择类消息，不记录
                 break;
             default:
-                this.updateFieldInfo(duel);
+                // 其他消息类型
                 break;
         }
+    }
+
+    getPlayerName(player) {
+        if (player === undefined || player === null || isNaN(player)) {
+            return '玩家?';
+        }
+        const idx = Math.max(0, Math.min(1, player));
+        return (this.playerNames && this.playerNames[idx]) || `玩家${player}`;
     }
 
     handleNewTurn(message) {
-        this.logMessage(`=== 回合 ${message.turn} - 玩家 ${message.player} ===`);
+        // message 可能是对象或包含 raw 属性
+        const turn = message.turn ?? message.Turn ?? message.raw?.[0] ?? '?';
+        const player = message.player ?? message.Player ?? 0;
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-turn">=== 回合 ${turn} - ${playerName} ===</div>`);
     }
 
     handleNewPhase(message) {
-        const phases = {
-            0x01: '抽卡阶段',
-            0x02: '准备阶段',
-            0x04: '主要阶段1',
-            0x08: '战斗阶段',
-            0x10: '伤害步骤',
-            0x20: '伤害计算',
-            0x40: '战斗阶段结束',
-            0x80: '主要阶段2',
-            0x100: '结束阶段'
-        };
-        const phaseName = phases[message.phase] || `阶段(${message.phase})`;
-        this.logMessage(`进入 ${phaseName}`);
+        const phase = message.phase ?? message.Phase ?? message.raw?.[0] ?? 0;
+        const phaseName = PHASE_NAMES[phase] || `阶段(${phase})`;
+        this.logMessage(`<div class="log-phase">【${phaseName}】</div>`);
     }
 
     handleChangeLp(message) {
-        const player = message.player;
-        const lpElement = player === 0 ? this.elements.player0Lp : this.elements.player1Lp;
-        lpElement.textContent = message.lp;
-        this.logMessage(`玩家 ${player} LP: ${message.lp}`);
+        const player = message.player ?? message.Player ?? 0;
+        const oldLP = this.playerLP[player] || 8000;
+        const newLP = message.lp ?? message.LP ?? message.raw?.[1] ?? oldLP;
+        const diff = newLP - oldLP;
+        
+        this.playerLP[player] = newLP;
+        
+        const playerName = this.getPlayerName(player);
+        const diffText = diff >= 0 ? `+${diff}` : `${diff}`;
+        this.logMessage(`<div class="log-lp">${playerName} LP: ${newLP} (${diffText})</div>`);
+    }
+
+    handlePayLpCost(message) {
+        const player = message.player ?? message.Player ?? 0;
+        const cost = message.cost ?? message.Cost ?? message.raw?.[1] ?? '?';
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-cost">${playerName} 支付 ${cost} LP 作为代价</div>`);
+    }
+
+    handleDamage(message) {
+        const player = message.player ?? message.Player ?? 0;
+        const damage = message.damage ?? message.Damage ?? message.raw?.[1] ?? '?';
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-damage">${playerName} 受到 ${damage} 点伤害</div>`);
+    }
+
+    handleRecover(message) {
+        const player = message.player ?? message.Player ?? 0;
+        const recover = message.recover ?? message.Recover ?? message.raw?.[1] ?? '?';
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-recover">${playerName} 回复 ${recover} LP</div>`);
     }
 
     handleSummoning(message) {
-        const cardName = this.getCardName(message.code);
-        this.logMessage(`召唤: ${cardName} (${message.code})`);
+        const code = message.code ?? message.Code ?? message.raw?.[1] ?? 0;
+        const player = message.player ?? message.Player ?? 0;
+        const cardName = this.getCardName(code);
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-summon">${playerName} 召唤: <span class="card-name">${cardName}</span></div>`);
     }
 
-    updateFieldInfo(duel) {
-        try {
-            const fieldInfo = duel.queryFieldInfo();
-            if (!fieldInfo || !fieldInfo.field) return;
-
-            const field = fieldInfo.field;
-            
-            if (field.players && field.players.length >= 2) {
-                this.elements.player0Lp.textContent = field.players[0].lp;
-                this.elements.player1Lp.textContent = field.players[1].lp;
-            }
-
-            this.updateZones(duel, field);
-            
-        } catch (e) {
-            // 静默处理查询错误
-        }
+    handleChaining(message) {
+        const code = message.code ?? message.Code ?? 0;
+        const player = message.player ?? message.Player ?? 0;
+        const cardName = this.getCardName(code);
+        const playerName = this.getPlayerName(player);
+        this.logMessage(`<div class="log-chain">${playerName} 发动: <span class="card-name">${cardName}</span></div>`);
     }
 
-    updateZones(duel, field) {
-        this.clearFieldCards();
-
-        for (let player = 0; player < 2; player++) {
-            for (let seq = 0; seq < 5; seq++) {
-                this.updateZoneCard(duel, player, LOCATION.SZONE, seq, `szone${player}-${seq}`);
-            }
-            
-            for (let seq = 0; seq < 5; seq++) {
-                this.updateZoneCard(duel, player, LOCATION.MZONE, seq, `mzone${player}-${seq}`);
-            }
-
-            this.updateZoneCount(player, LOCATION.DECK, `deck${player}Count`, duel);
-            this.updateZoneCount(player, LOCATION.GRAVE, `grave${player}Count`, duel);
-            this.updateZoneCount(player, LOCATION.EXTRA, `extra${player}Count`, duel);
-            
-            this.updateHandCards(duel, player);
-        }
+    handleChainEnd(message) {
+        this.logMessage(`<div class="log-chain-end">连锁结束</div>`);
     }
 
-    updateZoneCard(duel, player, location, sequence, zoneId) {
-        try {
-            const queryFlag = QUERY.CODE | QUERY.POSITION;
-            const result = duel.queryCard({
-                player: player,
-                location: location,
-                sequence: sequence,
-                queryFlag: queryFlag
-            });
-
-            if (result && result.card && result.card.code) {
-                const zone = document.querySelector(`[data-zone="${zoneId}"]`);
-                if (zone) {
-                    const card = result.card;
-                    const isFaceDown = (card.position & POS.FACEUP) === 0;
-                    
-                    const img = document.createElement('img');
-                    img.className = 'card-image';
-                    img.dataset.code = card.code;
-                    img.dataset.zone = zoneId;
-                    
-                    if (isFaceDown) {
-                        img.src = this.getCardBackImage();
-                        img.style.opacity = '0.7';
-                    } else {
-                        img.src = this.getCardImageUrl(card.code);
-                    }
-                    
-                    zone.innerHTML = '';
-                    zone.appendChild(img);
-                }
-            }
-        } catch (e) {
-            // 区域为空
-        }
+    handleMove(message) {
+        // 移动消息，可选记录
     }
 
-    updateZoneCount(player, location, elementId, duel) {
-        try {
-            const count = duel.queryFieldCount({
-                player: player,
-                location: location
-            });
-            
-            const element = document.getElementById(elementId);
-            if (element) {
-                element.textContent = count;
-            }
-        } catch (e) {
-            // 忽略错误
-        }
+    handleAttack(message) {
+        const code = message.code ?? message.Code ?? 0;
+        const player = message.player ?? message.Player ?? 0;
+        const attackerName = this.getCardName(code);
+        const playerName = this.getPlayerName(player);
+        const targetPlayer = this.getPlayerName(1 - player);
+        this.logMessage(`<div class="log-attack">${playerName} 的 <span class="card-name">${attackerName}</span> 攻击 ${targetPlayer}</div>`);
     }
 
-    updateHandCards(duel, player) {
-        const container = document.getElementById(`hand${player}Cards`);
-        if (!container) return;
-        
-        container.innerHTML = '';
-        
-        try {
-            const queryFlag = QUERY.CODE;
-            const result = duel.queryFieldCard({
-                player: player,
-                location: LOCATION.HAND,
-                queryFlag: queryFlag
-            });
-
-            if (result && result.cards) {
-                for (const card of result.cards) {
-                    if (card.code) {
-                        const img = document.createElement('img');
-                        img.className = 'hand-card';
-                        img.src = this.getCardImageUrl(card.code);
-                        img.dataset.code = card.code;
-                        container.appendChild(img);
-                    }
-                }
-            }
-        } catch (e) {
-            // 手牌为空
-        }
+    handleBattle(message) {
+        // 战斗结果
     }
 
-    clearField() {
-        this.clearFieldCards();
-        
-        this.elements.player0Lp.textContent = '8000';
-        this.elements.player1Lp.textContent = '8000';
-        
-        for (let player = 0; player < 2; player++) {
-            ['deck', 'grave', 'extra'].forEach(zone => {
-                const element = document.getElementById(`${zone}${player}Count`);
-                if (element) element.textContent = '0';
-            });
-            
-            const handContainer = document.getElementById(`hand${player}Cards`);
-            if (handContainer) handContainer.innerHTML = '';
-        }
+    handleHint(message) {
+        // 提示消息，通常不记录
     }
 
-    clearFieldCards() {
-        document.querySelectorAll('.mzone, .szone').forEach(zone => {
-            zone.innerHTML = '';
-        });
-    }
-
-    getCardImageUrl(code) {
-        return this.imageUrlBase + code;
-    }
-
-    getCardBackImage() {
-        return `${this.getBaseUrl()}assets/images/card_back.jpg`;
-    }
-
-    getCardName(code) {
-        if (this.cardCache.has(code)) {
-            return this.cardCache.get(code).name;
-        }
-        return `#${code}`;
-    }
-
-    logMessage(text) {
+    logMessage(html) {
         const log = this.elements.messageLog;
         const entry = document.createElement('div');
         entry.className = 'log-entry';
-        entry.textContent = text;
+        entry.innerHTML = html;
         log.appendChild(entry);
         log.scrollTop = log.scrollHeight;
         
-        while (log.children.length > 100) {
+        // 保持最多500条记录
+        while (log.children.length > 500) {
             log.removeChild(log.firstChild);
         }
     }
@@ -686,10 +662,6 @@ class ReplayPlayer {
 
 document.addEventListener('DOMContentLoaded', () => {
     if (window.RAMSAY_REPLAY_CONFIG) {
-        try {
-            new ReplayPlayer();
-        } catch (e) {
-            console.error('初始化播放器失败:', e);
-        }
+        new ReplayPlayer();
     }
 });

@@ -154,11 +154,14 @@ class Replay {
 
         $filename = basename($filePath);
         
+        // 优先从文件名提取玩家名
+        $playerNamesFromFilename = $this->extractPlayerNamesFromFilename($filename);
+        
         $info = [
             'id' => md5($filename),
             'filename' => $filename,
             'file_path' => $filePath,
-            'player_names' => [],
+            'player_names' => $playerNamesFromFilename,
             'duel_rule' => '未知',
             'is_yrp2' => preg_match('/\.yrp2$/i', $filename) === 1,
             'file_size' => filesize($filePath),
@@ -188,37 +191,40 @@ class Replay {
                 $info['duel_rule'] = $this->getDuelRuleName($flag);
             }
 
-            $playerNames = [];
-            for ($i = 0; $i < 4; $i++) {
-                $nameLenByte = fread($fp, 1);
-                if (strlen($nameLenByte) < 1) {
-                    break;
-                }
-                $len = ord($nameLenByte);
-                if ($len > 0) {
-                    $nameBytes = fread($fp, $len * 2);
-                    if (strlen($nameBytes) >= 2) {
-                        $name = @mb_convert_encoding($nameBytes, 'UTF-8', 'UTF-16LE');
-                        if ($name === false) {
-                            $name = bin2hex($nameBytes);
-                        }
-                        $name = rtrim($name, "\0");
-                        $playerNames[] = $name;
+            // 尝试从 YRP 头部读取玩家名，但仅当文件名解析失败时使用
+            if (empty($playerNamesFromFilename) || (isset($playerNamesFromFilename[0]) && $playerNamesFromFilename[0] === '未知玩家')) {
+                $playerNames = [];
+                for ($i = 0; $i < 4; $i++) {
+                    $nameLenByte = fread($fp, 1);
+                    if (strlen($nameLenByte) < 1) {
+                        break;
                     }
-                } else {
-                    $playerNames[] = '';
+                    $len = ord($nameLenByte);
+                    if ($len > 0) {
+                        $nameBytes = fread($fp, $len * 2);
+                        if (strlen($nameBytes) >= 2) {
+                            // 直接解析 UTF-16LE
+                            $name = '';
+                            for ($j = 0; $j < strlen($nameBytes); $j += 2) {
+                                $charCode = ord($nameBytes[$j]) | (ord($nameBytes[$j + 1]) << 8);
+                                if ($charCode > 0 && $charCode < 0x10000) {
+                                    $name .= mb_convert_encoding('&#' . $charCode . ';', 'UTF-8', 'HTML-ENTITIES');
+                                }
+                            }
+                            $name = trim($name);
+                            if ($name) {
+                                $playerNames[] = $name;
+                            }
+                        }
+                    }
+                }
+
+                if (!empty($playerNames)) {
+                    $info['player_names'] = array_slice($playerNames, 0, 2);
                 }
             }
 
             fclose($fp);
-
-            if (!empty($playerNames)) {
-                $info['player_names'] = array_filter($playerNames);
-            }
-
-            if (empty($info['player_names'])) {
-                $info['player_names'] = $this->extractPlayerNamesFromFilename($filename);
-            }
 
             return $info;
 
@@ -236,15 +242,23 @@ class Replay {
      * @return array 玩家名数组
      */
     private function extractPlayerNamesFromFilename($filename) {
+        // 格式1: 2026-02-13 18-30-45 玩家1 VS 玩家2.yrp
+        if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s+(.+?)\s+VS\s+(.+?)(?:\s+\d+)?\.yrp2?$/i', $filename, $matches)) {
+            $player1 = trim($matches[1]);
+            $player2 = trim($matches[2]);
+            return [$player1, $player2];
+        }
+        
+        // 格式2: 玩家1 VS 玩家2.yrp
         if (preg_match('/^(.+?)\s+VS\s+(.+?)(?:\s+\d+)?\.yrp2?$/i', $filename, $matches)) {
             $player1 = trim($matches[1]);
             $player2 = trim($matches[2]);
-            
-            if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s+(.+)$/', $player1, $dtMatches)) {
-                $player1 = trim($dtMatches[1]);
-            }
-            
             return [$player1, $player2];
+        }
+        
+        // 格式3: 玩家1 vs. 玩家2.yrp
+        if (preg_match('/^(.+?)\s+vs\.?\s+(.+?)\.yrp2?$/i', $filename, $matches)) {
+            return [trim($matches[1]), trim($matches[2])];
         }
         
         return ['未知玩家', '未知玩家'];

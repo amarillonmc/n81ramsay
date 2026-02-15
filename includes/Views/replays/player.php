@@ -1,6 +1,6 @@
 <?php
 /**
- * 录像播放器页面
+ * 录像播放器页面 - 纯文本日志模式
  */
 ?>
 
@@ -37,93 +37,8 @@
     </div>
     
     <div class="player-main" id="playerMain" style="display: none;">
-        <div class="duel-field">
-            <div class="player-area player-1">
-                <div class="player-info-bar">
-                    <span class="player-name" id="player1Name">玩家 1</span>
-                    <span class="lp-display">LP: <span id="player1Lp">8000</span></span>
-                </div>
-                <div class="field-row">
-                    <div class="card-zone grave" data-zone="grave1">
-                        <span class="zone-label">墓地</span>
-                        <span class="card-count" id="grave1Count">0</span>
-                    </div>
-                    <div class="card-zone deck" data-zone="deck1">
-                        <span class="zone-label">卡组</span>
-                        <span class="card-count" id="deck1Count">0</span>
-                    </div>
-                    <div class="card-zone extra" data-zone="extra1">
-                        <span class="zone-label">额外</span>
-                        <span class="card-count" id="extra1Count">0</span>
-                    </div>
-                </div>
-                <div class="field-row szone-row">
-                    <div class="szone" data-zone="szone1-0"></div>
-                    <div class="szone" data-zone="szone1-1"></div>
-                    <div class="szone" data-zone="szone1-2"></div>
-                    <div class="szone" data-zone="szone1-3"></div>
-                    <div class="szone" data-zone="szone1-4"></div>
-                </div>
-                <div class="field-row mzone-row">
-                    <div class="mzone" data-zone="mzone1-0"></div>
-                    <div class="mzone" data-zone="mzone1-1"></div>
-                    <div class="mzone" data-zone="mzone1-2"></div>
-                    <div class="mzone" data-zone="mzone1-3"></div>
-                    <div class="mzone" data-zone="mzone1-4"></div>
-                </div>
-            </div>
-            
-            <div class="center-area">
-                <div class="message-log" id="messageLog">
-                    <div class="log-entry">准备就绪</div>
-                </div>
-            </div>
-            
-            <div class="player-area player-0">
-                <div class="field-row mzone-row">
-                    <div class="mzone" data-zone="mzone0-0"></div>
-                    <div class="mzone" data-zone="mzone0-1"></div>
-                    <div class="mzone" data-zone="mzone0-2"></div>
-                    <div class="mzone" data-zone="mzone0-3"></div>
-                    <div class="mzone" data-zone="mzone0-4"></div>
-                </div>
-                <div class="field-row szone-row">
-                    <div class="szone" data-zone="szone0-0"></div>
-                    <div class="szone" data-zone="szone0-1"></div>
-                    <div class="szone" data-zone="szone0-2"></div>
-                    <div class="szone" data-zone="szone0-3"></div>
-                    <div class="szone" data-zone="szone0-4"></div>
-                </div>
-                <div class="field-row">
-                    <div class="card-zone grave" data-zone="grave0">
-                        <span class="zone-label">墓地</span>
-                        <span class="card-count" id="grave0Count">0</span>
-                    </div>
-                    <div class="card-zone deck" data-zone="deck0">
-                        <span class="zone-label">卡组</span>
-                        <span class="card-count" id="deck0Count">0</span>
-                    </div>
-                    <div class="card-zone extra" data-zone="extra0">
-                        <span class="zone-label">额外</span>
-                        <span class="card-count" id="extra0Count">0</span>
-                    </div>
-                </div>
-                <div class="player-info-bar">
-                    <span class="player-name" id="player0Name">玩家 0</span>
-                    <span class="lp-display">LP: <span id="player0Lp">8000</span></span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="hand-area">
-            <div class="hand" id="hand0">
-                <h4>玩家 0 手牌</h4>
-                <div class="hand-cards" id="hand0Cards"></div>
-            </div>
-            <div class="hand" id="hand1">
-                <h4>玩家 1 手牌</h4>
-                <div class="hand-cards" id="hand1Cards"></div>
-            </div>
+        <div class="message-log" id="messageLog">
+            <div class="log-entry">准备就绪</div>
         </div>
         
         <div class="controls">
@@ -171,7 +86,7 @@ window.RAMSAY_REPLAY_CONFIG = {
 
 <style>
 .replay-player-container {
-    max-width: 1400px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
 }
@@ -279,154 +194,77 @@ window.RAMSAY_REPLAY_CONFIG = {
     padding: 20px;
 }
 
-.duel-field {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-height: 500px;
-}
-
-.player-area {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.player-info-bar {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 15px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 6px;
-    color: #fff;
-}
-
-.player-name {
-    font-weight: 600;
-}
-
-.lp-display {
-    font-size: 18px;
-    color: #ffd700;
-}
-
-.field-row {
-    display: flex;
-    gap: 8px;
-    justify-content: center;
-}
-
-.card-zone {
-    width: 70px;
-    height: 90px;
-    background: rgba(255,255,255,0.05);
-    border: 2px dashed rgba(255,255,255,0.2);
-    border-radius: 6px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255,255,255,0.5);
-    font-size: 12px;
-}
-
-.card-zone .zone-label {
-    margin-bottom: 5px;
-}
-
-.card-zone .card-count {
-    font-size: 18px;
-    font-weight: bold;
-}
-
-.mzone,
-.szone {
-    width: 70px;
-    height: 90px;
-    background: rgba(255,255,255,0.05);
-    border: 2px solid rgba(255,255,255,0.1);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.mzone {
-    border-color: rgba(255,100,100,0.3);
-}
-
-.szone {
-    border-color: rgba(100,100,255,0.3);
-}
-
-.mzone .card-image,
-.szone .card-image {
-    width: 100%;
-    height: 100%;
-    border-radius: 4px;
-    object-fit: cover;
-}
-
-.center-area {
-    display: flex;
-    justify-content: center;
-    padding: 10px;
-}
-
 .message-log {
     width: 100%;
-    max-width: 600px;
-    height: 80px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 6px;
-    padding: 10px;
+    height: 500px;
+    background: #0d0d1a;
+    border-radius: 8px;
+    padding: 15px;
     overflow-y: auto;
-    color: #fff;
-    font-size: 13px;
+    color: #e0e0e0;
+    font-size: 14px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    line-height: 1.6;
 }
 
 .log-entry {
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
+    padding: 2px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.hand-area {
-    display: flex;
-    gap: 20px;
-    margin-top: 15px;
-    padding: 15px;
-    background: rgba(255,255,255,0.05);
-    border-radius: 8px;
+.log-turn {
+    color: #ffd700;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 8px 0;
+    margin-top: 10px;
+    border-bottom: 1px solid rgba(255,215,0,0.3);
 }
 
-.hand {
-    flex: 1;
+.log-phase {
+    color: #64b5f6;
+    padding: 4px 0;
 }
 
-.hand h4 {
+.log-lp {
+    color: #ef5350;
+}
+
+.log-cost {
+    color: #ff9800;
+}
+
+.log-damage {
+    color: #f44336;
+}
+
+.log-recover {
+    color: #4caf50;
+}
+
+.log-summon {
+    color: #81c784;
+}
+
+.log-chain {
+    color: #ce93d8;
+}
+
+.log-chain-end {
+    color: #90a4ae;
+    font-style: italic;
+}
+
+.log-attack {
+    color: #ff7043;
+}
+
+.card-name {
     color: #fff;
-    margin: 0 0 10px;
-    font-size: 14px;
-}
-
-.hand-cards {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.hand-card {
-    width: 60px;
-    height: 80px;
-    border-radius: 4px;
-    object-fit: cover;
-    border: 2px solid transparent;
-    transition: transform 0.2s, border-color 0.2s;
-}
-
-.hand-card:hover {
-    transform: translateY(-10px);
-    border-color: #ffd700;
+    font-weight: bold;
+    background: rgba(255,255,255,0.1);
+    padding: 1px 6px;
+    border-radius: 3px;
 }
 
 .controls {
@@ -490,7 +328,7 @@ window.RAMSAY_REPLAY_CONFIG = {
 .progress-text {
     color: #fff;
     font-size: 14px;
-    min-width: 80px;
+    min-width: 100px;
     text-align: right;
 }
 
@@ -523,30 +361,22 @@ window.RAMSAY_REPLAY_CONFIG = {
     background: #e0e0e0;
 }
 
-.card-tooltip {
-    position: absolute;
-    z-index: 100;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    padding: 10px;
-    max-width: 300px;
+/* 滚动条样式 */
+.message-log::-webkit-scrollbar {
+    width: 8px;
 }
 
-.card-tooltip img {
-    width: 100px;
-    float: left;
-    margin-right: 10px;
+.message-log::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.05);
     border-radius: 4px;
 }
 
-.card-tooltip .card-name {
-    font-weight: 600;
-    margin-bottom: 5px;
+.message-log::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.2);
+    border-radius: 4px;
 }
 
-.card-tooltip .card-desc {
-    font-size: 12px;
-    color: #666;
+.message-log::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.3);
 }
 </style>
