@@ -164,11 +164,10 @@ window.RAMSAY_REPLAY_CONFIG = {
     replayFile: <?php echo json_encode($replayInfo['filename']); ?>,
     replayUrl: '?controller=replay&action=file&file=' + encodeURIComponent(<?php echo json_encode($replayInfo['filename']); ?>),
     databasesUrl: '?controller=replay&action=databases',
-    imageUrlTemplate: '?controller=replay&action=cardimage&type={type}&id={id}',
     playerNames: <?php echo json_encode($replayInfo['player_names']); ?>
 };
 </script>
-<script type="module" src="<?php echo BASE_URL; ?>assets/js/replay-player.js"></script>
+<script type="module" src="<?php echo BASE_URL; ?>assets/js/replay-player.bundle.js"></script>
 
 <style>
 .replay-player-container {

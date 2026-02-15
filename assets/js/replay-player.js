@@ -1,20 +1,16 @@
 /**
- * RAMSAY 录像播放器 (生产环境版本)
- * 直接加载编译后的模块
+ * RAMSAY 录像播放器
+ * 使用 koishipro-core.js 实现 YRP/YRP2 回放功能
  * 
- * 构建说明：
- * 1. 运行 npm install 安装依赖
- * 2. 运行 npm run build 构建前端资源
- * 3. 将 dist/assets/js/replay-player-*.js 复制到 assets/js/replay-player.bundle.js
- * 4. 将 node_modules/sql.js/dist/sql-wasm.wasm 复制到 assets/sql-wasm.wasm
+ * 依赖通过 importmap 在 HTML 中配置
  */
 
 import {
     createOcgcoreWrapper,
     playYrpStep,
-    SqljsCardReader,
-    MapScriptReader
+    SqljsCardReader
 } from 'koishipro-core.js';
+
 import initSqlJs from 'sql.js';
 
 const LOCATION = {
@@ -139,31 +135,46 @@ class ReplayPlayer {
 
     async load() {
         try {
-            this.setLoadingProgress(10, '初始化 SQL.js...');
+            this.setLoadingProgress(5, '初始化 SQL.js...');
+            
             const SQL = await initSqlJs({
-                locateFile: file => this.resolveAssetUrl(`assets/sql-wasm.wasm`)
+                locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/sql-wasm.wasm`
             });
             
-            this.setLoadingProgress(20, '加载卡片数据库...');
+            this.setLoadingProgress(15, '加载卡片数据库...');
             await this.loadCardDatabases(SQL);
             
-            this.setLoadingProgress(50, '加载 OCGcore WASM...');
+            this.setLoadingProgress(35, '下载 OCGcore WASM...');
+            const wasmResponse = await fetch('https://cdn.jsdelivr.net/npm/koishipro-core.js@1.3.4/dist/vendor/wasm_esm/libocgcore.wasm');
+            if (!wasmResponse.ok) {
+                throw new Error(`下载 OCGcore WASM 失败: ${wasmResponse.status}`);
+            }
+            const wasmBinary = new Uint8Array(await wasmResponse.arrayBuffer());
+            
+            this.setLoadingProgress(45, '初始化 OCGcore...');
             this.wrapper = await createOcgcoreWrapper({
                 scriptBufferSize: 0x200000,
-                logBufferSize: 2048
+                logBufferSize: 2048,
+                wasmBinary: wasmBinary
             });
 
-            this.setLoadingProgress(60, '配置卡片读取器...');
+            this.setLoadingProgress(55, '配置卡片读取器...');
             this.wrapper.setCardReader(SqljsCardReader(this.cardDatabase));
 
-            this.setLoadingProgress(70, '下载录像文件...');
+            // 设置空的脚本读取器，避免 fs 模块调用
+            // 录像回放不需要实际的脚本执行
+            this.setLoadingProgress(60, '配置脚本读取器...');
+            const emptyScriptReader = () => null;
+            this.wrapper.setScriptReader(emptyScriptReader);
+
+            this.setLoadingProgress(65, '下载录像文件...');
             const yrpResponse = await fetch(this.config.replayUrl);
             if (!yrpResponse.ok) {
                 throw new Error(`下载录像失败: ${yrpResponse.status}`);
             }
             this.yrpData = new Uint8Array(await yrpResponse.arrayBuffer());
 
-            this.setLoadingProgress(80, '解析录像数据...');
+            this.setLoadingProgress(75, '解析录像数据...');
             await this.parseReplay();
 
             this.setLoadingProgress(100, '准备就绪');
@@ -172,7 +183,7 @@ class ReplayPlayer {
                 this.elements.loadingOverlay.style.display = 'none';
                 this.elements.playerMain.style.display = 'block';
                 this.updateProgress();
-            }, 500);
+            }, 300);
 
         } catch (error) {
             console.error('加载失败:', error);
@@ -180,19 +191,14 @@ class ReplayPlayer {
         }
     }
 
-    resolveAssetUrl(path) {
-        const base = document.querySelector('base');
-        if (base) {
-            return base.href + path;
-        }
-        return path;
-    }
-
-    getBasePath() {
+    getBaseUrl() {
         let basePath = window.location.pathname;
         const lastSlash = basePath.lastIndexOf('/');
         if (lastSlash > 0) {
             basePath = basePath.substring(0, lastSlash + 1);
+        }
+        if (!basePath.endsWith('/')) {
+            basePath += '/';
         }
         return basePath;
     }
@@ -207,15 +213,24 @@ class ReplayPlayer {
         const databases = data.databases;
         
         this.cardDatabase = null;
+        this.imageUrlBase = data.image_url;
         
+        if (!databases || databases.length === 0) {
+            console.warn('没有找到卡片数据库');
+            return;
+        }
+
         for (let i = 0; i < databases.length; i++) {
             const dbInfo = databases[i];
-            const percent = 20 + (i / databases.length) * 25;
-            this.setLoadingProgress(percent, `加载 ${dbInfo.name}...`);
+            const percent = 15 + (i / databases.length) * 20;
+            this.setLoadingProgress(Math.round(percent), `加载 ${dbInfo.name}...`);
             
             try {
                 const dbResponse = await fetch(dbInfo.url);
-                if (!dbResponse.ok) continue;
+                if (!dbResponse.ok) {
+                    console.warn(`加载数据库 ${dbInfo.name} 失败: HTTP ${dbResponse.status}`);
+                    continue;
+                }
                 
                 const dbData = new Uint8Array(await dbResponse.arrayBuffer());
                 const db = new SQL.Database(dbData);
@@ -229,8 +244,6 @@ class ReplayPlayer {
                 console.warn(`加载数据库 ${dbInfo.name} 失败:`, e);
             }
         }
-
-        this.imageUrlTemplate = data.image_urls;
     }
 
     async mergeDatabases(mainDb, additionalDb) {
@@ -279,7 +292,8 @@ class ReplayPlayer {
                 });
             }
         } catch (e) {
-            if (e.message && e.message.includes('Got MSG_RETRY')) {
+            console.error('解析录像错误:', e);
+            if (e.message && e.message.includes('MSG_RETRY')) {
                 console.warn('录像包含 MSG_RETRY，可能不完整');
             } else {
                 throw e;
@@ -289,6 +303,8 @@ class ReplayPlayer {
         if (this.messages.length === 0) {
             throw new Error('录像中没有有效消息');
         }
+        
+        this.logMessage(`解析完成，共 ${this.messages.length} 条消息`);
     }
 
     togglePlay() {
@@ -333,6 +349,7 @@ class ReplayPlayer {
                 this.scheduleNextStep();
             } else {
                 this.pause();
+                this.logMessage('播放完成');
             }
         }, delay);
     }
@@ -369,7 +386,7 @@ class ReplayPlayer {
 
     seekTo(event) {
         const rect = this.elements.playbackProgress.getBoundingClientRect();
-        const percent = (event.clientX - rect.left) / rect.width;
+        const percent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
         const newIndex = Math.floor(percent * this.messages.length);
         
         this.currentIndex = Math.max(0, Math.min(newIndex, this.messages.length - 1));
@@ -378,7 +395,9 @@ class ReplayPlayer {
     }
 
     updateProgress() {
-        const percent = (this.currentIndex / this.messages.length) * 100;
+        const percent = this.messages.length > 0 
+            ? (this.currentIndex / this.messages.length) * 100 
+            : 0;
         this.elements.progressFill.style.width = `${percent}%`;
         this.elements.progressText.textContent = `${this.currentIndex} / ${this.messages.length}`;
     }
@@ -389,8 +408,7 @@ class ReplayPlayer {
         
         if (!message) return;
 
-        const msgType = message.constructor.name;
-        this.logMessage(`[${msgType}]`);
+        const msgType = message.constructor ? message.constructor.name : 'Unknown';
         
         switch (msgType) {
             case 'YGOProMsgNewTurn':
@@ -399,44 +417,32 @@ class ReplayPlayer {
             case 'YGOProMsgNewPhase':
                 this.handleNewPhase(message);
                 break;
-            case 'YGOProMsgMove':
-                this.handleMove(message, duel);
-                break;
-            case 'YGOProMsgSet':
-                this.handleSet(message);
-                break;
-            case 'YGOProMsgSwap':
-                this.handleSwap(message);
-                break;
             case 'YGOProMsgFieldFinish':
-                this.handleFieldFinish(duel);
+                this.updateFieldInfo(duel);
                 break;
             case 'YGOProMsgChangeLp':
                 this.handleChangeLp(message);
+                this.updateFieldInfo(duel);
                 break;
             case 'YGOProMsgPayLpCost':
-                this.handlePayLpCost(message);
-                break;
             case 'YGOProMsgDamage':
-                this.handleDamage(message);
-                break;
             case 'YGOProMsgRecover':
-                this.handleRecover(message);
+                this.updateFieldInfo(duel);
                 break;
             case 'YGOProMsgSummoning':
             case 'YGOProMsgSpSummoning':
                 this.handleSummoning(message);
+                this.updateFieldInfo(duel);
                 break;
-            case 'YGOProMsgChaining':
-            case 'YGOProMsgChainEnd':
-            case 'YGOProMsgChainSolved':
-            case 'YGOProMsgChainIgnored':
+            case 'YGOProMsgMove':
+            case 'YGOProMsgSet':
+            case 'YGOProMsgSwap':
+                this.updateFieldInfo(duel);
                 break;
             default:
+                this.updateFieldInfo(duel);
                 break;
         }
-        
-        this.updateFieldInfo(duel);
     }
 
     handleNewTurn(message) {
@@ -455,44 +461,15 @@ class ReplayPlayer {
             0x80: '主要阶段2',
             0x100: '结束阶段'
         };
-        const phaseName = phases[message.phase] || `未知阶段(${message.phase})`;
+        const phaseName = phases[message.phase] || `阶段(${message.phase})`;
         this.logMessage(`进入 ${phaseName}`);
-    }
-
-    handleMove(message, duel) {
-        // Move消息包含卡片移动信息
-    }
-
-    handleSet(message) {
-        // 设置卡片
-    }
-
-    handleSwap(message) {
-        // 交换卡片位置
-    }
-
-    handleFieldFinish(duel) {
-        // 字段初始化完成
-        this.updateFieldInfo(duel);
     }
 
     handleChangeLp(message) {
         const player = message.player;
         const lpElement = player === 0 ? this.elements.player0Lp : this.elements.player1Lp;
         lpElement.textContent = message.lp;
-        this.logMessage(`玩家 ${player} LP 变为 ${message.lp}`);
-    }
-
-    handlePayLpCost(message) {
-        this.logMessage(`玩家 ${message.player} 支付 ${message.cost} LP`);
-    }
-
-    handleDamage(message) {
-        this.logMessage(`玩家 ${message.player} 受到 ${message.damage} 伤害`);
-    }
-
-    handleRecover(message) {
-        this.logMessage(`玩家 ${message.player} 回复 ${message.recover} LP`);
+        this.logMessage(`玩家 ${player} LP: ${message.lp}`);
     }
 
     handleSummoning(message) {
@@ -515,7 +492,7 @@ class ReplayPlayer {
             this.updateZones(duel, field);
             
         } catch (e) {
-            console.warn('更新字段信息失败:', e);
+            // 静默处理查询错误
         }
     }
 
@@ -541,7 +518,7 @@ class ReplayPlayer {
 
     updateZoneCard(duel, player, location, sequence, zoneId) {
         try {
-            const queryFlag = QUERY.CODE | QUERY.POSITION | QUERY.ATTACK | QUERY.DEFENSE | QUERY.LEVEL | QUERY.RANK;
+            const queryFlag = QUERY.CODE | QUERY.POSITION;
             const result = duel.queryCard({
                 player: player,
                 location: location,
@@ -566,9 +543,6 @@ class ReplayPlayer {
                     } else {
                         img.src = this.getCardImageUrl(card.code);
                     }
-                    
-                    img.addEventListener('mouseenter', (e) => this.showCardTooltip(e, card));
-                    img.addEventListener('mouseleave', () => this.hideCardTooltip());
                     
                     zone.innerHTML = '';
                     zone.appendChild(img);
@@ -602,7 +576,7 @@ class ReplayPlayer {
         container.innerHTML = '';
         
         try {
-            const queryFlag = QUERY.CODE | QUERY.POSITION;
+            const queryFlag = QUERY.CODE;
             const result = duel.queryFieldCard({
                 player: player,
                 location: LOCATION.HAND,
@@ -616,8 +590,6 @@ class ReplayPlayer {
                         img.className = 'hand-card';
                         img.src = this.getCardImageUrl(card.code);
                         img.dataset.code = card.code;
-                        img.addEventListener('mouseenter', (e) => this.showCardTooltip(e, card));
-                        img.addEventListener('mouseleave', () => this.hideCardTooltip());
                         container.appendChild(img);
                     }
                 }
@@ -651,18 +623,11 @@ class ReplayPlayer {
     }
 
     getCardImageUrl(code) {
-        const type = this.isDiyCard(code) ? 'diy' : 'tcg';
-        return this.config.imageUrlTemplate.replace('{type}', type).replace('{id}', code);
-    }
-
-    isDiyCard(code) {
-        const codeStr = String(code);
-        const diyPrefixes = ['81', '82', '83', '84', '85', '86', '87', '88', '89'];
-        return diyPrefixes.some(prefix => codeStr.startsWith(prefix));
+        return this.imageUrlBase + code;
     }
 
     getCardBackImage() {
-        return `${this.getBasePath()}assets/images/card_back.jpg`;
+        return `${this.getBaseUrl()}assets/images/card_back.jpg`;
     }
 
     getCardName(code) {
@@ -684,53 +649,14 @@ class ReplayPlayer {
             log.removeChild(log.firstChild);
         }
     }
-
-    showCardTooltip(event, card) {
-        this.hideCardTooltip();
-        
-        const tooltip = document.createElement('div');
-        tooltip.className = 'card-tooltip';
-        tooltip.id = 'cardTooltip';
-        
-        const img = document.createElement('img');
-        img.src = this.getCardImageUrl(card.code);
-        tooltip.appendChild(img);
-        
-        const info = document.createElement('div');
-        info.innerHTML = `
-            <div class="card-name">${this.getCardName(card.code)}</div>
-            <div class="card-stats">
-                ${card.attack !== undefined ? `ATK/${card.attack}` : ''}
-                ${card.defense !== undefined ? ` DEF/${card.defense}` : ''}
-            </div>
-        `;
-        tooltip.appendChild(info);
-        
-        document.body.appendChild(tooltip);
-        
-        const rect = event.target.getBoundingClientRect();
-        tooltip.style.left = `${rect.right + 10}px`;
-        tooltip.style.top = `${rect.top}px`;
-        
-        const tooltipRect = tooltip.getBoundingClientRect();
-        if (tooltipRect.right > window.innerWidth) {
-            tooltip.style.left = `${rect.left - tooltipRect.width - 10}px`;
-        }
-        if (tooltipRect.bottom > window.innerHeight) {
-            tooltip.style.top = `${window.innerHeight - tooltipRect.height - 10}px`;
-        }
-    }
-
-    hideCardTooltip() {
-        const tooltip = document.getElementById('cardTooltip');
-        if (tooltip) {
-            tooltip.remove();
-        }
-    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     if (window.RAMSAY_REPLAY_CONFIG) {
-        new ReplayPlayer();
+        try {
+            new ReplayPlayer();
+        } catch (e) {
+            console.error('初始化播放器失败:', e);
+        }
     }
 });

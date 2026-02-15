@@ -101,7 +101,7 @@ class ReplayController {
 
         $result = $this->replayModel->getReplayList($page, $perPage);
 
-        echo json_encode($result);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -116,7 +116,7 @@ class ReplayController {
             return;
         }
 
-        if (!preg_match('/^[\w\-]+\.yrp2?$/', $filename)) {
+        if (!$this->isValidReplayFilename($filename)) {
             header('HTTP/1.0 400 Bad Request');
             echo json_encode(['error' => '无效的文件名']);
             return;
@@ -134,10 +134,28 @@ class ReplayController {
 
         header('Content-Type: ' . $mimeType);
         header('Content-Length: ' . strlen($content));
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Disposition: attachment; filename*=UTF-8\'\'' . rawurlencode($filename));
         header('Cache-Control: public, max-age=3600');
 
         echo $content;
+    }
+
+    /**
+     * 验证录像文件名是否有效
+     *
+     * @param string $filename 文件名
+     * @return bool 是否有效
+     */
+    private function isValidReplayFilename($filename) {
+        if (preg_match('/\.\./', $filename)) {
+            return false;
+        }
+        
+        if (!preg_match('/\.yrp2?$/i', $filename)) {
+            return false;
+        }
+        
+        return true;
     }
 
     /**
@@ -156,8 +174,8 @@ class ReplayController {
 
         echo json_encode([
             'databases' => $dbs,
-            'image_urls' => $this->replayModel->getCardImageUrls()
-        ]);
+            'image_url' => $this->replayModel->getCardImageUrls()
+        ], JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -173,7 +191,7 @@ class ReplayController {
         }
 
         $name = basename($name);
-        if (!preg_match('/^[\w\-]+\.cdb$/', $name)) {
+        if (!preg_match('/^[\w\-]+\.cdb$/i', $name)) {
             header('HTTP/1.0 400 Bad Request');
             echo json_encode(['error' => '无效的数据库名']);
             return;
@@ -196,9 +214,9 @@ class ReplayController {
 
     /**
      * API: 获取卡图
+     * 自动判断卡片类型：先查找DIY卡图路径，找不到再查找TCG卡图路径
      */
     public function cardimage() {
-        $type = isset($_GET['type']) ? $_GET['type'] : 'diy';
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
         if ($id <= 0) {
@@ -208,24 +226,26 @@ class ReplayController {
 
         $imagePath = null;
 
-        if ($type === 'tcg' && defined('TCG_CARD_IMAGE_PATH') && TCG_CARD_IMAGE_PATH) {
-            $tcgPath = TCG_CARD_IMAGE_PATH . '/' . $id . '.jpg';
-            if (file_exists($tcgPath)) {
-                $imagePath = $tcgPath;
-            }
-        }
-
-        if (!$imagePath && defined('CARD_DATA_PATH')) {
+        // 优先查找 DIY 卡图路径
+        if (defined('CARD_DATA_PATH')) {
             $diyPath = CARD_DATA_PATH . '/pics/' . $id . '.jpg';
             if (file_exists($diyPath)) {
                 $imagePath = $diyPath;
             }
+            
+            if (!$imagePath) {
+                $thumbPath = CARD_DATA_PATH . '/pics/thumbnail/' . $id . '.jpg';
+                if (file_exists($thumbPath)) {
+                    $imagePath = $thumbPath;
+                }
+            }
         }
 
-        if (!$imagePath && $type === 'diy') {
-            $thumbPath = CARD_DATA_PATH . '/pics/thumbnail/' . $id . '.jpg';
-            if (file_exists($thumbPath)) {
-                $imagePath = $thumbPath;
+        // 找不到则查找 TCG 卡图路径
+        if (!$imagePath && defined('TCG_CARD_IMAGE_PATH') && TCG_CARD_IMAGE_PATH) {
+            $tcgPath = TCG_CARD_IMAGE_PATH . '/' . $id . '.jpg';
+            if (file_exists($tcgPath)) {
+                $imagePath = $tcgPath;
             }
         }
 

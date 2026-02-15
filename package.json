@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node -e \"require('fs').copyFileSync('dist/replay-player.bundle.js', 'assets/js/replay-player.bundle.js')\"",
     "preview": "vite preview",
     "postinstall": "node -e \"const fs=require('fs');const src='node_modules/sql.js/dist/sql-wasm.wasm';const dest='assets/sql-wasm.wasm';if(fs.existsSync(src)){fs.copyFileSync(src,dest);console.log('Copied sql-wasm.wasm to assets/')}else{console.log('sql-wasm.wasm not found, skipping')}\""
   },

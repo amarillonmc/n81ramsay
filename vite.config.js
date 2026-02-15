@@ -1,38 +1,43 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { builtinModules } from 'module';
 
 export default defineConfig({
     root: '.',
-    publicDir: 'assets',
+    publicDir: 'public',
     build: {
         outDir: 'dist',
-        emptyOutDir: false,
+        emptyOutDir: true,
+        lib: {
+            entry: resolve(__dirname, 'assets/js/replay-player.js'),
+            name: 'ReplayPlayer',
+            formats: ['es'],
+            fileName: () => 'replay-player.bundle.js'
+        },
         rollupOptions: {
-            input: {
-                'replay-player': resolve(__dirname, 'assets/js/replay-player.js')
-            },
+            external: [],
             output: {
-                entryFileNames: 'assets/js/[name]-[hash].js',
-                chunkFileNames: 'assets/js/[name]-[hash].js',
-                assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
+                inlineDynamicImports: true,
+                manualChunks: undefined
             }
-        }
-    },
-    server: {
-        port: 3000,
-        proxy: {
-            '/?controller': {
-                target: 'http://localhost:80',
-                changeOrigin: true
-            }
-        }
-    },
-    optimizeDeps: {
-        exclude: ['koishipro-core.js']
+        },
+        target: 'es2020',
+        minify: false,
+        sourcemap: true
     },
     resolve: {
         alias: {
-            '@': resolve(__dirname, 'assets')
+            'fs': resolve(__dirname, 'assets/js/shims/empty.js'),
+            'path': resolve(__dirname, 'assets/js/shims/empty.js'),
+            'buffer': resolve(__dirname, 'assets/js/shims/buffer.js'),
+            'process': resolve(__dirname, 'assets/js/shims/process.js'),
+            'stream': resolve(__dirname, 'assets/js/shims/empty.js'),
+            'util': resolve(__dirname, 'assets/js/shims/empty.js'),
+            'events': resolve(__dirname, 'assets/js/shims/empty.js')
         }
+    },
+    define: {
+        'process.env.NODE_ENV': '"production"',
+        'global': 'globalThis'
     }
 });

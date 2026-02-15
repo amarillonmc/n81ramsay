@@ -27,6 +27,7 @@ class Replay {
 
     /**
      * 扫描录像目录并获取所有录像文件
+     * 优化版：从文件名提取信息，不解析文件内容
      *
      * @param int $page 页码
      * @param int $perPage 每页数量
@@ -46,12 +47,21 @@ class Replay {
             ];
         }
 
-        $files = glob($this->replayPath . '/*.yrp');
-        $yrp2Files = glob($this->replayPath . '/*.yrp2');
-        $files = array_merge($files, $yrp2Files);
+        $iterator = new FilesystemIterator($this->replayPath, FilesystemIterator::SKIP_DOTS);
+        
+        $files = [];
+        foreach ($iterator as $file) {
+            if ($file->isFile() && preg_match('/\.yrp2?$/i', $file->getFilename())) {
+                $files[] = [
+                    'filename' => $file->getFilename(),
+                    'mtime' => $file->getMTime(),
+                    'size' => $file->getSize()
+                ];
+            }
+        }
 
         usort($files, function($a, $b) {
-            return filemtime($b) - filemtime($a);
+            return $b['mtime'] - $a['mtime'];
         });
 
         $total = count($files);
@@ -64,8 +74,8 @@ class Replay {
 
         $pagedFiles = array_slice($files, $offset, $perPage);
 
-        foreach ($pagedFiles as $file) {
-            $replayInfo = $this->parseReplayHeader($file);
+        foreach ($pagedFiles as $fileData) {
+            $replayInfo = $this->parseReplayInfoFromFilename($fileData);
             if ($replayInfo) {
                 $replays[] = $replayInfo;
             }
@@ -81,7 +91,58 @@ class Replay {
     }
 
     /**
-     * 解析 YRP 文件头获取基本信息
+     * 从文件名解析录像信息
+     * 文件名格式: 2026-02-13 18-30-45 玩家1 VS 玩家2.yrp
+     *
+     * @param array $fileData 文件数据
+     * @return array|null 录像信息
+     */
+    public function parseReplayInfoFromFilename($fileData) {
+        $filename = $fileData['filename'];
+        
+        $info = [
+            'id' => md5($filename),
+            'filename' => $filename,
+            'file_path' => $this->replayPath . '/' . $filename,
+            'player_names' => [],
+            'duel_rule' => '未知',
+            'is_yrp2' => preg_match('/\.yrp2$/i', $filename) === 1,
+            'file_size' => $fileData['size'],
+            'modified_time' => date('Y-m-d H:i:s', $fileData['mtime'])
+        ];
+
+        if (preg_match('/\.yrp2$/i', $filename)) {
+            $info['duel_rule'] = 'YRP2';
+        } else {
+            $info['duel_rule'] = '标准';
+        }
+
+        if (preg_match('/^(.+?)\s+VS\s+(.+?)(?:\s+\d+)?\.yrp2?$/i', $filename, $matches)) {
+            $player1 = trim($matches[1]);
+            $player2 = trim($matches[2]);
+            
+            $datetime = null;
+            if (preg_match('/^(\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2})\s+(.+)$/', $player1, $dtMatches)) {
+                $datetime = $dtMatches[1];
+                $player1 = trim($dtMatches[2]);
+            }
+            
+            $info['player_names'] = [$player1, $player2];
+            
+            if ($datetime) {
+                $info['datetime'] = $datetime;
+            }
+        } elseif (preg_match('/^(.+?)\s+vs\.?\s+(.+?)\.yrp2?$/i', $filename, $matches)) {
+            $info['player_names'] = [trim($matches[1]), trim($matches[2])];
+        } else {
+            $info['player_names'] = ['未知玩家', '未知玩家'];
+        }
+
+        return $info;
+    }
+
+    /**
+     * 解析 YRP 文件头获取基本信息（仅用于播放页面）
      *
      * @param string $filePath 文件路径
      * @return array|null 录像信息
@@ -91,52 +152,59 @@ class Replay {
             return null;
         }
 
+        $filename = basename($filePath);
+        
+        $info = [
+            'id' => md5($filename),
+            'filename' => $filename,
+            'file_path' => $filePath,
+            'player_names' => [],
+            'duel_rule' => '未知',
+            'is_yrp2' => preg_match('/\.yrp2$/i', $filename) === 1,
+            'file_size' => filesize($filePath),
+            'modified_time' => date('Y-m-d H:i:s', filemtime($filePath))
+        ];
+
         $fp = fopen($filePath, 'rb');
         if (!$fp) {
-            return null;
+            return $info;
         }
 
         try {
             $header = fread($fp, 1);
             if (strlen($header) < 1) {
-                return null;
+                fclose($fp);
+                return $info;
             }
 
-            $version = ord($header[0]);
-            $isYrp2 = ($version === 0x87);
+            $isYrp2 = (ord($header[0]) === 0x87);
 
-            $id = fread($fp, 4);
-            if (strlen($id) < 4) {
-                return null;
-            }
-            $id = unpack('V', $id)[1];
-
+            $idBytes = fread($fp, 4);
             $versionBytes = fread($fp, 4);
-            if (strlen($versionBytes) < 4) {
-                return null;
-            }
-            $versionFlag = unpack('V', $versionBytes)[1];
-
             $flagBytes = fread($fp, 4);
-            if (strlen($flagBytes) < 4) {
-                return null;
-            }
-            $flag = unpack('V', $flagBytes)[1];
 
-            $duelRule = $this->getDuelRule($flag);
+            if (strlen($flagBytes) === 4) {
+                $flag = unpack('V', $flagBytes)[1];
+                $info['duel_rule'] = $this->getDuelRuleName($flag);
+            }
 
             $playerNames = [];
             for ($i = 0; $i < 4; $i++) {
-                $nameLen = fread($fp, 1);
-                if (strlen($nameLen) < 1) {
+                $nameLenByte = fread($fp, 1);
+                if (strlen($nameLenByte) < 1) {
                     break;
                 }
-                $len = ord($nameLen);
+                $len = ord($nameLenByte);
                 if ($len > 0) {
-                    $name = fread($fp, $len * 2);
-                    $name = mb_convert_encoding($name, 'UTF-8', 'UTF-16LE');
-                    $name = rtrim($name, "\0");
-                    $playerNames[] = $name;
+                    $nameBytes = fread($fp, $len * 2);
+                    if (strlen($nameBytes) >= 2) {
+                        $name = @mb_convert_encoding($nameBytes, 'UTF-8', 'UTF-16LE');
+                        if ($name === false) {
+                            $name = bin2hex($nameBytes);
+                        }
+                        $name = rtrim($name, "\0");
+                        $playerNames[] = $name;
+                    }
                 } else {
                     $playerNames[] = '';
                 }
@@ -144,30 +212,52 @@ class Replay {
 
             fclose($fp);
 
-            return [
-                'id' => md5(basename($filePath)),
-                'filename' => basename($filePath),
-                'file_path' => $filePath,
-                'player_names' => array_filter($playerNames),
-                'duel_rule' => $duelRule,
-                'is_yrp2' => $isYrp2,
-                'file_size' => filesize($filePath),
-                'modified_time' => date('Y-m-d H:i:s', filemtime($filePath))
-            ];
+            if (!empty($playerNames)) {
+                $info['player_names'] = array_filter($playerNames);
+            }
+
+            if (empty($info['player_names'])) {
+                $info['player_names'] = $this->extractPlayerNamesFromFilename($filename);
+            }
+
+            return $info;
+
         } catch (Exception $e) {
             fclose($fp);
             Utils::debug('解析录像头失败', ['错误' => $e->getMessage(), '文件' => $filePath]);
-            return null;
+            return $info;
         }
     }
 
     /**
-     * 根据标志获取决斗规则
+     * 从文件名提取玩家名
+     *
+     * @param string $filename 文件名
+     * @return array 玩家名数组
+     */
+    private function extractPlayerNamesFromFilename($filename) {
+        if (preg_match('/^(.+?)\s+VS\s+(.+?)(?:\s+\d+)?\.yrp2?$/i', $filename, $matches)) {
+            $player1 = trim($matches[1]);
+            $player2 = trim($matches[2]);
+            
+            if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}-\d{2}-\d{2}\s+(.+)$/', $player1, $dtMatches)) {
+                $player1 = trim($dtMatches[1]);
+            }
+            
+            return [$player1, $player2];
+        }
+        
+        return ['未知玩家', '未知玩家'];
+    }
+
+    /**
+     * 根据标志获取决斗规则名称
      *
      * @param int $flag 标志位
      * @return string 决斗规则名称
      */
-    private function getDuelRule($flag) {
+    private function getDuelRuleName($flag) {
+        $ruleIndex = $flag & 0x7;
         $rules = [
             0 => 'OCG',
             1 => 'TCG',
@@ -178,7 +268,6 @@ class Replay {
             6 => 'AI'
         ];
 
-        $ruleIndex = $flag & 0x7;
         return isset($rules[$ruleIndex]) ? $rules[$ruleIndex] : '未知';
     }
 
@@ -195,7 +284,7 @@ class Replay {
             return null;
         }
 
-        if (!preg_match('/\.yrp2?$/', $filename)) {
+        if (!preg_match('/\.yrp2?$/i', $filename)) {
             return null;
         }
 
@@ -215,7 +304,7 @@ class Replay {
             return null;
         }
 
-        if (!preg_match('/\.yrp2?$/', $filename)) {
+        if (!preg_match('/\.yrp2?$/i', $filename)) {
             return null;
         }
 
@@ -233,8 +322,11 @@ class Replay {
         if (defined('CARD_DATA_PATH') && is_dir(CARD_DATA_PATH)) {
             $diyDbs = glob(CARD_DATA_PATH . '/*.cdb');
             if ($diyDbs) {
+                $excluded = defined('EXCLUDED_CARD_DATABASES') ? json_decode(EXCLUDED_CARD_DATABASES, true) : [];
+                if (!is_array($excluded)) {
+                    $excluded = [];
+                }
                 foreach ($diyDbs as $db) {
-                    $excluded = defined('EXCLUDED_CARD_DATABASES') ? json_decode(EXCLUDED_CARD_DATABASES, true) : [];
                     if (!in_array(basename($db), $excluded)) {
                         $dbs[] = [
                             'path' => $db,
@@ -258,8 +350,7 @@ class Replay {
     }
 
     /**
-     * 合并所有卡片数据库为一个 SQL.js 兼容的 ArrayBuffer
-     * 实际上返回每个数据库的信息，前端分别加载后合并
+     * 获取卡片数据库信息列表
      *
      * @return array 数据库信息列表
      */
@@ -298,13 +389,10 @@ class Replay {
     /**
      * 获取卡图URL配置
      *
-     * @return array 卡图URL配置
+     * @return string 卡图URL模板
      */
     public function getCardImageUrls() {
         $baseUrl = defined('BASE_URL') ? BASE_URL : '/';
-        return [
-            'diy' => $baseUrl . 'api/cardimage?type=diy&id=',
-            'tcg' => $baseUrl . 'api/cardimage?type=tcg&id='
-        ];
+        return $baseUrl . '?controller=replay&action=cardimage&id=';
     }
 }

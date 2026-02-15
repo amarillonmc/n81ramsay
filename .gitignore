@@ -1,2 +1,4 @@
 config.user.php
 node_modules/
+dist/
+*.js.map

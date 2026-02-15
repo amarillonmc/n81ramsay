@@ -17,22 +17,18 @@ cd /path/to/n81ramsay
 npm install
 ```
 
-### 2. 复制 SQL.js WASM 文件
+安装完成后会自动将 `sql-wasm.wasm` 复制到 `assets/` 目录。
+
+### 2. 构建前端资源
 
 ```bash
-cp node_modules/sql.js/dist/sql-wasm.wasm assets/
+npm run build
 ```
 
-### 3. 构建前端资源（可选）
+这将使用 Vite 构建 `assets/js/replay-player.js` 并生成 `assets/js/replay-player.bundle.js`。
+WASM 文件（OCGcore）会内联到 bundle 中。
 
-如果需要开发调试：
-```bash
-npm run dev
-```
-
-生产环境可以直接使用源文件，Vite 开发服务器会自动处理模块加载。
-
-### 4. 配置录像目录
+### 3. 配置录像目录
 
 在 `config.user.php` 中添加：
 ```php
@@ -42,6 +38,9 @@ define('REPLAY_PATH', '/path/to/ygopro/replay');
 
 // 启用录像功能
 define('REPLAY_ENABLED', true);
+
+// TCG 卡图路径（可选）
+define('TCG_CARD_IMAGE_PATH', '/path/to/ygopro/pics');
 ```
 
 ## 文件结构
@@ -59,7 +58,9 @@ n81ramsay/
 │           └── player.php          # 播放器页
 ├── assets/
 │   ├── js/
-│   │   └── replay-player.js        # 前端播放器
+│   │   ├── replay-player.js        # 前端播放器源码
+│   │   ├── replay-player.bundle.js # 构建后的播放器（需要提交）
+│   │   └── shims/                  # Node.js polyfills
 │   ├── sql-wasm.wasm               # SQL.js WASM 文件
 │   └── images/
 │       └── card_back.jpg           # 默认卡背
@@ -81,7 +82,7 @@ n81ramsay/
 | `?controller=replay&action=file&file={filename}` | GET | 下载 YRP 文件 |
 | `?controller=replay&action=databases` | GET | 获取 CDB 数据库列表 |
 | `?controller=replay&action=database&name={name}` | GET | 下载单个 CDB 文件 |
-| `?controller=replay&action=cardimage&type={type}&id={id}` | GET | 获取卡图 |
+| `?controller=replay&action=cardimage&id={id}` | GET | 获取卡图 |
 
 ## 多 CDB 加载说明
 
@@ -97,17 +98,20 @@ define('TCG_CARD_DATA_PATH', '/path/to/cards.cdb'); // TCG 数据库
 
 ## 卡图路径配置
 
+系统自动按以下顺序查找卡图：
+1. `CARD_DATA_PATH/pics/{id}.jpg` - DIY 卡图
+2. `CARD_DATA_PATH/pics/thumbnail/{id}.jpg` - DIY 缩略图
+3. `TCG_CARD_IMAGE_PATH/{id}.jpg` - TCG 卡图
+
 ```php
-// DIY 卡图路径（自动从 CARD_DATA_PATH/pics/ 获取）
-// TCG 卡图路径
 define('TCG_CARD_IMAGE_PATH', '/path/to/pics');
 ```
 
 ## 故障排除
 
 ### WASM 加载失败
-- 确保 `assets/sql-wasm.wasm` 文件存在
-- 检查 Web 服务器 MIME 类型配置
+- 检查浏览器控制台错误信息
+- 确保 Web 服务器允许 .wasm 文件的 MIME 类型
 
 ### 录像解析失败
 - 检查录像文件是否完整
@@ -119,13 +123,23 @@ define('TCG_CARD_IMAGE_PATH', '/path/to/pics');
 - 检查 `TCG_CARD_IMAGE_PATH` 配置
 - 确认卡图文件名与卡片 ID 匹配
 
+### 构建失败
+- 确保 Node.js 版本 >= 16
+- 运行 `npm install` 重新安装依赖
+- 删除 `node_modules` 目录后重新安装
+
 ## 开发说明
 
 ### 修改前端代码
-编辑 `assets/js/replay-player.js`，然后在开发模式下运行 `npm run dev`。
+1. 编辑 `assets/js/replay-player.js`
+2. 运行 `npm run build` 重新构建
+3. 提交 `assets/js/replay-player.bundle.js` 文件
+
+### 开发调试
+运行 `npm run dev` 启动 Vite 开发服务器。
 
 ### 添加新的消息处理
 在 `ReplayPlayer` 类中添加对应的 `handle*` 方法。
 
 ### 自定义样式
-在视图文件 `includes/Views/replays/player.php` 中修改 `$extraCss` 变量。
+在视图文件 `includes/Views/replays/player.php` 中修改 `<style>` 部分。
