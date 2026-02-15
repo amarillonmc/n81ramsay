@@ -60,18 +60,31 @@ RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自�
 - 支持TCG卡片和DIY卡片的区分处理
 - 管理员可以强制更新统计信息
 
+### 录像回放（需安装Node.js依赖）
+- 在网页中播放YGOPro的YRP/YRP2录像文件
+- 自动加载多个CDB数据库（DIY卡 + TCG卡）
+- 支持双卡图路径（DIY卡图 + TCG卡图）
+- 逐步播放/暂停/快进/调速
+- 实时显示游戏状态（LP、场上卡片、手牌等）
+
 ## 技术实现
 
 - 基于PHP开发，无需额外框架
 - 使用SQLite数据库存储卡片和投票数据
 - 响应式设计，适配各种设备
 - 支持在IIS服务器上部署
+- 录像回放功能使用koishipro-core.js（OCGcore WASM封装）
 
 ## 环境要求
 
+### 基础要求
 - PHP 7.0+
 - SQLite 3
 - IIS服务器或其他支持PHP的Web服务器
+
+### 录像回放功能额外要求
+- Node.js 16+
+- npm
 
 ## 部署说明
 
@@ -82,6 +95,31 @@ RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自�
    - 当config.php和config.user.php同时存在相同的配置时，config.user.php中的配置值优先
 4. 访问网站根目录即可使用系统
 
+### 启用录像回放功能
+
+1. 安装Node.js依赖：
+   ```bash
+   npm install
+   ```
+   安装完成后会自动将 `sql-wasm.wasm` 复制到 `assets/` 目录。
+
+2. 在 `config.user.php` 中配置录像目录：
+   ```php
+   <?php
+   // 启用录像功能
+   define('REPLAY_ENABLED', true);
+   
+   // 录像文件目录（指向YGOPro服务器的replay目录）
+   define('REPLAY_PATH', '/path/to/ygopro/replay');
+   
+   // TCG卡图路径（可选）
+   define('TCG_CARD_IMAGE_PATH', '/path/to/ygopro/pics');
+   ```
+
+3. 访问 `?controller=replay` 即可使用录像回放功能。
+
+详细配置说明请参考 [docs/REPLAY_SETUP.md](docs/REPLAY_SETUP.md)。
+
 ## 目录结构
 
 ```
@@ -89,9 +127,11 @@ RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自�
 ├── index.php               # 入口文件
 ├── config.php              # 主配置文件
 ├── config.user.php         # 用户自定义配置文件（可选）
+├── package.json            # Node.js 依赖配置
 ├── assets/                 # 静态资源
 │   ├── css/                # 样式文件
 │   ├── js/                 # JavaScript文件
+│   ├── sql-wasm.wasm       # SQL.js WASM文件（npm install后生成）
 │   └── images/             # 图片资源
 ├── includes/               # 包含文件目录
 │   ├── Core/               # 核心功能
@@ -101,8 +141,9 @@ RAMSAY是一个专为no81游戏王DIY服务器设计的管理系统，旨在自�
 ├── data/                   # 数据存储目录
 │   └── cache/              # 缓存目录
 ├── deck_log/               # 卡组文件存储目录
-└── doc/                    # 文档目录
-    └── etc/                # 文档和开发记录
+├── docs/                   # 文档目录
+│   └── REPLAY_SETUP.md     # 录像功能配置说明
+└── node_modules/           # Node.js 依赖（不提交到仓库）
 ```
 
 ## 许可证

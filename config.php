@@ -262,6 +262,23 @@ if (!defined('DECKS_PER_PAGE')) {
     define('DECKS_PER_PAGE', 20); // 卡组列表每页显示数量
 }
 
+// 录像回放功能配置
+if (!defined('REPLAY_ENABLED')) {
+    define('REPLAY_ENABLED', true); // 是否启用录像回放功能
+}
+if (!defined('REPLAY_PATH')) {
+    // 录像文件目录路径
+    // 在生产环境中，这应该指向 YGOPro 服务器的 replay 目录
+    if ($isProduction) {
+        define('REPLAY_PATH', __DIR__ . '/replay');
+    } else {
+        define('REPLAY_PATH', __DIR__ . '/example/replay');
+    }
+}
+if (!defined('REPLAYS_PER_PAGE')) {
+    define('REPLAYS_PER_PAGE', 20); // 录像列表每页显示数量
+}
+
 // 错误处理配置
 if (defined('DEBUG_MODE') && DEBUG_MODE) {
     ini_set('display_errors', 1);

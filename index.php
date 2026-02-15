@@ -63,7 +63,8 @@ $controllerMap = [
     'card_ranking' => 'CardRankingController',
     'dialogue' => 'DialogueController',
     'api' => 'ApiController',
-    'deck' => 'DeckController'
+    'deck' => 'DeckController',
+    'replay' => 'ReplayController'
 ];
 
 // 特殊路由处理
