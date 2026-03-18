@@ -123,6 +123,7 @@ class VoteController {
                 $aliasCard = $this->cardModel->getCardById($card['alias']);
                 if ($aliasCard) {
                     $cardId = $card['alias'];
+                    $card = $aliasCard;
                 }
             }
 
@@ -133,8 +134,12 @@ class VoteController {
                 $errors[] = '请选择卡片';
             }
 
-            if ($environmentId <= 0) {
-                $errors[] = '请选择环境';
+            if (!$card) {
+                $errors[] = '卡片不存在';
+            }
+
+            if (!Utils::getEnvironmentById($environmentId)) {
+                $errors[] = '请选择有效的环境';
             }
 
             if ($status < 0 || $status > 3) {
@@ -383,8 +388,8 @@ class VoteController {
                 $errors[] = '请选择卡片';
             }
 
-            if ($environmentId <= 0) {
-                $errors[] = '请选择环境';
+            if (!Utils::getEnvironmentById($environmentId)) {
+                $errors[] = '请选择有效的环境';
             }
 
             if ($status < 0 || $status > 3) {
@@ -606,8 +611,8 @@ class VoteController {
             $errors[] = '请输入卡片ID列表';
         }
 
-        if ($environmentId <= 0) {
-            $errors[] = '请选择环境';
+        if (!Utils::getEnvironmentById($environmentId)) {
+            $errors[] = '请选择有效的环境';
         }
 
         if ($status < 0 || $status > 3) {
@@ -634,6 +639,10 @@ class VoteController {
             } else {
                 $invalidCardIds[] = $cardId;
             }
+        }
+
+        if (!empty($invalidCardIds)) {
+            $errors[] = '包含无效的卡片ID：' . implode('、', $invalidCardIds);
         }
 
         if (empty($validCardIds)) {
@@ -697,15 +706,38 @@ class VoteController {
         $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
         $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
 
+        if (!Utils::getEnvironmentById($environmentId)) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('请选择有效的环境'));
+            exit;
+        }
+
+        if ($status < 0 || $status > 3) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('请选择有效的禁限状态'));
+            exit;
+        }
+
+        if (empty($reason) || empty($initiatorId)) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('提交的高级投票参数不完整'));
+            exit;
+        }
+
         // 解析卡片ID列表
         $cardIds = $this->parseCardIds($cardIdsString);
         $validCardIds = [];
+        $invalidCardIds = [];
 
         foreach ($cardIds as $cardId) {
             $card = $this->cardModel->getCardById($cardId);
             if ($card) {
                 $validCardIds[] = $cardId;
+            } else {
+                $invalidCardIds[] = $cardId;
             }
+        }
+
+        if (!empty($invalidCardIds)) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('包含无效的卡片ID：' . implode('、', $invalidCardIds)));
+            exit;
         }
 
         if (empty($validCardIds)) {
