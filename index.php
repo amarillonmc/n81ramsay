@@ -5,19 +5,15 @@
  * 处理所有请求并路由到相应的控制器
  */
 
-// 加载配置文件
 require_once __DIR__ . '/config.php';
 
-// 自动加载类
 spl_autoload_register(function ($className) {
-    // 定义类文件的可能路径
     $paths = [
         __DIR__ . '/includes/Core/' . $className . '.php',
         __DIR__ . '/includes/Models/' . $className . '.php',
         __DIR__ . '/includes/Controllers/' . $className . '.php'
     ];
 
-    // 尝试加载类文件
     foreach ($paths as $path) {
         if (file_exists($path)) {
             require_once $path;
@@ -26,95 +22,74 @@ spl_autoload_register(function ($className) {
     }
 });
 
-// 使用查询参数来确定控制器和方法
+Auth::getInstance();
+Utils::rejectInvalidRequestData();
+
 $defaultController = 'card';
-$defaultMethod = 'index';
 if (defined('HOME_PAGE')) {
     switch (HOME_PAGE) {
         case 'home':
-            $defaultController = 'home';
-            break;
         case 'vote':
-            $defaultController = 'vote';
-            break;
         case 'card':
-        default:
-            $defaultController = 'card';
+            $defaultController = HOME_PAGE;
+            break;
     }
 }
 
-$controllerName = isset($_GET['controller']) ? $_GET['controller'] : $defaultController;
-$methodName = isset($_GET['action']) ? $_GET['action'] : $defaultMethod;
-$params = [];
-
-// 调试信息
-if (defined('DEBUG_MODE') && DEBUG_MODE) {
-    error_log("Route debug - Controller: $controllerName, Method: $methodName");
-}
-
-// 映射控制器名称到类名
-$controllerMap = [
-    'card' => 'CardController',
-    'vote' => 'VoteController',
-    'home' => 'HomeController',
-    'admin' => 'AdminController',
-    'banlist' => 'BanlistController',
-    'author' => 'AuthorController',
-    'card_ranking' => 'CardRankingController',
-    'dialogue' => 'DialogueController',
-    'api' => 'ApiController',
-    'deck' => 'DeckController',
-    'replay' => 'ReplayController'
+$routeMap = [
+    'card' => ['class' => 'CardController', 'actions' => ['index', 'detail', 'search', 'searchJson']],
+    'vote' => ['class' => 'VoteController', 'actions' => ['index', 'create', 'vote', 'createSeries', 'createAdvanced', 'submitAdvanced', 'deleteRecord']],
+    'home' => ['class' => 'HomeController', 'actions' => ['index']],
+    'admin' => ['class' => 'AdminController', 'actions' => ['login', 'logout', 'votes', 'closeVote', 'banlist', 'generate', 'reset', 'update', 'authors', 'identifyAuthors', 'addAuthor', 'deleteAuthor', 'editAuthor', 'tips', 'addTip', 'editTip', 'deleteTip', 'voterBans', 'addVoterBan', 'removeVoterBan', 'config']],
+    'banlist' => ['class' => 'BanlistController', 'actions' => ['index', 'generate', 'update', 'reset', 'reopenVote', 'deleteVote']],
+    'author' => ['class' => 'AuthorController', 'actions' => ['index', 'detail', 'update', 'clearCache', 'debug']],
+    'card_ranking' => ['class' => 'CardRankingController', 'actions' => ['index', 'update', 'clearCache']],
+    'dialogue' => ['class' => 'DialogueController', 'actions' => ['index', 'submit', 'submitDialogue', 'admin', 'reviewSubmission', 'deleteSubmission', 'addDialogue', 'editDialogue', 'deleteDialogue']],
+    'api' => ['class' => 'ApiController', 'actions' => ['index', 'test', 'getCardDetail', 'getSeriesCards']],
+    'deck' => ['class' => 'DeckController', 'actions' => ['index', 'detail', 'create', 'store', 'storeBatch', 'delete', 'comment', 'download']],
+    'replay' => ['class' => 'ReplayController', 'actions' => ['index', 'play', 'list', 'file', 'databases', 'database', 'script', 'cardimage']]
 ];
 
-// 特殊路由处理
-if ($controllerName === 'vote' && isset($_GET['id']) && !isset($_GET['action'])) {
-    // 如果是投票链接且没有指定action，则调用vote方法
-    $params = [$_GET['id']];
+$controllerName = Utils::getSafeParam($_GET, 'controller', 'slug', $defaultController, ROUTE_PARAM_MAX_LENGTH);
+$methodName = Utils::getSafeParam($_GET, 'action', 'slug', 'index', ROUTE_PARAM_MAX_LENGTH);
+
+if ($controllerName === null || $methodName === null) {
+    Utils::abort(400, 'Bad Request');
+}
+
+$params = [];
+if ($controllerName === 'vote' && !isset($_GET['action']) && isset($_GET['id'])) {
+    $voteLink = Utils::getSafeParam($_GET, 'id', 'hex8', null, 8);
+    if ($voteLink === null) {
+        Utils::abort(400, 'Bad Request');
+    }
     $methodName = 'vote';
+    $params = [$voteLink];
 }
 
-// 确定控制器类名
-$controllerClass = isset($controllerMap[$controllerName]) ? $controllerMap[$controllerName] : 'CardController';
-
-// 调试信息
-if (defined('DEBUG_MODE') && DEBUG_MODE) {
-    error_log("Route debug - Controller class: $controllerClass");
+if (!isset($routeMap[$controllerName])) {
+    Utils::abort(404, '404 Not Found');
 }
+if (!in_array($methodName, $routeMap[$controllerName]['actions'], true)) {
+    Utils::abort(404, '404 Not Found');
+}
+
+$controllerClass = $routeMap[$controllerName]['class'];
 
 try {
-    // 创建控制器实例
     $controller = new $controllerClass();
-
-    // 调试信息
-    if (defined('DEBUG_MODE') && DEBUG_MODE) {
-        error_log("Route debug - Controller instance created successfully");
-        error_log("Route debug - Method exists: " . (method_exists($controller, $methodName) ? 'yes' : 'no'));
+    if (!method_exists($controller, $methodName)) {
+        Utils::abort(404, '404 Not Found');
     }
-
-    // 调用方法
-    if (method_exists($controller, $methodName)) {
-        call_user_func_array([$controller, $methodName], $params);
-    } else {
-        // 如果方法不存在，则显示404页面
-        if (defined('DEBUG_MODE') && DEBUG_MODE) {
-            error_log("Route debug - Method $methodName not found in $controllerClass");
-        }
-        header('HTTP/1.0 404 Not Found');
-        echo '404 Not Found';
-    }
+    call_user_func_array([$controller, $methodName], $params);
 } catch (Exception $e) {
     if (defined('DEBUG_MODE') && DEBUG_MODE) {
-        error_log("Route debug - Exception: " . $e->getMessage());
-        error_log("Route debug - Trace: " . $e->getTraceAsString());
+        error_log('Route exception: ' . $e->getMessage());
     }
-    header('HTTP/1.0 500 Internal Server Error');
-    echo '500 Internal Server Error';
+    Utils::abort(500, '500 Internal Server Error');
 } catch (Error $e) {
     if (defined('DEBUG_MODE') && DEBUG_MODE) {
-        error_log("Route debug - Fatal Error: " . $e->getMessage());
-        error_log("Route debug - Trace: " . $e->getTraceAsString());
+        error_log('Route fatal error: ' . $e->getMessage());
     }
-    header('HTTP/1.0 500 Internal Server Error');
-    echo '500 Internal Server Error';
+    Utils::abort(500, '500 Internal Server Error');
 }

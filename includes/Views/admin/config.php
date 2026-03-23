@@ -5,6 +5,7 @@
 <?php endif; ?>
 
 <form method="POST" action="<?php echo BASE_URL; ?>?controller=admin&amp;action=config">
+    <?php Utils::renderCsrfFields('admin_config'); ?>
     <div class="table-responsive">
         <table class="table table-striped table-hover">
             <thead>

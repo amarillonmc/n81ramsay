@@ -44,6 +44,7 @@
                 </table>
 
                 <form id="create-vote-form" action="<?php echo BASE_URL; ?>?controller=vote&action=create" method="post">
+                    <?php Utils::renderCsrfFields('vote_create'); ?>
                     <input type="hidden" name="card_id" value="<?php echo $card['id']; ?>">
 
                     <div class="form-group">

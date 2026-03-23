@@ -34,6 +34,7 @@
         </div>
 
         <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=submitDialogue" method="post" class="submission-form">
+            <?php Utils::renderCsrfFields('dialogue_submit'); ?>
             <div class="form-group">
                 <label for="card_id">卡片ID <span class="required">*</span></label>
                 <input type="text" id="card_id" name="card_id" required placeholder="例如：33700001">

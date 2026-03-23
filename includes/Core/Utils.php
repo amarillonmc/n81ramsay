@@ -35,6 +35,340 @@ register_shutdown_function('cleanupTempFiles');
  * 提供各种工具函数
  */
 class Utils {
+
+    /**
+     * 输出HTTP错误并结束请求
+     *
+     * @param int $statusCode 状态码
+     * @param string $message 错误消息
+     */
+    public static function abort($statusCode, $message = '') {
+        http_response_code($statusCode);
+        if ($message !== '') {
+            echo self::escapeHtml($message);
+        }
+        exit;
+    }
+
+    /**
+     * 获取请求方法
+     *
+     * @return string
+     */
+    public static function getRequestMethod() {
+        return isset($_SERVER['REQUEST_METHOD']) ? strtoupper($_SERVER['REQUEST_METHOD']) : 'GET';
+    }
+
+    /**
+     * 检查参数是否为允许的标量值
+     *
+     * @param mixed $value 输入值
+     * @param int $maxLength 最大长度
+     * @return bool
+     */
+    public static function isAllowedScalar($value, $maxLength = 4096) {
+        if (is_array($value) || is_object($value)) {
+            return false;
+        }
+        if (is_bool($value) || is_int($value) || is_float($value) || $value === null) {
+            return true;
+        }
+        if (!is_string($value)) {
+            return false;
+        }
+        return strlen($value) <= $maxLength;
+    }
+
+    /**
+     * 获取安全的标量参数
+     */
+    public static function getSafeParam($source, $key, $type = 'string', $default = null, $maxLength = 4096) {
+        if (!isset($source[$key])) {
+            return $default;
+        }
+        $value = $source[$key];
+        if (!self::isAllowedScalar($value, $maxLength)) {
+            return null;
+        }
+        if (is_string($value)) {
+            $value = trim($value);
+        }
+        switch ($type) {
+            case 'int':
+                if ($value === '' || filter_var($value, FILTER_VALIDATE_INT) === false) {
+                    return null;
+                }
+                return (int) $value;
+            case 'slug':
+                if (!is_string($value) || !preg_match('/^[A-Za-z][A-Za-z0-9_]{0,63}$/', $value)) {
+                    return null;
+                }
+                return $value;
+            case 'hex8':
+                if (!is_string($value) || !preg_match('/^[a-f0-9]{8}$/', $value)) {
+                    return null;
+                }
+                return $value;
+            case 'string':
+            default:
+                return is_string($value) ? $value : (string) $value;
+        }
+    }
+
+    /**
+     * 拒绝包含数组污染的请求参数
+     */
+    public static function rejectInvalidRequestData() {
+        foreach (array($_GET, $_POST) as $bag) {
+            foreach ($bag as $key => $value) {
+                if (!self::isAllowedScalar($key, ROUTE_PARAM_MAX_LENGTH) || is_array($value)) {
+                    self::abort(400, 'Bad Request');
+                }
+            }
+        }
+    }
+
+    /**
+     * 生成CSRF Token
+     */
+    public static function generateCsrfToken($context) {
+        if (!isset($_SESSION['_csrf_tokens']) || !is_array($_SESSION['_csrf_tokens'])) {
+            $_SESSION['_csrf_tokens'] = array();
+        }
+        if (isset($_SESSION['_csrf_tokens'][$context])) {
+            $stored = $_SESSION['_csrf_tokens'][$context];
+            if ((time() - (int) $stored['created_at']) <= CSRF_TOKEN_TTL) {
+                return $stored['token'];
+            }
+        }
+        $token = bin2hex(random_bytes(16));
+        $_SESSION['_csrf_tokens'][$context] = array(
+            'token' => $token,
+            'created_at' => time()
+        );
+        return $token;
+    }
+
+    /**
+     * 验证CSRF Token
+     */
+    public static function validateCsrfToken($context, $token, $consume = false) {
+        if (!isset($_SESSION['_csrf_tokens'][$context])) {
+            return false;
+        }
+        $stored = $_SESSION['_csrf_tokens'][$context];
+        if ((time() - (int) $stored['created_at']) > CSRF_TOKEN_TTL) {
+            unset($_SESSION['_csrf_tokens'][$context]);
+            return false;
+        }
+        $valid = is_string($token) && hash_equals($stored['token'], $token);
+        if ($valid && $consume) {
+            unset($_SESSION['_csrf_tokens'][$context]);
+        }
+        return $valid;
+    }
+
+    /**
+     * 生成公开表单防机器人元数据
+     */
+    public static function issuePublicFormToken($context) {
+        if (!isset($_SESSION['_public_form_tokens']) || !is_array($_SESSION['_public_form_tokens'])) {
+            $_SESSION['_public_form_tokens'] = array();
+        }
+        if (isset($_SESSION['_public_form_tokens'][$context])) {
+            $stored = $_SESSION['_public_form_tokens'][$context];
+            if (empty($stored['used']) && (time() - (int) $stored['issued_at']) <= PUBLIC_FORM_NONCE_TTL) {
+                return array('nonce' => $stored['nonce'], 'issued_at' => $stored['issued_at']);
+            }
+        }
+        $issuedAt = time();
+        $nonce = bin2hex(random_bytes(16));
+        $_SESSION['_public_form_tokens'][$context] = array(
+            'nonce' => $nonce,
+            'issued_at' => $issuedAt,
+            'used' => false
+        );
+        return array('nonce' => $nonce, 'issued_at' => $issuedAt);
+    }
+
+    /**
+     * 验证公开表单请求
+     */
+    public static function validatePublicFormRequest($context, $data) {
+        $csrfToken = self::getSafeParam($data, 'csrf_token', 'string', '', 128);
+        if (empty($csrfToken) || !self::validateCsrfToken($context, $csrfToken, true)) {
+            return 'CSRF 校验失败';
+        }
+        if (!isset($_SESSION['_public_form_tokens'][$context])) {
+            return '表单令牌无效';
+        }
+        $stored = $_SESSION['_public_form_tokens'][$context];
+        $nonce = self::getSafeParam($data, 'form_nonce', 'string', '', 128);
+        $issuedAt = self::getSafeParam($data, 'form_issued_at', 'int', null);
+        $honeypot = self::getSafeParam($data, 'website', 'string', '', 255);
+        if ($honeypot !== '') {
+            return '请求被拒绝';
+        }
+        if (!$nonce || !hash_equals($stored['nonce'], $nonce)) {
+            return '表单令牌无效';
+        }
+        if (!empty($stored['used'])) {
+            return '请勿重复提交';
+        }
+        if ($issuedAt === null || abs((int) $issuedAt - (int) $stored['issued_at']) > 5) {
+            return '表单时间戳无效';
+        }
+        $age = time() - (int) $stored['issued_at'];
+        if ($age < PUBLIC_FORM_MIN_SECONDS) {
+            return '提交过快，请稍后重试';
+        }
+        if ($age > PUBLIC_FORM_NONCE_TTL || $age > PUBLIC_FORM_MAX_SECONDS) {
+            return '表单已过期，请刷新后重试';
+        }
+        if (self::getTrustedOrigin() === false) {
+            return '来源校验失败';
+        }
+        $_SESSION['_public_form_tokens'][$context]['used'] = true;
+        return null;
+    }
+
+    /**
+     * 获取并验证来源
+     */
+    public static function getTrustedOrigin() {
+        $origin = isset($_SERVER['HTTP_ORIGIN']) ? trim($_SERVER['HTTP_ORIGIN']) : '';
+        $referer = isset($_SERVER['HTTP_REFERER']) ? trim($_SERVER['HTTP_REFERER']) : '';
+        $host = isset($_SERVER['HTTP_HOST']) ? trim($_SERVER['HTTP_HOST']) : '';
+        if ($host === '') {
+            return false;
+        }
+        $allowedHosts = array($host);
+        if (PUBLIC_WRITE_ALLOWED_ORIGINS !== '') {
+            $extraOrigins = array_filter(array_map('trim', explode(',', PUBLIC_WRITE_ALLOWED_ORIGINS)));
+            foreach ($extraOrigins as $extraOrigin) {
+                $parsed = parse_url($extraOrigin);
+                if (!empty($parsed['host'])) {
+                    $allowedHosts[] = $parsed['host'];
+                }
+            }
+        }
+        if ($origin !== '') {
+            $parsedOrigin = parse_url($origin);
+            if (empty($parsedOrigin['host']) || !in_array($parsedOrigin['host'], $allowedHosts, true)) {
+                return false;
+            }
+            return $origin;
+        }
+        if ($referer !== '') {
+            $parsedReferer = parse_url($referer);
+            if (empty($parsedReferer['host']) || !in_array($parsedReferer['host'], $allowedHosts, true)) {
+                return false;
+            }
+        }
+        return $host;
+    }
+
+    /**
+     * 渲染 CSRF / nonce 隐藏字段
+     */
+    public static function renderCsrfFields($context) {
+        $csrf = self::generateCsrfToken($context);
+        $meta = self::issuePublicFormToken($context);
+        echo '<input type="hidden" name="csrf_token" value="' . self::escapeHtml($csrf) . '">';
+        echo '<input type="hidden" name="form_nonce" value="' . self::escapeHtml($meta['nonce']) . '">';
+        echo '<input type="hidden" name="form_issued_at" value="' . (int) $meta['issued_at'] . '">';
+        echo '<input type="text" name="website" value="" autocomplete="off" tabindex="-1" class="hp-field" aria-hidden="true">';
+    }
+
+    /**
+     * 对公开写请求进行节流
+     */
+    public static function throttlePublicWrite($bucket, $payloadHash) {
+        if (!isset($_SESSION['_rate_limits']) || !is_array($_SESSION['_rate_limits'])) {
+            $_SESSION['_rate_limits'] = array();
+        }
+        $now = time();
+        $ip = self::getClientIp();
+        $sessionKey = session_id() !== '' ? session_id() : 'anonymous';
+        $rateDir = dirname(DB_PATH) . '/rate_limits';
+        if (!is_dir($rateDir)) {
+            @mkdir($rateDir, 0755, true);
+        }
+        $ipFile = $rateDir . '/' . md5($bucket . '|ip|' . $ip) . '.json';
+        $payloadFile = $rateDir . '/' . md5($bucket . '|payload|' . $ip . '|' . $payloadHash) . '.json';
+
+        $ipData = self::readRateLimitFile($ipFile);
+        $ipData = array_values(array_filter($ipData, function ($ts) use ($now) {
+            return ($now - (int) $ts) < PUBLIC_WRITE_RATE_LIMIT_WINDOW;
+        }));
+        if (count($ipData) >= PUBLIC_WRITE_RATE_LIMIT_PER_IP) {
+            return '提交过于频繁，请稍后再试';
+        }
+        $ipData[] = $now;
+        self::writeRateLimitFile($ipFile, $ipData);
+
+        if (!isset($_SESSION['_rate_limits'][$bucket][$sessionKey])) {
+            $_SESSION['_rate_limits'][$bucket][$sessionKey] = array();
+        }
+        $_SESSION['_rate_limits'][$bucket][$sessionKey] = array_values(array_filter($_SESSION['_rate_limits'][$bucket][$sessionKey], function ($ts) use ($now) {
+            return ($now - (int) $ts) < PUBLIC_WRITE_RATE_LIMIT_WINDOW;
+        }));
+        if (count($_SESSION['_rate_limits'][$bucket][$sessionKey]) >= PUBLIC_WRITE_RATE_LIMIT_PER_SESSION) {
+            return '会话提交过于频繁，请稍后再试';
+        }
+        $_SESSION['_rate_limits'][$bucket][$sessionKey][] = $now;
+
+        $payloadData = self::readRateLimitFile($payloadFile);
+        $payloadData = array_values(array_filter($payloadData, function ($ts) use ($now) {
+            return ($now - (int) $ts) < PUBLIC_WRITE_DUPLICATE_WINDOW;
+        }));
+        if (!empty($payloadData)) {
+            return '检测到重复提交，请勿重复创建';
+        }
+        $payloadData[] = $now;
+        self::writeRateLimitFile($payloadFile, $payloadData);
+        return null;
+    }
+
+    private static function readRateLimitFile($path) {
+        if (!file_exists($path)) {
+            return array();
+        }
+        $content = @file_get_contents($path);
+        $decoded = json_decode($content, true);
+        return is_array($decoded) ? $decoded : array();
+    }
+
+    private static function writeRateLimitFile($path, $data) {
+        @file_put_contents($path, json_encode(array_values($data)));
+    }
+
+    /**
+     * 生成归一化载荷哈希
+     */
+    public static function buildPayloadHash($data) {
+        ksort($data);
+        return hash('sha256', json_encode($data, JSON_UNESCAPED_UNICODE));
+    }
+
+    /**
+     * 验证公开标识符
+     */
+    public static function isValidPublicIdentifier($value) {
+        return is_string($value)
+            && $value !== ''
+            && strlen($value) <= PUBLIC_IDENTIFIER_MAX_LENGTH
+            && preg_match('/^[A-Za-z0-9_\-\x{4e00}-\x{9fa5}\s]+$/u', $value);
+    }
+
+    /**
+     * 验证公开文本
+     */
+    public static function isValidPublicText($value, $maxLength) {
+        return is_string($value)
+            && trim($value) !== ''
+            && mb_strlen($value, 'UTF-8') <= $maxLength;
+    }
     /**
      * 生成随机字符串
      *

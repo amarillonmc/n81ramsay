@@ -6,6 +6,7 @@
     </div>
     <div class="card-body">
         <form action="<?php echo BASE_URL; ?>?controller=admin&action=generate" method="post">
+            <?php Utils::renderCsrfFields('admin_generate_banlist'); ?>
             <div class="form-group">
                 <label for="environment_id">选择环境</label>
                 <select id="environment_id" name="environment_id" required>
@@ -23,6 +24,7 @@
             <hr>
 
             <form action="<?php echo BASE_URL; ?>?controller=admin&action=reset" method="post" class="mt-3">
+                <?php Utils::renderCsrfFields('admin_reset_banlist'); ?>
                 <button type="submit" id="reset-vote-btn" class="btn btn-danger">重置投票并增加投票周期</button>
             </form>
         <?php endif; ?>
@@ -75,6 +77,7 @@
                                             <div class="vote-actions mt-2">
                                                 <?php if ($this->userModel->hasPermission(1)): ?>
                                                     <form action="<?php echo BASE_URL; ?>?controller=banlist&action=reopenVote" method="post" style="display: inline;">
+                                                        <?php Utils::renderCsrfFields('banlist_reopen_vote'); ?>
                                                         <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
                                                         <button type="submit" class="btn btn-sm btn-primary">重新打开</button>
                                                     </form>
@@ -82,6 +85,7 @@
 
                                                 <?php if ($this->userModel->hasPermission(2)): ?>
                                                     <form action="<?php echo BASE_URL; ?>?controller=banlist&action=deleteVote" method="post" style="display: inline;">
+                                                        <?php Utils::renderCsrfFields('banlist_delete_vote'); ?>
                                                         <input type="hidden" name="vote_id" value="<?php echo $result['vote_id']; ?>">
                                                         <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除此投票吗？此操作不可撤销。')">删除</button>
                                                     </form>

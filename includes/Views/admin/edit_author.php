@@ -6,6 +6,7 @@
     </div>
     <div class="card-body">
         <form action="<?php echo BASE_URL; ?>?controller=admin&action=editAuthor&card_prefix=<?php echo urlencode($cardPrefix); ?>" method="post">
+            <?php Utils::renderCsrfFields('admin_edit_author'); ?>
             <div class="form-group">
                 <label for="card_prefix">卡片前缀</label>
                 <input type="text" id="card_prefix" name="card_prefix" value="<?php echo Utils::escapeHtml($authorMapping['card_prefix']); ?>" required>

@@ -77,6 +77,10 @@ class Database {
                 initiator_id TEXT NOT NULL,
                 vote_cycle INTEGER NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_ip TEXT,
+                created_user_agent TEXT,
+                created_via TEXT,
+                payload_hash TEXT,
                 is_closed INTEGER DEFAULT 0,
                 vote_link TEXT UNIQUE NOT NULL,
                 is_series_vote INTEGER DEFAULT 0,
@@ -154,6 +158,10 @@ class Database {
             if (!$hasCardIds) {
                 $this->pdo->exec('ALTER TABLE votes ADD COLUMN card_ids TEXT');
             }
+            $this->ensureColumnExists('votes', 'created_ip', 'TEXT');
+            $this->ensureColumnExists('votes', 'created_user_agent', 'TEXT');
+            $this->ensureColumnExists('votes', 'created_via', 'TEXT');
+            $this->ensureColumnExists('votes', 'payload_hash', 'TEXT');
 
             // 检查vote_records表是否需要添加card_id字段
             $recordColumns = $this->pdo->query("PRAGMA table_info(vote_records)")->fetchAll(PDO::FETCH_ASSOC);
@@ -412,6 +420,24 @@ class Database {
      */
     public function rollBack() {
         $this->pdo->rollBack();
+    }
+
+    /**
+     * 确保列存在
+     *
+     * @param string $table 表名
+     * @param string $column 列名
+     * @param string $definition 定义
+     */
+    private function ensureColumnExists($table, $column, $definition) {
+        $columns = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($columns as $currentColumn) {
+            if ($currentColumn['name'] === $column) {
+                return;
+            }
+        }
+
+        $this->pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
     }
 
     /**

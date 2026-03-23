@@ -65,12 +65,14 @@ $isUsingTempPath = (DIALOGUES_FILE_PATH !== $originalPath);
                             </div>
                             <div class="submission-actions">
                                 <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=reviewSubmission" method="post" style="display: inline;">
+                                    <?php Utils::renderCsrfFields('dialogue_review'); ?>
                                     <input type="hidden" name="submission_id" value="<?php echo $submission['id']; ?>">
                                     <input type="hidden" name="action" value="accept">
                                     <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('确定要接受这个投稿吗？')">接受</button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-danger reject-btn" data-id="<?php echo $submission['id']; ?>">拒绝</button>
                                 <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=deleteSubmission" method="post" style="display: inline;">
+                                    <?php Utils::renderCsrfFields('dialogue_delete_submission'); ?>
                                     <input type="hidden" name="submission_id" value="<?php echo $submission['id']; ?>">
                                     <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('确定要删除这个投稿吗？')">删除</button>
                                 </form>
@@ -90,6 +92,7 @@ $isUsingTempPath = (DIALOGUES_FILE_PATH !== $originalPath);
     </div>
     <div class="card-body">
         <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=addDialogue" method="post" class="add-form">
+            <?php Utils::renderCsrfFields('dialogue_add'); ?>
             <div class="form-row">
                 <div class="form-group">
                     <label for="add_card_id">卡片ID</label>
@@ -136,6 +139,7 @@ $isUsingTempPath = (DIALOGUES_FILE_PATH !== $originalPath);
                                 </div>
                                 <div class="dialogue-edit" id="edit-<?php echo $item['card_id']; ?>" style="display: none;">
                                     <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=editDialogue" method="post">
+                                        <?php Utils::renderCsrfFields('dialogue_edit'); ?>
                                         <input type="hidden" name="card_id" value="<?php echo $item['card_id']; ?>">
                                         <textarea name="dialogue" rows="3" required><?php echo Utils::escapeHtml($item['dialogues'][0]); ?></textarea>
                                         <div class="edit-actions">
@@ -148,6 +152,7 @@ $isUsingTempPath = (DIALOGUES_FILE_PATH !== $originalPath);
                             <div class="dialogue-actions">
                                 <button type="button" class="btn btn-sm" onclick="toggleEdit('<?php echo $item['card_id']; ?>')">编辑</button>
                                 <form action="<?php echo BASE_URL; ?>?controller=dialogue&action=deleteDialogue" method="post" style="display: inline;">
+                                    <?php Utils::renderCsrfFields('dialogue_delete'); ?>
                                     <input type="hidden" name="card_id" value="<?php echo $item['card_id']; ?>">
                                     <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除这个召唤词吗？')">删除</button>
                                 </form>
@@ -169,6 +174,7 @@ $isUsingTempPath = (DIALOGUES_FILE_PATH !== $originalPath);
         </div>
         <div class="modal-body">
             <form id="rejectForm" action="<?php echo BASE_URL; ?>?controller=dialogue&action=reviewSubmission" method="post">
+                <?php Utils::renderCsrfFields('dialogue_review'); ?>
                 <input type="hidden" id="rejectSubmissionId" name="submission_id" value="">
                 <input type="hidden" name="action" value="reject">
                 <div class="form-group">
