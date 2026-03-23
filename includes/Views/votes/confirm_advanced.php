@@ -92,6 +92,7 @@
                     </div>
 
                     <form method="POST" action="<?php echo BASE_URL; ?>?controller=vote&action=createAdvanced">
+                        <?php Utils::renderCsrfFields('vote_create_advanced_confirm'); ?>
                         <!-- 隐藏字段保存表单数据 -->
                         <input type="hidden" name="card_ids" value="<?php echo Utils::escapeHtml($cardIdsString); ?>">
                         <input type="hidden" name="environment_id" value="<?php echo $environmentId; ?>">

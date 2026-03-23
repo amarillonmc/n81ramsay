@@ -39,6 +39,7 @@
                         <td>
                             <a href="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>" class="btn btn-sm">查看</a>
                             <form action="<?php echo BASE_URL; ?>?controller=admin&action=closeVote" method="post" style="display: inline;">
+                                <?php Utils::renderCsrfFields('admin_close_vote'); ?>
                                 <input type="hidden" name="vote_id" value="<?php echo $vote['id']; ?>">
                                 <button type="submit" class="btn btn-sm btn-danger close-vote-btn">关闭</button>
                             </form>

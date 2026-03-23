@@ -123,6 +123,57 @@ if (!defined('SESSION_LIFETIME')) {
     define('SESSION_LIFETIME', 3600); // 1小时
 }
 
+
+// 安全防护配置
+if (!defined('ROUTE_PARAM_MAX_LENGTH')) {
+    define('ROUTE_PARAM_MAX_LENGTH', 64);
+}
+if (!defined('CSRF_TOKEN_TTL')) {
+    define('CSRF_TOKEN_TTL', 7200);
+}
+if (!defined('PUBLIC_WRITE_ALLOWED_ORIGINS')) {
+    define('PUBLIC_WRITE_ALLOWED_ORIGINS', '');
+}
+if (!defined('PUBLIC_FORM_MIN_SECONDS')) {
+    define('PUBLIC_FORM_MIN_SECONDS', 3);
+}
+if (!defined('PUBLIC_FORM_MAX_SECONDS')) {
+    define('PUBLIC_FORM_MAX_SECONDS', 7200);
+}
+if (!defined('PUBLIC_FORM_NONCE_TTL')) {
+    define('PUBLIC_FORM_NONCE_TTL', 1800);
+}
+if (!defined('PUBLIC_VOTE_CREATION_ENABLED')) {
+    define('PUBLIC_VOTE_CREATION_ENABLED', false);
+}
+if (!defined('PUBLIC_DIALOGUE_SUBMISSION_ENABLED')) {
+    define('PUBLIC_DIALOGUE_SUBMISSION_ENABLED', true);
+}
+if (!defined('PUBLIC_WRITE_RATE_LIMIT_WINDOW')) {
+    define('PUBLIC_WRITE_RATE_LIMIT_WINDOW', 300);
+}
+if (!defined('PUBLIC_WRITE_RATE_LIMIT_PER_IP')) {
+    define('PUBLIC_WRITE_RATE_LIMIT_PER_IP', 5);
+}
+if (!defined('PUBLIC_WRITE_RATE_LIMIT_PER_SESSION')) {
+    define('PUBLIC_WRITE_RATE_LIMIT_PER_SESSION', 5);
+}
+if (!defined('PUBLIC_WRITE_DUPLICATE_WINDOW')) {
+    define('PUBLIC_WRITE_DUPLICATE_WINDOW', 900);
+}
+if (!defined('PUBLIC_VOTE_REASON_MAX_LENGTH')) {
+    define('PUBLIC_VOTE_REASON_MAX_LENGTH', 2000);
+}
+if (!defined('PUBLIC_IDENTIFIER_MAX_LENGTH')) {
+    define('PUBLIC_IDENTIFIER_MAX_LENGTH', 64);
+}
+if (!defined('PUBLIC_DIALOGUE_MAX_LENGTH')) {
+    define('PUBLIC_DIALOGUE_MAX_LENGTH', 500);
+}
+if (!defined('PUBLIC_VOTE_CLEANUP_ZERO_INTERACTION_HOURS')) {
+    define('PUBLIC_VOTE_CLEANUP_ZERO_INTERACTION_HOURS', 24);
+}
+
 // 投票配置
 if (!defined('VOTES_PER_PAGE')) {
     define('VOTES_PER_PAGE', 20);
@@ -260,6 +311,30 @@ if (!defined('TCG_CARD_IMAGE_PATH')) {
 }
 if (!defined('DECKS_PER_PAGE')) {
     define('DECKS_PER_PAGE', 20); // 卡组列表每页显示数量
+}
+
+// TCG 脚本路径配置（录像回放功能需要）
+if (!defined('TCG_SCRIPT_PATH')) {
+    // TCG 卡片脚本目录路径
+    // 在生产环境中，这应该指向 YGOPro 服务器的 script 目录
+    define('TCG_SCRIPT_PATH', '');
+}
+
+// 录像回放功能配置
+if (!defined('REPLAY_ENABLED')) {
+    define('REPLAY_ENABLED', true); // 是否启用录像回放功能
+}
+if (!defined('REPLAY_PATH')) {
+    // 录像文件目录路径
+    // 在生产环境中，这应该指向 YGOPro 服务器的 replay 目录
+    if ($isProduction) {
+        define('REPLAY_PATH', __DIR__ . '/replay');
+    } else {
+        define('REPLAY_PATH', __DIR__ . '/example/replay');
+    }
+}
+if (!defined('REPLAYS_PER_PAGE')) {
+    define('REPLAYS_PER_PAGE', 20); // 录像列表每页显示数量
 }
 
 // 错误处理配置

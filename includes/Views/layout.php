@@ -28,6 +28,10 @@ $isLoggedIn = $auth->isLoggedIn();
                         <li><a href="<?php echo BASE_URL; ?>?controller=deck">卡组分享</a></li>
                     <?php endif; ?>
 
+                    <?php if (defined('REPLAY_ENABLED') && REPLAY_ENABLED): ?>
+                        <li><a href="<?php echo BASE_URL; ?>?controller=replay">录像回放</a></li>
+                    <?php endif; ?>
+
                     <?php if (defined('CARD_RANKING_ENABLED') && CARD_RANKING_ENABLED): ?>
                         <li><a href="<?php echo BASE_URL; ?>?controller=card_ranking">卡片排行榜</a></li>
                     <?php endif; ?>

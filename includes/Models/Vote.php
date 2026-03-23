@@ -39,7 +39,37 @@ class Vote {
      * @param string $cardIds 高级投票的卡片ID列表（JSON格式）
      * @return string|false 投票链接或失败
      */
-    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId, $isSeriesVote = false, $setcode = 0, $isAdvancedVote = false, $cardIds = '') {
+    public function createVote($cardId, $environmentId, $status, $reason, $initiatorId, $isSeriesVote = false, $setcode = 0, $isAdvancedVote = false, $cardIds = '', $createdVia = 'create') {
+        $cardId = (int)$cardId;
+        $environmentId = (int)$environmentId;
+        $status = (int)$status;
+        $initiatorId = trim($initiatorId);
+        $setcode = (int)$setcode;
+        $isSeriesVote = $isSeriesVote ? true : false;
+        $isAdvancedVote = $isAdvancedVote ? true : false;
+
+        if (!$this->isValidVoteStatus($status) || !$this->isValidEnvironmentId($environmentId) || $initiatorId === '') {
+            return false;
+        }
+
+        if ($isAdvancedVote) {
+            $normalizedCardIds = $this->normalizeAdvancedVoteCardIds($cardIds);
+            if (empty($normalizedCardIds)) {
+                return false;
+            }
+
+            $cardIds = json_encode($normalizedCardIds);
+            $cardId = $normalizedCardIds[0];
+        } else {
+            if (!$this->cardModel->getCardById($cardId)) {
+                return false;
+            }
+        }
+
+        if ($isSeriesVote && $setcode <= 0) {
+            return false;
+        }
+
         // 获取当前投票周期
         $voteCycle = $this->db->getCurrentVoteCycle();
 
@@ -68,6 +98,20 @@ class Vote {
             'initiator_id' => $initiatorId,
             'vote_cycle' => $voteCycle,
             'created_at' => date('Y-m-d H:i:s'),
+            'created_ip' => Utils::getClientIp(),
+            'created_user_agent' => isset($_SERVER['HTTP_USER_AGENT']) ? substr($_SERVER['HTTP_USER_AGENT'], 0, 255) : '',
+            'created_via' => $createdVia,
+            'payload_hash' => Utils::buildPayloadHash([
+                'card_id' => $cardId,
+                'environment_id' => $environmentId,
+                'status' => $status,
+                'reason' => $reason,
+                'initiator_id' => $initiatorId,
+                'setcode' => $setcode,
+                'is_series_vote' => $isSeriesVote ? 1 : 0,
+                'is_advanced_vote' => $isAdvancedVote ? 1 : 0,
+                'card_ids' => $cardIds
+            ]),
             'is_closed' => 0,
             'vote_link' => $voteLink,
             'is_series_vote' => $isSeriesVote ? 1 : 0,
@@ -97,6 +141,76 @@ class Vote {
         }
 
         return $voteLink;
+    }
+
+    /**
+     * 列出疑似垃圾投票
+     *
+     * @return array
+     */
+    public function listSuspiciousVotes() {
+        return $this->db->getRows(
+            'SELECT v.*,
+                    COALESCE((SELECT COUNT(*) FROM vote_records vr WHERE vr.vote_id = v.id), 0) AS record_count
+             FROM votes v
+             WHERE v.reason IS NULL
+                OR TRIM(v.reason) = ""
+                OR TRIM(v.initiator_id) = ""
+                OR v.created_ip IS NOT NULL
+             ORDER BY v.created_at DESC
+             LIMIT 200'
+        );
+    }
+
+
+    /**
+     * 检查禁限状态是否有效
+     *
+     * @param int $status 禁限状态
+     * @return bool 是否有效
+     */
+    private function isValidVoteStatus($status) {
+        return $status >= 0 && $status <= 3;
+    }
+
+    /**
+     * 检查环境ID是否有效
+     *
+     * @param int $environmentId 环境ID
+     * @return bool 是否有效
+     */
+    private function isValidEnvironmentId($environmentId) {
+        return Utils::getEnvironmentById($environmentId) !== null;
+    }
+
+    /**
+     * 规范化高级投票的卡片ID列表
+     *
+     * @param string $cardIds 卡片ID列表（JSON格式）
+     * @return array 规范化后的卡片ID列表
+     */
+    private function normalizeAdvancedVoteCardIds($cardIds) {
+        $decodedCardIds = json_decode($cardIds, true);
+        if (!is_array($decodedCardIds)) {
+            return [];
+        }
+
+        $normalizedCardIds = [];
+        foreach ($decodedCardIds as $cardId) {
+            $cardId = (int)$cardId;
+            if ($cardId <= 0) {
+                continue;
+            }
+
+            if ($this->cardModel->getCardById($cardId)) {
+                $normalizedCardIds[] = $cardId;
+            }
+        }
+
+        $normalizedCardIds = array_values(array_unique($normalizedCardIds));
+        sort($normalizedCardIds);
+
+        return $normalizedCardIds;
     }
 
     /**

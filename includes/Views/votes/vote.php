@@ -177,6 +177,7 @@
                     <?php if ($vote['is_advanced_vote']): ?>
                         <!-- 高级投票表单 - 支持分别投票 -->
                         <form id="advanced-vote-form" action="<?php echo BASE_URL; ?>?controller=vote&action=submitAdvanced&id=<?php echo $vote['vote_link']; ?>" method="post">
+                            <?php Utils::renderCsrfFields('vote_submit_advanced_' . $vote['vote_link']); ?>
                             <div class="form-group">
                                 <label for="user_id">您的ID</label>
                                 <input type="text" id="user_id" name="user_id" required>
@@ -271,6 +272,7 @@
                     <?php else: ?>
                         <!-- 普通投票表单 -->
                         <form id="vote-form" action="<?php echo BASE_URL; ?>?controller=vote&id=<?php echo $vote['vote_link']; ?>" method="post">
+                            <?php Utils::renderCsrfFields('vote_submit_' . $vote['vote_link']); ?>
                             <div class="form-group">
                                 <label>您的投票</label>
                                 <div>
@@ -988,6 +990,7 @@ function deleteVoteRecord(recordId, voteLink) {
     const formData = new FormData();
     formData.append('record_id', recordId);
     formData.append('vote_link', voteLink);
+    formData.append('csrf_token', '<?php echo Utils::escapeHtml(Utils::generateCsrfToken('vote_delete_record')); ?>');
 
     fetch('<?php echo BASE_URL; ?>?controller=vote&action=deleteRecord', {
         method: 'POST',

@@ -58,6 +58,7 @@ class AdminController {
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requirePostCsrf('admin_login');
             // 获取表单数据
             $username = isset($_POST['username']) ? trim($_POST['username']) : '';
             $password = isset($_POST['password']) ? $_POST['password'] : '';
@@ -175,6 +176,7 @@ class AdminController {
     public function closeVote() {
         // 要求管理员权限
         $this->userModel->requirePermission(1);
+        $this->requirePostCsrf('admin_close_vote');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -283,6 +285,7 @@ class AdminController {
     public function identifyAuthors() {
         // 要求管理员权限（等级255以上）
         $this->userModel->requirePermission(255);
+        $this->requirePostCsrf('admin_identify_authors');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -308,6 +311,7 @@ class AdminController {
     public function addAuthor() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_add_author');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -365,6 +369,7 @@ class AdminController {
     public function deleteAuthor() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_delete_author');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -414,6 +419,7 @@ class AdminController {
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $this->requirePostCsrf('admin_edit_author');
             // 获取表单数据
             $newCardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
             $authorName = isset($_POST['author_name']) ? trim($_POST['author_name']) : '';
@@ -510,6 +516,7 @@ class AdminController {
     public function addTip() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_add_tip');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -560,6 +567,7 @@ class AdminController {
     public function editTip() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_edit_tip');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -604,6 +612,7 @@ class AdminController {
     public function deleteTip() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_delete_tip');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -784,6 +793,7 @@ class AdminController {
     public function addVoterBan() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_add_voter_ban');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -845,6 +855,7 @@ class AdminController {
     public function removeVoterBan() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_remove_voter_ban');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -892,6 +903,7 @@ class AdminController {
 
         // 处理保存请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $canEdit) {
+            $this->requirePostCsrf('admin_config');
             $newValues = isset($_POST['config']) ? $_POST['config'] : [];
             $this->saveConfigItems($configs, $newValues);
             $configs = $this->getConfigItems();
@@ -902,6 +914,22 @@ class AdminController {
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/admin/config.php';
         include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 管理后台 POST / CSRF 校验
+     *
+     * @param string $context 上下文
+     */
+    private function requirePostCsrf($context) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            Utils::abort(405, 'Method Not Allowed');
+        }
+
+        $csrfToken = Utils::getSafeParam($_POST, 'csrf_token', 'string', '', 128);
+        if (empty($csrfToken) || !Utils::validateCsrfToken($context, $csrfToken, false)) {
+            Utils::abort(403, 'CSRF 校验失败');
+        }
     }
 
     /**
