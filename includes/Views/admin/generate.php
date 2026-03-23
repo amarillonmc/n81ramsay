@@ -24,6 +24,7 @@
 
         <?php if ($this->userModel->hasPermission(2)): ?>
             <form action="<?php echo BASE_URL; ?>?controller=admin&action=update" method="post">
+                <?php Utils::renderCsrfFields('admin_update_banlist'); ?>
                 <input type="hidden" name="environment_id" value="<?php echo $environmentId; ?>">
                 <input type="hidden" name="lflist_text" value="<?php echo htmlspecialchars($lflistText); ?>">
 

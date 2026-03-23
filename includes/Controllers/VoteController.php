@@ -108,14 +108,16 @@ class VoteController {
      * 创建投票
      */
     public function create() {
+        $this->ensureVoteCreationEnabled();
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $requestError = Utils::validatePublicFormRequest('vote_create', $_POST);
             // 获取表单数据
-            $cardId = isset($_POST['card_id']) ? (int)$_POST['card_id'] : 0;
-            $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
-            $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
-            $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
-            $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+            $cardId = Utils::getSafeParam($_POST, 'card_id', 'int', 0);
+            $environmentId = Utils::getSafeParam($_POST, 'environment_id', 'int', 0);
+            $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
+            $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
+            $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
 
             // 检查卡片是否有alias字段，如果有则使用alias对应的卡片ID
             $card = $this->cardModel->getCardById($cardId);
@@ -129,6 +131,9 @@ class VoteController {
 
             // 验证数据
             $errors = [];
+            if ($requestError !== null) {
+                $errors[] = $requestError;
+            }
 
             if ($cardId <= 0) {
                 $errors[] = '请选择卡片';
@@ -146,8 +151,12 @@ class VoteController {
                 $errors[] = '请选择有效的禁限状态';
             }
 
-            if (empty($initiatorId)) {
-                $errors[] = '请输入您的ID';
+            if (!Utils::isValidPublicIdentifier($initiatorId)) {
+                $errors[] = '请输入有效的ID';
+            }
+
+            if ($reason !== '' && !Utils::isValidPublicText($reason, PUBLIC_VOTE_REASON_MAX_LENGTH)) {
+                $errors[] = '请输入有效的理由';
             }
 
             // 检查是否为无意义投票
@@ -164,7 +173,21 @@ class VoteController {
 
             // 如果没有错误，则创建投票
             if (empty($errors)) {
-                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, false, 0, false, '');
+                $throttleError = Utils::throttlePublicWrite('vote_create', Utils::buildPayloadHash([
+                    'card_id' => $cardId,
+                    'environment_id' => $environmentId,
+                    'status' => $status,
+                    'reason' => $reason,
+                    'initiator_id' => $initiatorId,
+                    'mode' => 'create'
+                ]));
+                if ($throttleError !== null) {
+                    $errors[] = $throttleError;
+                }
+            }
+
+            if (empty($errors)) {
+                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, false, 0, false, '', 'create');
 
                 if ($voteLink) {
                     // 重定向到投票页面
@@ -194,15 +217,14 @@ class VoteController {
         }
 
         // 获取卡片ID
-        $cardId = isset($_GET['card_id']) ? (int)$_GET['card_id'] : 0;
+        $cardId = Utils::getSafeParam($_GET, 'card_id', 'int', 0);
 
         // 获取卡片信息
         $card = $this->cardModel->getCardById($cardId);
 
         // 如果卡片不存在，则重定向到首页
         if (!$card) {
-            header('Location: ' . BASE_URL);
-            exit;
+            Utils::abort(404, '404 Not Found');
         }
 
         // 如果卡片有alias字段，则使用alias对应的卡片ID
@@ -296,20 +318,24 @@ class VoteController {
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && $vote['is_closed'] == 0) {
+            $requestError = Utils::validatePublicFormRequest('vote_submit_' . $voteLink, $_POST);
             // 获取表单数据
-            $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
-            $userId = isset($_POST['user_id']) ? trim($_POST['user_id']) : '';
-            $comment = isset($_POST['comment']) ? trim($_POST['comment']) : '';
+            $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
+            $userId = Utils::getSafeParam($_POST, 'user_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+            $comment = Utils::getSafeParam($_POST, 'comment', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
 
             // 验证数据
             $errors = [];
+            if ($requestError !== null) {
+                $errors[] = $requestError;
+            }
 
             if ($status < 0 || $status > 3) {
                 $errors[] = '请选择有效的禁限状态';
             }
 
-            if (empty($userId)) {
-                $errors[] = '请输入您的ID';
+            if (!Utils::isValidPublicIdentifier($userId)) {
+                $errors[] = '请输入有效的ID';
             }
 
             // 检查投票者是否被封禁
@@ -366,23 +392,27 @@ class VoteController {
      * 系列投票创建
      */
     public function createSeries() {
+        $this->ensureVoteCreationEnabled();
         // 检查系列投票功能是否启用
         if (!defined('SERIES_VOTING_ENABLED') || !SERIES_VOTING_ENABLED) {
-            header('Location: ' . BASE_URL);
-            exit;
+            Utils::abort(404, '404 Not Found');
         }
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $requestError = Utils::validatePublicFormRequest('vote_create_series', $_POST);
             // 获取表单数据
-            $cardId = isset($_POST['card_id']) ? (int)$_POST['card_id'] : 0;
-            $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
-            $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
-            $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
-            $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+            $cardId = Utils::getSafeParam($_POST, 'card_id', 'int', 0);
+            $environmentId = Utils::getSafeParam($_POST, 'environment_id', 'int', 0);
+            $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
+            $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
+            $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
 
             // 验证数据
             $errors = [];
+            if ($requestError !== null) {
+                $errors[] = $requestError;
+            }
 
             if ($cardId <= 0) {
                 $errors[] = '请选择卡片';
@@ -396,8 +426,8 @@ class VoteController {
                 $errors[] = '请选择有效的禁限状态';
             }
 
-            if (empty($initiatorId)) {
-                $errors[] = '请输入您的ID';
+            if (!Utils::isValidPublicIdentifier($initiatorId)) {
+                $errors[] = '请输入有效的ID';
             }
 
             // 获取卡片信息
@@ -443,8 +473,8 @@ class VoteController {
 
             if ($strictness >= 3) {
                 // 需要额外验证卡片作者
-                $cardAuthorId = isset($_POST['card_author_id']) ? trim($_POST['card_author_id']) : '';
-                if (empty($cardAuthorId)) {
+                $cardAuthorId = Utils::getSafeParam($_POST, 'card_author_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+                if (empty($cardAuthorId) || !Utils::isValidPublicIdentifier($cardAuthorId)) {
                     $errors[] = '请填写卡片作者ID';
                 } else {
                     $isCardAuthorValid = $this->checkCardAuthorAuthorization($cardAuthorId, $card);
@@ -456,7 +486,21 @@ class VoteController {
 
             // 如果没有错误，则创建系列投票
             if (empty($errors)) {
-                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, true, $card['setcode'], false, '');
+                $throttleError = Utils::throttlePublicWrite('vote_create_series', Utils::buildPayloadHash([
+                    'card_id' => $cardId,
+                    'environment_id' => $environmentId,
+                    'status' => $status,
+                    'reason' => $reason,
+                    'initiator_id' => $initiatorId,
+                    'mode' => 'createSeries'
+                ]));
+                if ($throttleError !== null) {
+                    $errors[] = $throttleError;
+                }
+            }
+
+            if (empty($errors)) {
+                $voteLink = $this->voteModel->createVote($cardId, $environmentId, $status, $reason, $initiatorId, true, $card['setcode'], false, '', 'createSeries');
 
                 if ($voteLink) {
                     // 重定向到投票页面
@@ -491,15 +535,14 @@ class VoteController {
         }
 
         // 获取卡片ID
-        $cardId = isset($_GET['card_id']) ? (int)$_GET['card_id'] : 0;
+        $cardId = Utils::getSafeParam($_GET, 'card_id', 'int', 0);
 
         // 获取卡片信息
         $card = $this->cardModel->getCardById($cardId);
 
         // 如果卡片不存在，则重定向到首页
         if (!$card) {
-            header('Location: ' . BASE_URL);
-            exit;
+            Utils::abort(404, '404 Not Found');
         }
 
         // 检查卡片是否为TCG卡片或无系列卡片
@@ -559,15 +602,15 @@ class VoteController {
      * 高级投票创建
      */
     public function createAdvanced() {
+        $this->ensureVoteCreationEnabled();
         // 检查高级投票功能是否启用
         if (!defined('ADVANCED_VOTING_ENABLED') || !ADVANCED_VOTING_ENABLED) {
-            header('Location: ' . BASE_URL);
-            exit;
+            Utils::abort(404, '404 Not Found');
         }
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $action = isset($_POST['action']) ? $_POST['action'] : '';
+            $action = Utils::getSafeParam($_POST, 'action', 'string', '', 16);
 
             if ($action === 'preview') {
                 // 预览确认页面
@@ -597,15 +640,19 @@ class VoteController {
      * 显示高级投票预览确认页面
      */
     private function showAdvancedVotePreview() {
+        $requestError = Utils::validatePublicFormRequest('vote_create_advanced_preview', $_POST);
         // 获取表单数据
-        $cardIdsString = isset($_POST['card_ids']) ? trim($_POST['card_ids']) : '';
-        $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
-        $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
-        $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
-        $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+        $cardIdsString = Utils::getSafeParam($_POST, 'card_ids', 'string', '', 2000);
+        $environmentId = Utils::getSafeParam($_POST, 'environment_id', 'int', 0);
+        $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
+        $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
+        $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
 
         // 验证数据
         $errors = [];
+        if ($requestError !== null) {
+            $errors[] = $requestError;
+        }
 
         if (empty($cardIdsString)) {
             $errors[] = '请输入卡片ID列表';
@@ -623,8 +670,8 @@ class VoteController {
             $errors[] = '请输入理由';
         }
 
-        if (empty($initiatorId)) {
-            $errors[] = '请输入您的ID';
+        if (!Utils::isValidPublicIdentifier($initiatorId)) {
+            $errors[] = '请输入有效的ID';
         }
 
         // 解析卡片ID列表
@@ -699,12 +746,18 @@ class VoteController {
      * 确认创建高级投票
      */
     private function confirmAdvancedVote() {
+        $requestError = Utils::validatePublicFormRequest('vote_create_advanced_confirm', $_POST);
         // 获取表单数据
-        $cardIdsString = isset($_POST['card_ids']) ? trim($_POST['card_ids']) : '';
-        $environmentId = isset($_POST['environment_id']) ? (int)$_POST['environment_id'] : 0;
-        $status = isset($_POST['status']) ? (int)$_POST['status'] : 3;
-        $reason = isset($_POST['reason']) ? trim($_POST['reason']) : '';
-        $initiatorId = isset($_POST['initiator_id']) ? trim($_POST['initiator_id']) : '';
+        $cardIdsString = Utils::getSafeParam($_POST, 'card_ids', 'string', '', 2000);
+        $environmentId = Utils::getSafeParam($_POST, 'environment_id', 'int', 0);
+        $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
+        $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
+        $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+
+        if ($requestError !== null) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode($requestError));
+            exit;
+        }
 
         if (!Utils::getEnvironmentById($environmentId)) {
             header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('请选择有效的环境'));
@@ -716,7 +769,7 @@ class VoteController {
             exit;
         }
 
-        if (empty($reason) || empty($initiatorId)) {
+        if (!Utils::isValidPublicText($reason, PUBLIC_VOTE_REASON_MAX_LENGTH) || !Utils::isValidPublicIdentifier($initiatorId)) {
             header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode('提交的高级投票参数不完整'));
             exit;
         }
@@ -749,6 +802,19 @@ class VoteController {
         $representativeCardId = $validCardIds[0];
 
         // 创建高级投票
+        $throttleError = Utils::throttlePublicWrite('vote_create_advanced', Utils::buildPayloadHash([
+            'card_ids' => $validCardIds,
+            'environment_id' => $environmentId,
+            'status' => $status,
+            'reason' => $reason,
+            'initiator_id' => $initiatorId,
+            'mode' => 'createAdvanced'
+        ]));
+        if ($throttleError !== null) {
+            header('Location: ' . BASE_URL . '?controller=vote&action=createAdvanced&error=' . urlencode($throttleError));
+            exit;
+        }
+
         $voteLink = $this->voteModel->createVote(
             $representativeCardId,
             $environmentId,
@@ -758,7 +824,8 @@ class VoteController {
             false, // 不是系列投票
             0,     // 无系列代码
             true,  // 是高级投票
-            json_encode($validCardIds) // 卡片ID列表
+            json_encode($validCardIds), // 卡片ID列表
+            'createAdvanced'
         );
 
         if ($voteLink) {
@@ -801,7 +868,7 @@ class VoteController {
      * 处理高级投票提交
      */
     public function submitAdvanced() {
-        $voteLink = isset($_GET['id']) ? $_GET['id'] : '';
+        $voteLink = Utils::getSafeParam($_GET, 'id', 'hex8', '', 8);
 
         if (empty($voteLink)) {
             header('Location: ' . BASE_URL . '?controller=vote');
@@ -816,20 +883,24 @@ class VoteController {
         }
 
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: ' . BASE_URL . '?controller=vote&id=' . $voteLink);
-            exit;
+            Utils::abort(405, 'Method Not Allowed');
         }
 
         // 获取表单数据
-        $userId = isset($_POST['user_id']) ? trim($_POST['user_id']) : '';
-        $comment = isset($_POST['comment']) ? trim($_POST['comment']) : '';
+        $requestError = Utils::validatePublicFormRequest('vote_submit_advanced_' . $voteLink, $_POST);
+        $userId = Utils::getSafeParam($_POST, 'user_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+        $comment = Utils::getSafeParam($_POST, 'comment', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
         $cardVotes = isset($_POST['card_votes']) ? $_POST['card_votes'] : [];
 
         // 验证数据
         $errors = [];
 
-        if (empty($userId)) {
-            $errors[] = '请输入您的ID';
+        if ($requestError !== null) {
+            $errors[] = $requestError;
+        }
+
+        if (!Utils::isValidPublicIdentifier($userId)) {
+            $errors[] = '请输入有效的ID';
         }
 
         if (empty($cardVotes)) {
@@ -870,7 +941,7 @@ class VoteController {
         }
 
         // 生成投票者标识符
-        $voterIdentifier = Utils::generateVoterIdentifier($_SERVER['REMOTE_ADDR'], $userId);
+        $voterIdentifier = Utils::generateVoterIdentifier(Utils::getClientIp(), $userId);
 
         // 检查投票者是否被封禁
         $banStatus = $this->voteModel->getVoterBanStatus($voterIdentifier);
@@ -1006,6 +1077,7 @@ class VoteController {
      * 删除投票记录
      */
     public function deleteRecord() {
+        header('Content-Type: application/json; charset=UTF-8');
         // 检查是否为POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             http_response_code(405);
@@ -1014,8 +1086,15 @@ class VoteController {
         }
 
         // 获取参数
-        $recordId = isset($_POST['record_id']) ? (int)$_POST['record_id'] : 0;
-        $voteLink = isset($_POST['vote_link']) ? trim($_POST['vote_link']) : '';
+        $csrfToken = Utils::getSafeParam($_POST, 'csrf_token', 'string', '', 128);
+        if (empty($csrfToken) || !Utils::validateCsrfToken('vote_delete_record', $csrfToken, false)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'CSRF 校验失败']);
+            return;
+        }
+
+        $recordId = Utils::getSafeParam($_POST, 'record_id', 'int', 0);
+        $voteLink = Utils::getSafeParam($_POST, 'vote_link', 'hex8', '', 8);
 
         if ($recordId <= 0 || empty($voteLink)) {
             echo json_encode(['success' => false, 'message' => '参数错误']);
@@ -1121,5 +1200,19 @@ class VoteController {
         $logContent = json_encode($logData, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
 
         file_put_contents($logFile, $logContent, FILE_APPEND | LOCK_EX);
+    }
+
+    /**
+     * 确保投票创建入口可用
+     */
+    private function ensureVoteCreationEnabled() {
+        $auth = Auth::getInstance();
+        if (PUBLIC_VOTE_CREATION_ENABLED) {
+            return;
+        }
+
+        if (!$auth->isLoggedIn() || !$auth->hasPermission(1)) {
+            Utils::abort(403, '公开投票创建已关闭');
+        }
     }
 }

@@ -59,6 +59,7 @@ $isUsingTempPath = (TIPS_FILE_PATH !== $originalPath);
     </div>
     <div class="card-body">
         <form action="<?php echo BASE_URL; ?>?controller=admin&action=addTip" method="post">
+            <?php Utils::renderCsrfFields('admin_add_tip'); ?>
             <div class="form-group">
                 <label for="tip_content">提示内容</label>
                 <textarea id="tip_content" name="tip_content" rows="3" required placeholder="请输入服务器提示内容..."></textarea>
@@ -89,6 +90,7 @@ $isUsingTempPath = (TIPS_FILE_PATH !== $originalPath);
                             <div class="tip-actions">
                                 <button type="button" class="btn btn-sm edit-tip-btn" onclick="toggleEdit(<?php echo $index; ?>)">编辑</button>
                                 <form action="<?php echo BASE_URL; ?>?controller=admin&action=deleteTip" method="post" style="display: inline;">
+                                    <?php Utils::renderCsrfFields('admin_delete_tip'); ?>
                                     <input type="hidden" name="index" value="<?php echo $index; ?>">
                                     <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('确定要删除这条提示吗？')">删除</button>
                                 </form>
@@ -97,6 +99,7 @@ $isUsingTempPath = (TIPS_FILE_PATH !== $originalPath);
                             <!-- 编辑表单（默认隐藏） -->
                             <div class="tip-edit-form" id="edit-form-<?php echo $index; ?>" style="display: none;">
                                 <form action="<?php echo BASE_URL; ?>?controller=admin&action=editTip" method="post">
+                                    <?php Utils::renderCsrfFields('admin_edit_tip'); ?>
                                     <input type="hidden" name="index" value="<?php echo $index; ?>">
                                     <div class="form-group">
                                         <textarea name="tip_content" rows="3" required><?php echo Utils::escapeHtml($tip); ?></textarea>

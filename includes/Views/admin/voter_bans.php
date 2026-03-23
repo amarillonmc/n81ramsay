@@ -17,6 +17,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="<?php echo BASE_URL; ?>?controller=admin&action=addVoterBan">
+                    <?php Utils::renderCsrfFields('admin_add_voter_ban'); ?>
                     <div class="form-group">
                         <label for="voter_identifier">投票者标识符</label>
                         <input type="text" class="form-control" id="voter_identifier" name="voter_identifier" 
@@ -100,6 +101,7 @@
                                             <form method="POST" action="<?php echo BASE_URL; ?>?controller=admin&action=removeVoterBan" 
                                                   style="display: inline;" 
                                                   onsubmit="return confirm('确定要解除对 <?php echo Utils::escapeHtml($ban['voter_identifier']); ?> 的封禁吗？')">
+                                                <?php Utils::renderCsrfFields('admin_remove_voter_ban'); ?>
                                                 <input type="hidden" name="voter_identifier" value="<?php echo Utils::escapeHtml($ban['voter_identifier']); ?>">
                                                 <button type="submit" class="btn btn-sm btn-success">解封</button>
                                             </form>

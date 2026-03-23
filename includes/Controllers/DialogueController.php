@@ -78,6 +78,9 @@ class DialogueController {
      * 召唤词投稿页面
      */
     public function submit() {
+        if (!PUBLIC_DIALOGUE_SUBMISSION_ENABLED) {
+            Utils::abort(403, '公开投稿已关闭');
+        }
         // 获取消息
         $message = isset($_GET['message']) ? $_GET['message'] : '';
         $error = isset($_GET['error']) ? $_GET['error'] : '';
@@ -94,25 +97,28 @@ class DialogueController {
     public function submitDialogue() {
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit');
-            exit;
+            Utils::abort(405, 'Method Not Allowed');
+        }
+
+        if (!PUBLIC_DIALOGUE_SUBMISSION_ENABLED) {
+            Utils::abort(403, '公开投稿已关闭');
         }
 
         // 获取表单数据
-        $cardId = isset($_POST['card_id']) ? trim($_POST['card_id']) : '';
-        $dialogue = isset($_POST['dialogue']) ? trim($_POST['dialogue']) : '';
-        $authorId = isset($_POST['author_id']) ? trim($_POST['author_id']) : '';
-        $userId = isset($_POST['user_id']) ? trim($_POST['user_id']) : '';
+        $requestError = Utils::validatePublicFormRequest('dialogue_submit', $_POST);
+        $cardId = Utils::getSafeParam($_POST, 'card_id', 'int', 0);
+        $dialogue = Utils::getSafeParam($_POST, 'dialogue', 'string', '', PUBLIC_DIALOGUE_MAX_LENGTH);
+        $authorId = Utils::getSafeParam($_POST, 'author_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+        $userId = Utils::getSafeParam($_POST, 'user_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
 
-        // 验证输入
-        if (empty($cardId) || empty($dialogue) || empty($authorId) || empty($userId)) {
-            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode('所有字段都是必填的'));
+        if ($requestError !== null) {
+            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($requestError));
             exit;
         }
 
-        // 验证卡片ID格式
-        if (!is_numeric($cardId)) {
-            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode('卡片ID必须是数字'));
+        // 验证输入
+        if (empty($cardId) || !Utils::isValidPublicText($dialogue, PUBLIC_DIALOGUE_MAX_LENGTH) || !Utils::isValidPublicIdentifier($authorId) || !Utils::isValidPublicIdentifier($userId)) {
+            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode('所有字段都是必填的'));
             exit;
         }
 
@@ -217,6 +223,7 @@ class DialogueController {
     public function reviewSubmission() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requireAdminPostCsrf('dialogue_review');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -262,6 +269,7 @@ class DialogueController {
     public function deleteSubmission() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requireAdminPostCsrf('dialogue_delete_submission');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -294,6 +302,7 @@ class DialogueController {
     public function addDialogue() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requireAdminPostCsrf('dialogue_add');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -346,6 +355,7 @@ class DialogueController {
     public function editDialogue() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requireAdminPostCsrf('dialogue_edit');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -391,6 +401,7 @@ class DialogueController {
     public function deleteDialogue() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requireAdminPostCsrf('dialogue_delete');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -428,4 +439,30 @@ class DialogueController {
         }
         exit;
     }
+
+    /**
+     * 管理后台 POST + CSRF 校验
+     *
+     * @param string $context 上下文
+     */
+    private function requireAdminPostCsrf($context) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            Utils::abort(405, 'Method Not Allowed');
+        }
+
+        $csrfToken = Utils::getSafeParam($_POST, 'csrf_token', 'string', '', 128);
+        if (empty($csrfToken) || !Utils::validateCsrfToken($context, $csrfToken, false)) {
+            Utils::abort(403, 'CSRF 校验失败');
+        }
+    }
 }
+        $throttleError = Utils::throttlePublicWrite('dialogue_submit', Utils::buildPayloadHash([
+            'card_id' => $cardId,
+            'dialogue' => $dialogue,
+            'author_id' => $authorId,
+            'user_id' => $userId
+        ]));
+        if ($throttleError !== null) {
+            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($throttleError));
+            exit;
+        }

@@ -13,6 +13,7 @@
     <div class="card-body">
         <p>点击下方按钮，系统将自动从strings.conf文件中识别作者信息并导入。</p>
         <form action="<?php echo BASE_URL; ?>?controller=admin&action=identifyAuthors" method="post">
+            <?php Utils::renderCsrfFields('admin_identify_authors'); ?>
             <button type="submit" class="btn">识别作者</button>
         </form>
     </div>
@@ -24,6 +25,7 @@
     </div>
     <div class="card-body">
         <form action="<?php echo BASE_URL; ?>?controller=admin&action=addAuthor" method="post">
+            <?php Utils::renderCsrfFields('admin_add_author'); ?>
             <div class="form-group">
                 <label for="card_prefix">卡片前缀</label>
                 <input type="text" id="card_prefix" name="card_prefix" required>
@@ -91,6 +93,7 @@
                                 <td>
                                     <a href="<?php echo BASE_URL; ?>?controller=admin&action=editAuthor&card_prefix=<?php echo urlencode($mapping['card_prefix']); ?>" class="btn btn-sm">编辑</a>
                                     <form action="<?php echo BASE_URL; ?>?controller=admin&action=deleteAuthor" method="post" style="display: inline;">
+                                        <?php Utils::renderCsrfFields('admin_delete_author'); ?>
                                         <input type="hidden" name="card_prefix" value="<?php echo Utils::escapeHtml($mapping['card_prefix']); ?>">
                                         <button type="submit" class="btn btn-sm btn-danger delete-author-btn" onclick="return confirm('确定要删除这个作者映射吗？')">删除</button>
                                     </form>

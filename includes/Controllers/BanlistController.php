@@ -67,6 +67,7 @@ class BanlistController {
     public function generate() {
         // 要求管理员权限
         $this->userModel->requirePermission(1);
+        $this->requirePostCsrf('admin_generate_banlist');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -97,6 +98,7 @@ class BanlistController {
     public function update() {
         // 要求管理员权限
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_update_banlist');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -174,6 +176,7 @@ class BanlistController {
     public function reset() {
         // 要求管理员权限
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_reset_banlist');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -202,6 +205,7 @@ class BanlistController {
     public function reopenVote() {
         // 要求管理员权限（等级1以上）
         $this->userModel->requirePermission(1);
+        $this->requirePostCsrf('banlist_reopen_vote');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -235,6 +239,7 @@ class BanlistController {
     public function deleteVote() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('banlist_delete_vote');
 
         // 检查是否是POST请求
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -260,5 +265,21 @@ class BanlistController {
         // 如果不是POST请求，则重定向到禁卡表管理页面
         header('Location: ' . BASE_URL . '?controller=admin&action=banlist');
         exit;
+    }
+
+    /**
+     * 管理后台 POST / CSRF 校验
+     *
+     * @param string $context 上下文
+     */
+    private function requirePostCsrf($context) {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            Utils::abort(405, 'Method Not Allowed');
+        }
+
+        $csrfToken = Utils::getSafeParam($_POST, 'csrf_token', 'string', '', 128);
+        if (empty($csrfToken) || !Utils::validateCsrfToken($context, $csrfToken, false)) {
+            Utils::abort(403, 'CSRF 校验失败');
+        }
     }
 }

@@ -3,6 +3,7 @@
 <div class="card">
     <div class="card-body">
         <form id="login-form" action="<?php echo BASE_URL; ?>?controller=admin&action=login<?php echo isset($_GET['redirect']) ? '&redirect=' . urlencode($_GET['redirect']) : ''; ?>" method="post">
+            <?php Utils::renderCsrfFields('admin_login'); ?>
             <div class="form-group">
                 <label for="username">用户名</label>
                 <input type="text" id="username" name="username" required>

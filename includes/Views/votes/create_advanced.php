@@ -20,6 +20,7 @@
                 </div>
                 <div class="card-body">
                     <form method="POST" action="<?php echo BASE_URL; ?>?controller=vote&action=createAdvanced">
+                        <?php Utils::renderCsrfFields('vote_create_advanced_preview'); ?>
                         <div class="form-group">
                             <label for="card_ids">卡片ID列表</label>
                             <textarea id="card_ids" name="card_ids" rows="4" placeholder="请输入一个或多个卡片ID，每行一个或用逗号分隔" required><?php echo isset($_POST['card_ids']) ? Utils::escapeHtml($_POST['card_ids']) : ''; ?></textarea>
