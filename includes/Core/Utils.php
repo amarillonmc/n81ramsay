@@ -354,11 +354,16 @@ class Utils {
     /**
      * 验证公开标识符
      */
-    public static function isValidPublicIdentifier($value) {
-        return is_string($value)
-            && $value !== ''
-            && strlen($value) <= PUBLIC_IDENTIFIER_MAX_LENGTH
-            && preg_match('/^[A-Za-z0-9_\-\x{4e00}-\x{9fa5}\s]+$/u', $value);
+    public static function isValidPublicIdentifier($value, $exactWhitelist = array()) {
+        if (!is_string($value) || $value === '' || strlen($value) > PUBLIC_IDENTIFIER_MAX_LENGTH) {
+            return false;
+        }
+
+        if (!empty($exactWhitelist) && in_array($value, $exactWhitelist, true)) {
+            return true;
+        }
+
+        return preg_match('/^[A-Za-z0-9_\-\x{4e00}-\x{9fa5}\s]+$/u', $value) === 1;
     }
 
     /**

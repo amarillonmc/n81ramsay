@@ -110,6 +110,7 @@ class DialogueController {
         $dialogue = Utils::getSafeParam($_POST, 'dialogue', 'string', '', PUBLIC_DIALOGUE_MAX_LENGTH);
         $authorId = Utils::getSafeParam($_POST, 'author_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
         $userId = Utils::getSafeParam($_POST, 'user_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+        $authorIdWhitelist = $this->dialogueModel->getAuthorIdentifierWhitelist();
 
         if ($requestError !== null) {
             header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($requestError));
@@ -117,7 +118,7 @@ class DialogueController {
         }
 
         // 验证输入
-        if (empty($cardId) || !Utils::isValidPublicText($dialogue, PUBLIC_DIALOGUE_MAX_LENGTH) || !Utils::isValidPublicIdentifier($authorId) || !Utils::isValidPublicIdentifier($userId)) {
+        if (empty($cardId) || !Utils::isValidPublicText($dialogue, PUBLIC_DIALOGUE_MAX_LENGTH) || !Utils::isValidPublicIdentifier($authorId, $authorIdWhitelist) || !Utils::isValidPublicIdentifier($userId)) {
             header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode('所有字段都是必填的'));
             exit;
         }
@@ -140,6 +141,17 @@ class DialogueController {
         $validation = $this->dialogueModel->validateAuthor($authorId, $cardId, DIALOGUE_SUBMISSION_STRICTNESS);
         if (!$validation['valid']) {
             header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($validation['message']));
+            exit;
+        }
+
+        $throttleError = Utils::throttlePublicWrite('dialogue_submit', Utils::buildPayloadHash([
+            'card_id' => $cardId,
+            'dialogue' => $dialogue,
+            'author_id' => $authorId,
+            'user_id' => $userId
+        ]));
+        if ($throttleError !== null) {
+            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($throttleError));
             exit;
         }
 
@@ -456,13 +468,3 @@ class DialogueController {
         }
     }
 }
-        $throttleError = Utils::throttlePublicWrite('dialogue_submit', Utils::buildPayloadHash([
-            'card_id' => $cardId,
-            'dialogue' => $dialogue,
-            'author_id' => $authorId,
-            'user_id' => $userId
-        ]));
-        if ($throttleError !== null) {
-            header('Location: ' . BASE_URL . '?controller=dialogue&action=submit&error=' . urlencode($throttleError));
-            exit;
-        }
