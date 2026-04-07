@@ -118,6 +118,9 @@ class VoteController {
             $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
             $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
             $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+            $authorIdWhitelist = $this->getAuthorIdentifierWhitelist();
+            $authorIdWhitelist = $this->getAuthorIdentifierWhitelist();
+            $authorIdWhitelist = $this->getAuthorIdentifierWhitelist();
 
             // 检查卡片是否有alias字段，如果有则使用alias对应的卡片ID
             $card = $this->cardModel->getCardById($cardId);
@@ -151,7 +154,7 @@ class VoteController {
                 $errors[] = '请选择有效的禁限状态';
             }
 
-            if (!Utils::isValidPublicIdentifier($initiatorId)) {
+            if (!Utils::isValidPublicIdentifier($initiatorId, $authorIdWhitelist)) {
                 $errors[] = '请输入有效的ID';
             }
 
@@ -407,6 +410,7 @@ class VoteController {
             $status = Utils::getSafeParam($_POST, 'status', 'int', 3);
             $reason = Utils::getSafeParam($_POST, 'reason', 'string', '', PUBLIC_VOTE_REASON_MAX_LENGTH);
             $initiatorId = Utils::getSafeParam($_POST, 'initiator_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
+            $authorIdWhitelist = $this->getAuthorIdentifierWhitelist();
 
             // 验证数据
             $errors = [];
@@ -426,7 +430,7 @@ class VoteController {
                 $errors[] = '请选择有效的禁限状态';
             }
 
-            if (!Utils::isValidPublicIdentifier($initiatorId)) {
+            if (!Utils::isValidPublicIdentifier($initiatorId, $authorIdWhitelist)) {
                 $errors[] = '请输入有效的ID';
             }
 
@@ -474,7 +478,7 @@ class VoteController {
             if ($strictness >= 3) {
                 // 需要额外验证卡片作者
                 $cardAuthorId = Utils::getSafeParam($_POST, 'card_author_id', 'string', '', PUBLIC_IDENTIFIER_MAX_LENGTH);
-                if (empty($cardAuthorId) || !Utils::isValidPublicIdentifier($cardAuthorId)) {
+                if (empty($cardAuthorId) || !Utils::isValidPublicIdentifier($cardAuthorId, $authorIdWhitelist)) {
                     $errors[] = '请填写卡片作者ID';
                 } else {
                     $isCardAuthorValid = $this->checkCardAuthorAuthorization($cardAuthorId, $card);
@@ -1027,6 +1031,35 @@ class VoteController {
         }
 
         return false;
+    }
+
+    /**
+     * 获取作者ID白名单（作者名 + 别名）
+     *
+     * @return array
+     */
+    private function getAuthorIdentifierWhitelist() {
+        $db = Database::getInstance();
+        $allMappings = $db->getRows('SELECT author_name, alias FROM author_mappings');
+        $whitelist = array();
+
+        foreach ($allMappings as $mapping) {
+            if (!empty($mapping['author_name'])) {
+                $whitelist[] = trim($mapping['author_name']);
+            }
+
+            if (!empty($mapping['alias'])) {
+                $aliases = explode(',', $mapping['alias']);
+                foreach ($aliases as $alias) {
+                    $alias = trim($alias);
+                    if ($alias !== '') {
+                        $whitelist[] = $alias;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($whitelist));
     }
 
     /**

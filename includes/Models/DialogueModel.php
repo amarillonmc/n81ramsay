@@ -330,4 +330,32 @@ class DialogueModel {
 
         return ['valid' => false, 'message' => '未知的严格度设置', 'warning' => false];
     }
+
+    /**
+     * 获取作者ID白名单（作者名 + 别名）
+     *
+     * @return array
+     */
+    public function getAuthorIdentifierWhitelist() {
+        $authorMapping = new AuthorMapping();
+        $allMappings = $authorMapping->getAllAuthorMappings();
+        $whitelist = [];
+
+        foreach ($allMappings as $mapping) {
+            if (!empty($mapping['author_name'])) {
+                $whitelist[] = trim($mapping['author_name']);
+            }
+            if (!empty($mapping['alias'])) {
+                $aliases = explode(',', $mapping['alias']);
+                foreach ($aliases as $alias) {
+                    $alias = trim($alias);
+                    if ($alias !== '') {
+                        $whitelist[] = $alias;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($whitelist));
+    }
 }
