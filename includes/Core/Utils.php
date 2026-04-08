@@ -119,13 +119,54 @@ class Utils {
      * 拒绝包含数组污染的请求参数
      */
     public static function rejectInvalidRequestData() {
-        foreach (array($_GET, $_POST) as $bag) {
-            foreach ($bag as $key => $value) {
-                if (!self::isAllowedScalar($key, ROUTE_PARAM_MAX_LENGTH) || is_array($value)) {
-                    self::abort(400, 'Bad Request');
-                }
+        // GET 参数用于路由和查询，保持标量限制
+        foreach ($_GET as $key => $value) {
+            if (!self::isAllowedScalar($key, ROUTE_PARAM_MAX_LENGTH) || is_array($value)) {
+                self::abort(400, 'Bad Request');
             }
         }
+
+        // POST 参数允许数组（例如高级投票的 card_votes[card_id]），
+        // 但必须保证键名和值都为安全的标量或受限深度的数组，防止参数污染
+        if (!self::isValidRequestPayload($_POST, 0)) {
+            self::abort(400, 'Bad Request');
+        }
+    }
+
+    /**
+     * 验证请求负载结构
+     *
+     * @param mixed $payload 请求负载
+     * @param int $depth 当前递归深度
+     * @return bool
+     */
+    private static function isValidRequestPayload($payload, $depth = 0) {
+        $maxDepth = 4;
+        $maxArraySize = 512;
+        $maxFieldLength = defined('ROUTE_PARAM_MAX_LENGTH') ? ROUTE_PARAM_MAX_LENGTH * 64 : 4096;
+
+        if (!is_array($payload)) {
+            return self::isAllowedScalar($payload, $maxFieldLength);
+        }
+
+        if ($depth > $maxDepth || count($payload) > $maxArraySize) {
+            return false;
+        }
+
+        foreach ($payload as $key => $value) {
+            if (!self::isAllowedScalar($key, ROUTE_PARAM_MAX_LENGTH)) {
+                return false;
+            }
+            if (is_array($value)) {
+                if (!self::isValidRequestPayload($value, $depth + 1)) {
+                    return false;
+                }
+            } elseif (!self::isAllowedScalar($value, $maxFieldLength)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
