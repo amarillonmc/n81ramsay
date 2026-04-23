@@ -354,8 +354,9 @@ class VoteController {
                     } elseif ($ban['ban_level'] == 1) {
                         // 等级1封禁：检查理由长度
                         $minLength = defined('SERIES_VOTING_REASON_MIN_LENGTH') ? SERIES_VOTING_REASON_MIN_LENGTH : 400;
-                        if (strlen($comment) < $minLength) {
-                            $errors[] = "由于您的投票受到限制，评论字数不足，至少需要 {$minLength} 个字符，当前为 " . strlen($comment) . " 个字符";
+                        $commentLength = Utils::getStringLength($comment);
+                        if ($commentLength < $minLength) {
+                            $errors[] = "由于您的投票受到限制，评论字数不足，至少需要 {$minLength} 个字符，当前为 {$commentLength} 个字符";
                         }
                     }
                 }
@@ -462,8 +463,9 @@ class VoteController {
 
             if ($strictness >= 1) {
                 // 需要填写理由
-                if (strlen($reason) < $minReasonLength) {
-                    $errors[] = "理由字数不足，至少需要 {$minReasonLength} 个字符，当前为 " . strlen($reason) . " 个字符";
+                $reasonLength = Utils::getStringLength($reason);
+                if ($reasonLength < $minReasonLength) {
+                    $errors[] = "理由字数不足，至少需要 {$minReasonLength} 个字符，当前为 {$reasonLength} 个字符";
                 }
             }
 
@@ -702,8 +704,9 @@ class VoteController {
 
         // 检查理由长度（使用系列投票的标准）
         $minReasonLength = defined('SERIES_VOTING_REASON_MIN_LENGTH') ? SERIES_VOTING_REASON_MIN_LENGTH : 400;
-        if (count($validCardIds) > 1 && strlen($reason) < $minReasonLength) {
-            $errors[] = "涉及多张卡片时，理由字数不足，至少需要 {$minReasonLength} 个字符，当前为 " . strlen($reason) . " 个字符";
+        $reasonLength = Utils::getStringLength($reason);
+        if (count($validCardIds) > 1 && $reasonLength < $minReasonLength) {
+            $errors[] = "涉及多张卡片时，理由字数不足，至少需要 {$minReasonLength} 个字符，当前为 {$reasonLength} 个字符";
         }
 
         if (!empty($errors)) {

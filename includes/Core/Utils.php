@@ -76,7 +76,25 @@ class Utils {
         if (!is_string($value)) {
             return false;
         }
-        return strlen($value) <= $maxLength;
+        return self::getStringLength($value) <= $maxLength;
+    }
+
+    /**
+     * 获取字符串长度（优先按 UTF-8 字符计数）
+     *
+     * @param string $value 输入字符串
+     * @return int
+     */
+    public static function getStringLength($value) {
+        if (!is_string($value)) {
+            return 0;
+        }
+
+        if (function_exists('mb_strlen')) {
+            return mb_strlen($value, 'UTF-8');
+        }
+
+        return strlen($value);
     }
 
     /**
