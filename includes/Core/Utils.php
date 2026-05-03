@@ -161,10 +161,11 @@ class Utils {
     private static function isValidRequestPayload($payload, $depth = 0) {
         $maxDepth = 4;
         $maxArraySize = 512;
-        $maxFieldLength = defined('ROUTE_PARAM_MAX_LENGTH') ? ROUTE_PARAM_MAX_LENGTH * 64 : 4096;
+        $defaultFieldMaxLength = defined('ROUTE_PARAM_MAX_LENGTH') ? ROUTE_PARAM_MAX_LENGTH * 64 : 4096;
+        $largeTextFieldMaxLength = defined('LARGE_TEXT_FIELD_MAX_LENGTH') ? LARGE_TEXT_FIELD_MAX_LENGTH : 500000;
 
         if (!is_array($payload)) {
-            return self::isAllowedScalar($payload, $maxFieldLength);
+            return self::isAllowedScalar($payload, $defaultFieldMaxLength);
         }
 
         if ($depth > $maxDepth || count($payload) > $maxArraySize) {
@@ -179,8 +180,15 @@ class Utils {
                 if (!self::isValidRequestPayload($value, $depth + 1)) {
                     return false;
                 }
-            } elseif (!self::isAllowedScalar($value, $maxFieldLength)) {
-                return false;
+            } else {
+                $maxFieldLength = $defaultFieldMaxLength;
+                if (is_string($key) && in_array($key, array('batch_content', 'ydk_content', 'deck_content'), true)) {
+                    $maxFieldLength = $largeTextFieldMaxLength;
+                }
+
+                if (!self::isAllowedScalar($value, $maxFieldLength)) {
+                    return false;
+                }
             }
         }
 
