@@ -955,7 +955,7 @@ class AdminController {
                 }
                 if (preg_match("/define\(['\"]([A-Z0-9_]+)['\"]/", $line, $matches)) {
                     $name = $matches[1];
-                    if ($name === 'ADMIN_CONFIG') {
+                    if (in_array($name, $this->getSensitiveConfigNames(), true)) {
                         $description = '';
                         continue;
                     }
@@ -996,7 +996,7 @@ class AdminController {
         ];
 
         foreach ($configItems as $name => $info) {
-            if ($name === 'ADMIN_CONFIG') {
+            if (in_array($name, $this->getSensitiveConfigNames(), true)) {
                 continue;
             }
             if (!isset($newValues[$name]) || $newValues[$name] === '') {
@@ -1013,7 +1013,32 @@ class AdminController {
             $lines[] = "define('{$name}', {$valueExpr});";
         }
 
+        // 敏感值不在后台表单中回显，但保存其他配置时需要原样保留。
+        foreach ($this->getSensitiveConfigNames() as $name) {
+            if ($name === 'ADMIN_CONFIG' || !defined($name)) {
+                continue;
+            }
+            $value = constant($name);
+            if ($value === '') {
+                continue;
+            }
+            $lines[] = "define('{$name}', " . var_export($value, true) . ');';
+        }
+
         $content = implode("\n", $lines) . "\n";
         file_put_contents($configPath, $content);
+    }
+
+    /**
+     * 获取不能在后台回显的敏感配置项
+     *
+     * @return array 敏感配置名
+     */
+    private function getSensitiveConfigNames() {
+        return [
+            'ADMIN_CONFIG',
+            'SRVPRO2_API_PASSWORD',
+            'SRVPRO2_DB_PASSWORD'
+        ];
     }
 }

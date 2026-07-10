@@ -21,6 +21,118 @@ if (!defined('DB_PATH')) {
     define('DB_PATH', __DIR__ . '/data/ramsay.db');
 }
 
+// srvpro2 数据源总开关：true 使用 PostgreSQL + 动态录像 API；false 回退旧 srvpro 文件逻辑
+// 新部署应保持 true。旧逻辑仅用于临时回滚，会重新读取 REPLAY_PATH 与 DECK_LOG_PATH。
+if (!defined('SRVPRO2_INTEGRATION_ENABLED')) {
+    define('SRVPRO2_INTEGRATION_ENABLED', true);
+}
+
+// srvpro2 HTTP API 地址（回环可用 HTTP；任何远程地址必须使用 HTTPS）
+if (!defined('SRVPRO2_API_BASE_URL')) {
+    define('SRVPRO2_API_BASE_URL', 'http://127.0.0.1:7922');
+}
+// srvpro2 API 用户名；账号需要 download_replay 与 duel_log 权限
+if (!defined('SRVPRO2_API_USERNAME')) {
+    define('SRVPRO2_API_USERNAME', '');
+}
+// srvpro2 API 密码（敏感配置，不会显示在 RAMSAY 后台配置页）
+if (!defined('SRVPRO2_API_PASSWORD')) {
+    define('SRVPRO2_API_PASSWORD', '');
+}
+// srvpro2 API 请求总超时（秒）
+if (!defined('SRVPRO2_API_TIMEOUT')) {
+    define('SRVPRO2_API_TIMEOUT', 30);
+}
+// HTTPS API 是否校验证书；生产环境不应关闭
+if (!defined('SRVPRO2_API_VERIFY_TLS')) {
+    define('SRVPRO2_API_VERIFY_TLS', true);
+}
+// 单个动态录像允许的最大响应大小（字节）
+if (!defined('SRVPRO2_REPLAY_MAX_BYTES')) {
+    define('SRVPRO2_REPLAY_MAX_BYTES', 67108864); // 64 MiB
+}
+
+// srvpro2 PostgreSQL 主机（录像列表与卡片排行榜使用独立只读连接）
+if (!defined('SRVPRO2_DB_HOST')) {
+    define('SRVPRO2_DB_HOST', '127.0.0.1');
+}
+// srvpro2 PostgreSQL 端口
+if (!defined('SRVPRO2_DB_PORT')) {
+    define('SRVPRO2_DB_PORT', 5432);
+}
+// srvpro2 PostgreSQL 数据库名
+if (!defined('SRVPRO2_DB_NAME')) {
+    define('SRVPRO2_DB_NAME', 'srvpro2');
+}
+// srvpro2 PostgreSQL schema
+if (!defined('SRVPRO2_DB_SCHEMA')) {
+    define('SRVPRO2_DB_SCHEMA', 'public');
+}
+// srvpro2 PostgreSQL 只读用户名
+if (!defined('SRVPRO2_DB_USER')) {
+    define('SRVPRO2_DB_USER', ''); // 必须显式配置只读账号；不要使用数据库 owner
+}
+// srvpro2 PostgreSQL 密码（敏感配置，不会显示在 RAMSAY 后台配置页）
+if (!defined('SRVPRO2_DB_PASSWORD')) {
+    define('SRVPRO2_DB_PASSWORD', '');
+}
+// PostgreSQL SSL 模式：disable、allow、prefer、require、verify-ca、verify-full
+if (!defined('SRVPRO2_DB_SSLMODE')) {
+    define('SRVPRO2_DB_SSLMODE', 'prefer');
+}
+// PostgreSQL 单条查询超时（毫秒，0 表示不设置）
+if (!defined('SRVPRO2_DB_STATEMENT_TIMEOUT_MS')) {
+    define('SRVPRO2_DB_STATEMENT_TIMEOUT_MS', 60000);
+}
+// PostgreSQL 建连超时（秒），避免 IIS FastCGI worker 被不可达主机长期占用
+if (!defined('SRVPRO2_DB_CONNECT_TIMEOUT')) {
+    define('SRVPRO2_DB_CONNECT_TIMEOUT', 10);
+}
+// 活动房间状态的短缓存时间（秒，0 表示禁用）
+if (!defined('SRVPRO2_REPLAY_VISIBILITY_CACHE_SECONDS')) {
+    define('SRVPRO2_REPLAY_VISIBILITY_CACHE_SECONDS', 30);
+}
+// 单页最多向 /api/duellog 查询多少个无法由比分确认结束的房间
+if (!defined('SRVPRO2_REPLAY_VISIBILITY_MAX_LOOKUPS')) {
+    define('SRVPRO2_REPLAY_VISIBILITY_MAX_LOOKUPS', 10);
+}
+// 单次 /api/duellog 状态查询的超时与最大响应大小
+if (!defined('SRVPRO2_DUEL_LOG_TIMEOUT')) {
+    define('SRVPRO2_DUEL_LOG_TIMEOUT', 5);
+}
+if (!defined('SRVPRO2_DUEL_LOG_MAX_BYTES')) {
+    define('SRVPRO2_DUEL_LOG_MAX_BYTES', 8388608); // 8 MiB
+}
+if (!defined('SRVPRO2_DUEL_LOG_MAX_ENTRIES')) {
+    define('SRVPRO2_DUEL_LOG_MAX_ENTRIES', 10000);
+}
+// 录像列表按 ID keyset 向后扫描的批次大小，以及允许的最大页码
+if (!defined('SRVPRO2_REPLAY_SCAN_BATCH_SIZE')) {
+    define('SRVPRO2_REPLAY_SCAN_BATCH_SIZE', 50);
+}
+if (!defined('SRVPRO2_REPLAY_MAX_SCAN_BATCHES')) {
+    define('SRVPRO2_REPLAY_MAX_SCAN_BATCHES', 20);
+}
+if (!defined('SRVPRO2_REPLAY_MAX_PAGE')) {
+    define('SRVPRO2_REPLAY_MAX_PAGE', 1000);
+}
+// srvpro2 卡组 payload 的安全卡片数量上限
+if (!defined('SRVPRO2_MAX_DECK_CARDS')) {
+    define('SRVPRO2_MAX_DECK_CARDS', 200);
+}
+// 排行榜从 PostgreSQL 每批读取的卡组行数，避免 PDO_PGSQL 缓冲全量结果
+if (!defined('SRVPRO2_DECK_BATCH_SIZE')) {
+    define('SRVPRO2_DECK_BATCH_SIZE', 500);
+}
+// 可选：srvpro2 WINDBOT_BOTLIST 指向的 bots.json 在 IIS 主机上的可读路径
+if (!defined('SRVPRO2_WINDBOT_BOTLIST_PATH')) {
+    define('SRVPRO2_WINDBOT_BOTLIST_PATH', '');
+}
+// 可选：远程 srvpro2 无法共享 bots.json 时，手工提供 Windbot 名称 JSON 数组
+if (!defined('SRVPRO2_WINDBOT_NAMES')) {
+    define('SRVPRO2_WINDBOT_NAMES', '[]');
+}
+
 // 根据DEBUG_MODE判断环境类型
 // DEBUG_MODE为false时为生产环境，否则为测试环境
 $isProduction = !DEBUG_MODE;
@@ -53,7 +165,7 @@ if (!defined('ALLOW_TCG_CARD_VOTING')) {
     define('ALLOW_TCG_CARD_VOTING', false);
 }
 
-// 服务器记录卡组文件存放位置
+// 旧 srvpro 服务器卡组文件目录（仅 SRVPRO2_INTEGRATION_ENABLED=false 时使用）
 if (!defined('DECK_LOG_PATH')) {
     define('DECK_LOG_PATH', __DIR__ . '/deck_log');
 }
@@ -245,7 +357,7 @@ if (!defined('EXCLUDED_CARD_DATABASES')) {
 
 // 卡片排行榜配置
 if (!defined('CARD_RANKING_ENABLED')) {
-    define('CARD_RANKING_ENABLED', false); // 是否启用卡片排行榜功能
+    define('CARD_RANKING_ENABLED', true); // 是否启用卡片排行榜功能
 }
 if (!defined('CARD_RANKING_CACHE_DAYS')) {
     define('CARD_RANKING_CACHE_DAYS', 7); // 卡片排行榜缓存天数，超过此天数将重新生成
@@ -325,8 +437,7 @@ if (!defined('REPLAY_ENABLED')) {
     define('REPLAY_ENABLED', true); // 是否启用录像回放功能
 }
 if (!defined('REPLAY_PATH')) {
-    // 录像文件目录路径
-    // 在生产环境中，这应该指向 YGOPro 服务器的 replay 目录
+    // 旧 srvpro 录像文件目录（仅 SRVPRO2_INTEGRATION_ENABLED=false 时使用）
     if ($isProduction) {
         define('REPLAY_PATH', __DIR__ . '/replay');
     } else {

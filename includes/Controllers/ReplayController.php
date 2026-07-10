@@ -37,8 +37,16 @@ class ReplayController {
 
         $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         $perPage = defined('REPLAYS_PER_PAGE') ? REPLAYS_PER_PAGE : 20;
+        $cursor = Utils::getSafeParam($_GET, 'cursor', 'string', null, 16);
 
-        $result = $this->replayModel->getReplayList($page, $perPage);
+        $replayError = null;
+        try {
+            $result = $this->replayModel->getReplayList($page, $perPage, $cursor);
+        } catch (Exception $e) {
+            Utils::debug('获取录像列表失败', ['错误' => $e->getMessage()]);
+            $result = $this->getEmptyReplayResult($page, $perPage);
+            $replayError = '无法读取 srvpro2 录像数据，请管理员检查 PostgreSQL 与 API 配置。';
+        }
 
         $pageTitle = '录像回放 - ' . SITE_TITLE;
         include __DIR__ . '/../Views/layout.php';
@@ -56,25 +64,25 @@ class ReplayController {
             return;
         }
 
-        $filename = isset($_GET['file']) ? $_GET['file'] : null;
+        $filename = Utils::getSafeParam($_GET, 'file', 'string', null, 260);
 
-        if (!$filename) {
+        if (!$filename || !$this->isValidReplayFilename($filename)) {
             $_SESSION['error_message'] = '录像文件不存在';
             Utils::redirect('?controller=replay');
             return;
         }
 
-        $filePath = $this->replayModel->getReplayPath($filename);
-        if (!$filePath) {
-            $_SESSION['error_message'] = '录像文件不存在';
+        try {
+            $replayInfo = $this->replayModel->getReplayInfo($filename);
+        } catch (Exception $e) {
+            Utils::debug('获取录像详情失败', ['错误' => $e->getMessage(), '文件' => $filename]);
+            $_SESSION['error_message'] = '无法读取 srvpro2 录像数据，请稍后重试';
             Utils::redirect('?controller=replay');
             return;
         }
-
-        $replayInfo = $this->replayModel->parseReplayHeader($filePath);
 
         if (!$replayInfo) {
-            $_SESSION['error_message'] = '无法读取录像文件';
+            $_SESSION['error_message'] = '录像不存在、尚未结束或已被删除';
             Utils::redirect('?controller=replay');
             return;
         }
@@ -98,17 +106,27 @@ class ReplayController {
 
         $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
         $perPage = isset($_GET['per_page']) ? min(100, max(1, (int)$_GET['per_page'])) : 20;
+        $cursor = Utils::getSafeParam($_GET, 'cursor', 'string', null, 16);
 
-        $result = $this->replayModel->getReplayList($page, $perPage);
-
-        echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        try {
+            $result = $this->replayModel->getReplayList($page, $perPage, $cursor);
+            foreach ($result['replays'] as &$replay) {
+                unset($replay['file_path']);
+            }
+            unset($replay);
+            echo json_encode($result, JSON_UNESCAPED_UNICODE);
+        } catch (Exception $e) {
+            Utils::debug('录像列表 API 失败', ['错误' => $e->getMessage()]);
+            http_response_code(502);
+            echo json_encode(['error' => '无法读取 srvpro2 录像数据'], JSON_UNESCAPED_UNICODE);
+        }
     }
 
     /**
      * API: 获取录像文件
      */
     public function file() {
-        $filename = isset($_GET['file']) ? $_GET['file'] : null;
+        $filename = Utils::getSafeParam($_GET, 'file', 'string', null, 260);
 
         if (!$filename) {
             header('HTTP/1.0 400 Bad Request');
@@ -122,7 +140,15 @@ class ReplayController {
             return;
         }
 
-        $content = $this->replayModel->getReplayContent($filename);
+        try {
+            $content = $this->replayModel->getReplayContent($filename);
+        } catch (Exception $e) {
+            Utils::debug('下载动态录像失败', ['错误' => $e->getMessage(), '文件' => $filename]);
+            http_response_code(502);
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['error' => 'srvpro2 动态录像服务暂时不可用'], JSON_UNESCAPED_UNICODE);
+            return;
+        }
 
         if ($content === null) {
             header('HTTP/1.0 404 Not Found');
@@ -150,7 +176,15 @@ class ReplayController {
         if (preg_match('/\.\./', $filename)) {
             return false;
         }
-        
+
+        if (defined('SRVPRO2_INTEGRATION_ENABLED') && SRVPRO2_INTEGRATION_ENABLED) {
+            if (!preg_match('/^([1-9][0-9]{0,15})\.yrp$/', $filename, $matches)) {
+                return false;
+            }
+
+            return strlen($matches[1]) < 16 || strcmp($matches[1], '9007199254740991') <= 0;
+        }
+
         if (!preg_match('/\.yrp2?$/i', $filename)) {
             return false;
         }
@@ -170,7 +204,9 @@ class ReplayController {
         $baseUrl = defined('BASE_URL') ? BASE_URL : '/';
         foreach ($dbs as &$db) {
             $db['url'] = $baseUrl . '?controller=replay&action=database&name=' . urlencode($db['name']);
+            unset($db['path']);
         }
+        unset($db);
 
         $scriptUrl = $baseUrl . '?controller=replay&action=script&path=';
 
@@ -338,5 +374,27 @@ class ReplayController {
         } else {
             header('HTTP/1.0 404 Not Found');
         }
+    }
+
+    /**
+     * 构造空录像分页结果
+     *
+     * @param int $page 页码
+     * @param int $perPage 每页数量
+     * @return array 空结果
+     */
+    private function getEmptyReplayResult($page, $perPage) {
+        return [
+            'replays' => [],
+            'total' => 0,
+            'page' => max(1, (int)$page),
+            'per_page' => max(1, (int)$perPage),
+            'total_pages' => 0,
+            'has_next' => false,
+            'next_cursor' => null,
+            'source' => defined('SRVPRO2_INTEGRATION_ENABLED') && SRVPRO2_INTEGRATION_ENABLED
+                ? 'srvpro2'
+                : 'legacy_files'
+        ];
     }
 }

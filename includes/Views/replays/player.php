@@ -2,6 +2,10 @@
 /**
  * 录像播放器页面 - 纯文本日志模式
  */
+$playerDisplay = isset($replayInfo['versus_text'])
+    ? $replayInfo['versus_text']
+    : implode(' vs ', array_slice($replayInfo['player_names'], 0, 2));
+$jsonFlags = JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 ?>
 
 <div class="replay-player-container">
@@ -13,7 +17,7 @@
     <div class="player-info">
         <div class="info-item">
             <span class="label">玩家：</span>
-            <span class="value"><?php echo htmlspecialchars(implode(' vs ', array_slice($replayInfo['player_names'], 0, 2))); ?></span>
+            <span class="value"><?php echo Utils::escapeHtml($playerDisplay); ?></span>
         </div>
         <div class="info-item">
             <span class="label">规则：</span>
@@ -76,10 +80,10 @@
 
 <script>
 window.RAMSAY_REPLAY_CONFIG = {
-    replayFile: <?php echo json_encode($replayInfo['filename']); ?>,
-    replayUrl: '?controller=replay&action=file&file=' + encodeURIComponent(<?php echo json_encode($replayInfo['filename']); ?>),
+    replayFile: <?php echo json_encode($replayInfo['filename'], $jsonFlags); ?>,
+    replayUrl: '?controller=replay&action=file&file=' + encodeURIComponent(<?php echo json_encode($replayInfo['filename'], $jsonFlags); ?>),
     databasesUrl: '?controller=replay&action=databases',
-    playerNames: <?php echo json_encode($replayInfo['player_names']); ?>
+    playerNames: <?php echo json_encode($replayInfo['player_names'], $jsonFlags); ?>
 };
 </script>
 <script type="module" src="<?php echo BASE_URL; ?>assets/js/replay-player.bundle.js"></script>

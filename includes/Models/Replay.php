@@ -6,10 +6,10 @@
  */
 class Replay {
     /**
-     * 数据库实例
-     * @var Database
+     * srvpro2 录像仓库
+     * @var Srvpro2ReplayRepository|null
      */
-    private $db;
+    private $srvpro2Repository;
 
     /**
      * 录像文件目录
@@ -21,8 +21,10 @@ class Replay {
      * 构造函数
      */
     public function __construct() {
-        $this->db = Database::getInstance();
         $this->replayPath = defined('REPLAY_PATH') ? REPLAY_PATH : __DIR__ . '/../../replay';
+        $this->srvpro2Repository = $this->isSrvpro2Enabled()
+            ? new Srvpro2ReplayRepository()
+            : null;
     }
 
     /**
@@ -31,9 +33,14 @@ class Replay {
      *
      * @param int $page 页码
      * @param int $perPage 每页数量
+     * @param string|null $cursor srvpro2 下一页游标
      * @return array 录像列表和分页信息
      */
-    public function getReplayList($page = 1, $perPage = 20) {
+    public function getReplayList($page = 1, $perPage = 20, $cursor = null) {
+        if ($this->isSrvpro2Enabled()) {
+            return $this->srvpro2Repository->getReplayList($page, $perPage, $cursor);
+        }
+
         $replays = [];
         $offset = ($page - 1) * $perPage;
 
@@ -43,7 +50,10 @@ class Replay {
                 'total' => 0,
                 'page' => $page,
                 'per_page' => $perPage,
-                'total_pages' => 0
+                'total_pages' => 0,
+                'has_next' => false,
+                'next_cursor' => null,
+                'source' => 'legacy_files'
             ];
         }
 
@@ -86,7 +96,10 @@ class Replay {
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
-            'total_pages' => $totalPages
+            'total_pages' => $totalPages,
+            'has_next' => $page < $totalPages,
+            'next_cursor' => null,
+            'source' => 'legacy_files'
         ];
     }
 
@@ -236,6 +249,27 @@ class Replay {
     }
 
     /**
+     * 根据文件名获取录像信息
+     *
+     * srvpro2 模式从 PostgreSQL 查询；旧模式继续读取本地文件头。
+     *
+     * @param string $filename 录像文件名
+     * @return array|null 录像信息
+     */
+    public function getReplayInfo($filename) {
+        if ($this->isSrvpro2Enabled()) {
+            return $this->srvpro2Repository->getReplayInfo($filename);
+        }
+
+        $filePath = $this->getReplayPath($filename);
+        if ($filePath === null) {
+            return null;
+        }
+
+        return $this->parseReplayHeader($filePath);
+    }
+
+    /**
      * 从文件名提取玩家名
      *
      * @param string $filename 文件名
@@ -292,6 +326,10 @@ class Replay {
      * @return string|null 文件内容
      */
     public function getReplayContent($filename) {
+        if ($this->isSrvpro2Enabled()) {
+            return $this->srvpro2Repository->getReplayContent($filename);
+        }
+
         $filePath = $this->replayPath . '/' . basename($filename);
 
         if (!file_exists($filePath)) {
@@ -312,6 +350,10 @@ class Replay {
      * @return string|null 文件路径
      */
     public function getReplayPath($filename) {
+        if ($this->isSrvpro2Enabled()) {
+            return null;
+        }
+
         $filePath = $this->replayPath . '/' . basename($filename);
 
         if (!file_exists($filePath)) {
@@ -408,5 +450,14 @@ class Replay {
     public function getCardImageUrls() {
         $baseUrl = defined('BASE_URL') ? BASE_URL : '/';
         return $baseUrl . '?controller=replay&action=cardimage&id=';
+    }
+
+    /**
+     * 是否使用 srvpro2 新数据源
+     *
+     * @return bool 是否启用
+     */
+    private function isSrvpro2Enabled() {
+        return defined('SRVPRO2_INTEGRATION_ENABLED') && SRVPRO2_INTEGRATION_ENABLED;
     }
 }

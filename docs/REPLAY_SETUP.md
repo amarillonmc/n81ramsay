@@ -1,4 +1,8 @@
-# 录像回放功能设置指南
+# 旧 srvpro 本地录像模式设置指南
+
+> srvpro2 不再落地录像文件。新部署请使用
+> [srvpro2 录像与卡片排行榜接入指南](SRVPRO2_SETUP.md)。本文只说明将
+> `SRVPRO2_INTEGRATION_ENABLED` 设为 `false` 后的旧文件回滚模式。
 
 ## 功能概述
 
@@ -33,6 +37,9 @@ npm run build
 在 `config.user.php` 中添加：
 ```php
 <?php
+// 关闭srvpro2集成，显式启用旧srvpro文件入口
+define('SRVPRO2_INTEGRATION_ENABLED', false);
+
 // 启用录像功能
 define('REPLAY_ENABLED', true);
 
