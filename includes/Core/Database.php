@@ -38,6 +38,9 @@ class Database {
             // 设置错误模式
             $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+            // 冷部署并发请求可能同时执行兼容迁移；在任何DDL之前先允许等待首个写锁。
+            $this->pdo->exec('PRAGMA busy_timeout = 5000');
+
             // 启用外键约束
             $this->pdo->exec('PRAGMA foreign_keys = ON');
 
@@ -64,6 +67,8 @@ class Database {
 
     /**
      * 初始化数据库表
+     *
+     * @return void
      */
     private function initTables() {
         // 创建投票表
@@ -193,19 +198,80 @@ class Database {
             )
         ');
 
-        // 创建作者映射表
+        // 创建作者映射表。同一前缀可以由多个显式区间复用，记录以稳定ID区分。
         $this->pdo->exec('
             CREATE TABLE IF NOT EXISTS author_mappings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 card_prefix TEXT NOT NULL,
                 author_name TEXT NOT NULL,
+                card_id_length INTEGER,
+                card_id_start INTEGER,
+                card_id_end INTEGER,
+                priority INTEGER NOT NULL DEFAULT 100,
                 alias TEXT,
                 contact TEXT,
                 notes TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE (card_prefix)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ');
+
+        // 兼容已有作者映射数据库，补充精确区间与优先级字段。
+        $this->ensureColumnExists('author_mappings', 'card_id_length', 'INTEGER');
+        $this->ensureColumnExists('author_mappings', 'card_id_start', 'INTEGER');
+        $this->ensureColumnExists('author_mappings', 'card_id_end', 'INTEGER');
+        $this->ensureColumnExists('author_mappings', 'priority', 'INTEGER NOT NULL DEFAULT 100');
+        $this->ensureAuthorMappingsAllowDuplicatePrefixes();
+        $this->pdo->exec('
+            CREATE INDEX IF NOT EXISTS idx_author_mappings_resolution
+            ON author_mappings (priority DESC, card_prefix ASC, id ASC)
+        ');
+
+        // 管理员维护的CDB字段匹配规则。文本规则优先于卡号区间，适合无固定区间的散卡。
+        $this->pdo->exec('
+            CREATE TABLE IF NOT EXISTS card_match_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                database_file TEXT,
+                match_field TEXT NOT NULL DEFAULT "desc",
+                match_operator TEXT NOT NULL DEFAULT "contains",
+                match_value TEXT NOT NULL,
+                target_type TEXT NOT NULL DEFAULT "author",
+                target_value TEXT,
+                author_name TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 100,
+                is_case_sensitive INTEGER NOT NULL DEFAULT 0,
+                is_enabled INTEGER NOT NULL DEFAULT 1,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ');
+        // 旧规则默认都是作者规则；保留author_name列作为滚动部署兼容层。
+        $this->ensureColumnExists('card_match_rules', 'target_type', 'TEXT NOT NULL DEFAULT "author"');
+        $this->ensureColumnExists('card_match_rules', 'target_value', 'TEXT');
+        $needsTargetTypeBackfill = $this->pdo->query(
+            "SELECT 1 FROM card_match_rules "
+            . "WHERE target_type IS NULL OR target_type NOT IN ('author', 'series') LIMIT 1"
+        )->fetchColumn();
+        if ($needsTargetTypeBackfill !== false) {
+            $this->pdo->exec(
+                "UPDATE card_match_rules SET target_type = 'author' "
+                . "WHERE target_type IS NULL OR target_type NOT IN ('author', 'series')"
+            );
+        }
+        $needsTargetValueBackfill = $this->pdo->query(
+            "SELECT 1 FROM card_match_rules WHERE (target_value IS NULL OR trim(target_value) = '') "
+            . "AND author_name != '' LIMIT 1"
+        )->fetchColumn();
+        if ($needsTargetValueBackfill !== false) {
+            $this->pdo->exec(
+                "UPDATE card_match_rules SET target_value = author_name "
+                . "WHERE (target_value IS NULL OR trim(target_value) = '') AND author_name != ''"
+            );
+        }
+        $this->pdo->exec('
+            CREATE INDEX IF NOT EXISTS idx_card_match_rules_enabled_priority
+            ON card_match_rules (is_enabled, target_type, priority DESC, id ASC)
         ');
 
         // 创建召唤词投稿表
@@ -428,6 +494,7 @@ class Database {
      * @param string $table 表名
      * @param string $column 列名
      * @param string $definition 定义
+     * @return void
      */
     private function ensureColumnExists($table, $column, $definition) {
         $columns = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll(PDO::FETCH_ASSOC);
@@ -437,7 +504,112 @@ class Database {
             }
         }
 
-        $this->pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+        try {
+            $this->pdo->exec("ALTER TABLE {$table} ADD COLUMN {$column} {$definition}");
+        } catch (PDOException $e) {
+            // 滚动部署时两个首请求可能同时发现缺列；若另一请求已完成ALTER即可继续。
+            $columns = $this->pdo->query("PRAGMA table_info({$table})")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($columns as $currentColumn) {
+                if ($currentColumn['name'] === $column) {
+                    return;
+                }
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * 移除旧版author_mappings表的单前缀唯一约束。
+     *
+     * SQLite不能直接删除表级UNIQUE约束，因此在事务内重建表，并原样复制稳定ID、
+     * 人工维护字段及时间戳。新安装不会进入重建流程。
+     *
+     * @return void
+     * @throws PDOException 数据迁移失败时终止初始化，避免带着半迁移结构继续运行
+     */
+    private function ensureAuthorMappingsAllowDuplicatePrefixes() {
+        if (!$this->hasUniqueAuthorPrefixConstraint()) {
+            return;
+        }
+
+        $transactionStarted = false;
+        try {
+            $this->pdo->exec('BEGIN IMMEDIATE TRANSACTION');
+            $transactionStarted = true;
+            if (!$this->hasUniqueAuthorPrefixConstraint()) {
+                $this->pdo->exec('COMMIT');
+                $transactionStarted = false;
+                return;
+            }
+
+            $this->pdo->exec('DROP TABLE IF EXISTS author_mappings_migration');
+            $this->pdo->exec('
+                CREATE TABLE author_mappings_migration (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    card_prefix TEXT NOT NULL,
+                    author_name TEXT NOT NULL,
+                    card_id_length INTEGER,
+                    card_id_start INTEGER,
+                    card_id_end INTEGER,
+                    priority INTEGER NOT NULL DEFAULT 100,
+                    alias TEXT,
+                    contact TEXT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ');
+            $this->pdo->exec('
+                INSERT INTO author_mappings_migration (
+                    id, card_prefix, author_name, card_id_length, card_id_start,
+                    card_id_end, priority, alias, contact, notes, created_at, updated_at
+                )
+                SELECT
+                    id, card_prefix, author_name, card_id_length, card_id_start,
+                    card_id_end, priority, alias, contact, notes, created_at, updated_at
+                FROM author_mappings
+                ORDER BY id ASC
+            ');
+            $this->pdo->exec('DROP TABLE author_mappings');
+            $this->pdo->exec('ALTER TABLE author_mappings_migration RENAME TO author_mappings');
+            $this->pdo->exec('COMMIT');
+            $transactionStarted = false;
+        } catch (PDOException $e) {
+            if ($transactionStarted) {
+                try {
+                    $this->pdo->exec('ROLLBACK');
+                } catch (PDOException $rollbackException) {
+                    Utils::debug('作者映射表迁移回滚失败', ['错误' => $rollbackException->getMessage()]);
+                }
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * 检查作者映射表是否仍存在单列前缀唯一约束。
+     *
+     * @return bool 是否存在旧版唯一约束
+     */
+    private function hasUniqueAuthorPrefixConstraint() {
+        $indexes = $this->pdo->query('PRAGMA index_list(author_mappings)')->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($indexes as $index) {
+            if (empty($index['unique']) || !isset($index['name'])) {
+                continue;
+            }
+
+            $escapedIndexName = str_replace("'", "''", $index['name']);
+            $indexColumns = $this->pdo
+                ->query("PRAGMA index_info('{$escapedIndexName}')")
+                ->fetchAll(PDO::FETCH_ASSOC);
+            $columnNames = array_column($indexColumns, 'name');
+            if ($columnNames === ['card_prefix']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

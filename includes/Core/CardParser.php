@@ -60,9 +60,35 @@ class CardParser {
     private $authors = [];
 
     /**
+     * 作者归属解析器
+     * @var AuthorResolver|null
+     */
+    private $authorResolver;
+
+    /**
+     * 预加载的管理员作者区间
+     * @var array|null
+     */
+    private $manualAuthorMappings;
+
+    /**
+     * 预加载的管理员文本规则
+     * @var array|null
+     */
+    private $authorTextRules;
+
+    /**
+     * 作者码对应卡号总位数推断缓存
+     * @var array
+     */
+    private $authorPrefixLengthCache = [];
+
+    /**
      * 构造函数
      */
     private function __construct() {
+        $this->authorResolver = new AuthorResolver();
+
         // 加载卡片信息映射
         $this->loadCardInfoMappings();
 
@@ -367,90 +393,85 @@ class CardParser {
 
     /**
      * 加载作者信息
+     *
+     * @return void
      */
     private function loadAuthors() {
         $cardDataPath = CARD_DATA_PATH;
         $stringsFile = $cardDataPath . '/strings.conf';
 
-        if (file_exists($stringsFile)) {
-            $content = file_get_contents($stringsFile);
-            $lines = explode("\n", $content);
+        if (!file_exists($stringsFile)) {
+            return;
+        }
 
-            foreach ($lines as $line) {
-                $line = trim($line);
+        $content = file_get_contents($stringsFile);
+        $content = str_replace(["\r\n", "\r"], "\n", $content);
+        $claims = [];
 
-                // 只处理注释行中的作者信息
-                if (strpos($line, '#') === 0) {
-                    // 尝试匹配作者信息格式
-                    // 格式1: #作者名 卡片前缀 系列区间
-                    if (preg_match('/#([^\s]+)\s+(\d+)\s+(0x[0-9a-fA-F]+-0x[0-9a-fA-F]+)/', $line, $matches)) {
-                        $authorName = $matches[1];
-                        $cardPrefix = $matches[2];
-                        $setcodeRange = $matches[3];
-
-                        // 解析系列区间
-                        $setcodeRanges = [];
-                        $rangeParts = explode(' ', $setcodeRange);
-                        foreach ($rangeParts as $rangePart) {
-                            if (strpos($rangePart, '-') !== false) {
-                                list($start, $end) = explode('-', $rangePart);
-                                $setcodeRanges[] = [
-                                    'start' => $start,
-                                    'end' => $end
-                                ];
-                            }
-                        }
-
-                        // 存储作者信息
-                        $this->authors[$cardPrefix] = [
-                            'name' => $authorName,
-                            'card_prefix' => $cardPrefix,
-                            'setcode_ranges' => $setcodeRanges
-                        ];
-
-                        // 如果有多个卡片区间，也添加到映射中
-                        if (preg_match_all('/\s(\d+)\s/', $line, $prefixMatches)) {
-                            foreach ($prefixMatches[1] as $additionalPrefix) {
-                                if ($additionalPrefix != $cardPrefix) {
-                                    $this->authors[$additionalPrefix] = [
-                                        'name' => $authorName,
-                                        'card_prefix' => $additionalPrefix,
-                                        'setcode_ranges' => $setcodeRanges
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                    // 格式2: #作者名 卡片前缀
-                    else if (preg_match('/#([^\s]+)\s+(\d+)(?:\s|$)/', $line, $matches)) {
-                        $authorName = $matches[1];
-                        $cardPrefix = $matches[2];
-
-                        // 存储作者信息
-                        $this->authors[$cardPrefix] = [
-                            'name' => $authorName,
-                            'card_prefix' => $cardPrefix,
-                            'setcode_ranges' => []
-                        ];
-                    }
-                    // 格式3: #作者名:卡片前缀
-                    else if (preg_match('/#([^:]+):(\d+)/', $line, $matches)) {
-                        $authorName = trim($matches[1]);
-                        $cardPrefix = $matches[2];
-
-                        // 存储作者信息
-                        $this->authors[$cardPrefix] = [
-                            'name' => $authorName,
-                            'card_prefix' => $cardPrefix,
-                            'setcode_ranges' => []
-                        ];
-                    }
-                }
+        foreach (explode("\n", $content) as $line) {
+            $line = trim($line);
+            if (strpos($line, '#') !== 0 || strpos($line, '#!') === 0) {
+                continue;
             }
 
-            // 调试信息
-            Utils::debug('加载作者信息完成', ['作者数量' => count($this->authors)]);
+            $body = trim(substr($line, 1));
+            if ($body === '' || preg_match('/^(?:No81DIY|Moved|victory\s+reason|counters?|カテゴリ|cm\b|AddCodeList|TYGOC\s+Submissions)/iu', $body)) {
+                continue;
+            }
+
+            // 十六进制值是setcode命名空间，不是卡号区间；9-10位数字通常是QQ号。
+            $body = preg_replace('/0x[0-9a-f]+(?:\s*(?:-|--|~)\s*0x[0-9a-f]+)?/iu', ' ', $body);
+            $body = preg_replace('/(?:qq\s*[:：]?\s*)?\b\d{9,10}\b/iu', ' ', $body);
+            $body = preg_replace('/\s+/u', ' ', trim($body));
+
+            // 数字作者名（例如“#01 822”）无法在无schema文本中可靠消歧，交由后台人工维护。
+            if (preg_match('/^\d{1,4}(?:&\d{1,4})?\s+\d{1,4}(?:&\d{1,4})?(?:\s|$)/u', $body)) {
+                continue;
+            }
+
+            $match = [];
+            if (!preg_match('/^(.+?)(?:\s+|\s*:\s*)(\d{1,4}(?:&\d{1,4})*)(?:\s|$)/u', $body, $match)) {
+                continue;
+            }
+
+            $authorName = trim($match[1]);
+            if ($authorName === '' || preg_match('/^\d+$/', $authorName)) {
+                continue;
+            }
+
+            foreach (explode('&', $match[2]) as $cardPrefix) {
+                $cardPrefix = trim($cardPrefix);
+                if (!preg_match('/^\d{1,4}$/', $cardPrefix)) {
+                    continue;
+                }
+                if (!isset($claims[$cardPrefix])) {
+                    $claims[$cardPrefix] = [];
+                }
+                $claims[$cardPrefix][$authorName] = true;
+            }
         }
+
+        foreach ($claims as $cardPrefix => $authors) {
+            $authorNames = array_keys($authors);
+            if (count($authorNames) !== 1) {
+                Utils::debug('跳过存在冲突的strings.conf作者码', [
+                    'card_prefix' => $cardPrefix,
+                    'authors' => $authorNames
+                ]);
+                continue;
+            }
+
+            $this->authors[] = [
+                'author_name' => $authorNames[0],
+                'name' => $authorNames[0],
+                'card_prefix' => (string)$cardPrefix,
+                'card_id_length' => $this->inferAuthorCardIdLength((string)$cardPrefix),
+                'priority' => 0,
+                'setcode_ranges' => []
+            ];
+        }
+
+        Utils::debug('加载作者信息完成', ['作者数量' => count($this->authors)]);
     }
 
     /**
@@ -460,81 +481,164 @@ class CardParser {
      * @return string 作者名称
      */
     public function getCardAuthor($card) {
-        // 首先检查数据库中的作者映射
-        $cardId = (string)$card['id'];
+        $resolution = $this->getCardAuthorResolution($card);
+        return $resolution['author'];
+    }
+
+    /**
+     * 获取带判定来源的卡片作者信息
+     *
+     * @param array $card 卡片信息
+     * @param bool $manualOnly 是否只使用管理员规则
+     * @return array 作者、来源与命中规则
+     */
+    public function getCardAuthorResolution($card, $manualOnly = false) {
+        if (!($this->authorResolver instanceof AuthorResolver)) {
+            $this->authorResolver = new AuthorResolver();
+        }
+
+        $this->loadRuntimeAuthorRules();
+
+        return $this->authorResolver->resolve(
+            $card,
+            $this->manualAuthorMappings,
+            $this->authorTextRules,
+            $this->authors,
+            $manualOnly
+        );
+    }
+
+    /**
+     * 将作者与可解释来源写入卡片数组
+     *
+     * @param array $card 卡片信息
+     * @return void
+     */
+    private function applyAuthorResolution(&$card) {
+        $resolution = $this->getCardAuthorResolution($card);
+        $card['author'] = $resolution['author'];
+        $card['author_source'] = $resolution['source'];
+        $card['author_source_label'] = $resolution['source_label'];
+        $card['author_rule_id'] = $resolution['rule_id'];
+        $card['author_matched_on'] = $resolution['matched_on'];
+        $card['author_matched_value'] = $resolution['matched_value'];
+
+        $seriesResolution = $this->authorResolver->resolveSeries($card, $this->authorTextRules);
+        $card['manual_series_name'] = $seriesResolution !== null ? $seriesResolution['series_name'] : null;
+        $card['manual_series_source'] = $seriesResolution !== null ? $seriesResolution['source'] : null;
+        $card['manual_series_source_label'] = $seriesResolution !== null ? $seriesResolution['source_label'] : null;
+        $card['manual_series_rule_id'] = $seriesResolution !== null ? $seriesResolution['rule_id'] : null;
+        $card['manual_series_matched_on'] = $seriesResolution !== null ? $seriesResolution['matched_on'] : null;
+        $card['manual_series_matched_value'] = $seriesResolution !== null ? $seriesResolution['matched_value'] : null;
+    }
+
+    /**
+     * 一次性预加载管理员规则，避免排行榜逐卡查询RAMSAY数据库
+     *
+     * @return void
+     */
+    private function loadRuntimeAuthorRules() {
+        if ($this->manualAuthorMappings !== null && $this->authorTextRules !== null) {
+            return;
+        }
+
         $db = Database::getInstance();
-
-        // 尝试使用卡片ID前缀查找数据库中的作者映射
-        if (strlen($cardId) >= 3) {
-            $cardPrefix = substr($cardId, 0, 3);
-            $authorMapping = $db->getRow('SELECT * FROM author_mappings WHERE card_prefix = :card_prefix', [
-                ':card_prefix' => $cardPrefix
-            ]);
-
-            if ($authorMapping) {
-                return $this->normalizeAuthorName($authorMapping['author_name']);
+        $this->manualAuthorMappings = $db->getRows(
+            'SELECT * FROM author_mappings ORDER BY priority DESC, card_prefix ASC, id ASC'
+        );
+        foreach ($this->manualAuthorMappings as &$mapping) {
+            $hasExplicitRange = isset($mapping['card_id_start'], $mapping['card_id_end']) &&
+                $mapping['card_id_start'] !== null && $mapping['card_id_start'] !== '' &&
+                $mapping['card_id_end'] !== null && $mapping['card_id_end'] !== '';
+            if (!$hasExplicitRange &&
+                (!isset($mapping['card_id_length']) || (int)$mapping['card_id_length'] <= 0)) {
+                $mapping['card_id_length'] = $this->inferAuthorCardIdLength($mapping['card_prefix']);
             }
         }
+        unset($mapping);
 
-        // 其次检查卡片描述中是否有作者签名
-        $desc = $card['desc'];
+        $this->authorTextRules = $db->getRows(
+            'SELECT * FROM card_match_rules WHERE is_enabled = 1 ORDER BY priority DESC, id ASC'
+        );
+    }
 
-        // 匹配多种格式的作者签名
-        // 1. DoItYourself/DIY 后跟分隔符或by，然后是作者名
-        // 2. 分隔符后跟DoItYourself/DIY，然后是空格，然后是作者名
-        // 3. DoItYourself/DIY 后直接跟作者名（无分隔符）
-        if (
-            // 格式1: DoItYourself/DIY 后跟分隔符或by，然后是作者名
-            preg_match('/(?:DoItYourself|DIY)(?:\s*[-—_:：]+\s*|\s+by\s+)([^\n\r]+)/iu', $desc, $matches) ||
+    /**
+     * 使当前请求中的管理员规则缓存失效
+     *
+     * @return void
+     */
+    public static function invalidateAuthorRuleCache() {
+        if (self::$instance !== null) {
+            self::$instance->manualAuthorMappings = null;
+            self::$instance->authorTextRules = null;
+        }
+    }
 
-            // 格式2: 分隔符后跟DoItYourself/DIY，然后是空格，然后是作者名
-            preg_match('/[-—_:：]+\s*(?:DoItYourself|DIY)\s+([^\n\r]+)/iu', $desc, $matches) ||
-
-            // 格式3: DoItYourself/DIY 后直接跟作者名（无分隔符）
-            preg_match('/(?:DoItYourself|DIY)\s+([^\n\r]+)/iu', $desc, $matches)
-        ) {
-            // 确保使用UTF-8编码处理
-            if (!mb_check_encoding($matches[1], 'UTF-8')) {
-                // 尝试转换编码
-                $matches[1] = mb_convert_encoding($matches[1], 'UTF-8', 'auto');
-            }
-
-            // 清理作者名称，移除可能的额外分隔符
-            $authorName = trim($matches[1]);
-            // 移除开头可能存在的分隔符
-            $authorName = preg_replace('/^[-—_:：\s]+/u', '', $authorName);
-            // 提取作者名，去除后面可能的系列名或其他文本（如"图侵删歉"）
-            $authorName = $this->normalizeAuthorName($authorName);
-            return $authorName;
+    /**
+     * 根据实际CDB分布推断作者码对应的卡号总位数
+     *
+     * 一至三位作者码按传统八位卡号处理。四位作者码可能对应八位或九位卡号，
+     * 因此比较两个候选区间的实际卡片数量；管理员可用card_id_length覆盖推断。
+     *
+     * @param string $cardPrefix 作者码
+     * @return int 卡号总位数
+     */
+    public function inferAuthorCardIdLength($cardPrefix) {
+        $cardPrefix = trim((string)$cardPrefix);
+        if (isset($this->authorPrefixLengthCache[$cardPrefix])) {
+            return $this->authorPrefixLengthCache[$cardPrefix];
         }
 
-        // 最后根据strings.conf中的作者信息查找
-        // 首先尝试完全匹配
-        foreach ($this->authors as $prefix => $authorInfo) {
-            // 确保 $prefix 是字符串类型
-            $prefixStr = (string)$prefix;
-            if (strpos($cardId, $prefixStr) === 0) {
-                // 规范化作者名称
-                return $this->normalizeAuthorName($authorInfo['name']);
-            }
+        if (!preg_match('/^\d{1,16}$/', $cardPrefix)) {
+            return 8;
         }
 
-        // 如果完全匹配失败，尝试使用卡片ID的前三位数字进行匹配
-        if (strlen($cardId) >= 3) {
-            $cardPrefix = substr($cardId, 0, 3);
+        $canonicalPrefix = str_pad($cardPrefix, max(3, strlen($cardPrefix)), '0', STR_PAD_LEFT);
+        if (strlen($canonicalPrefix) <= 3) {
+            $this->authorPrefixLengthCache[$cardPrefix] = 8;
+            return 8;
+        }
 
-            // 遍历所有作者信息，查找前三位匹配的作者
-            foreach ($this->authors as $prefix => $authorInfo) {
-                $prefixStr = (string)$prefix;
-                // 如果前缀长度至少为3位，且与卡片ID的前三位匹配
-                if (strlen($prefixStr) >= 3 && substr($prefixStr, 0, 3) === $cardPrefix) {
-                    return $this->normalizeAuthorName($authorInfo['name']);
+        if (strlen($canonicalPrefix) !== 4) {
+            $inferredLength = max(8, min(16, strlen($canonicalPrefix) + 5));
+            $this->authorPrefixLengthCache[$cardPrefix] = $inferredLength;
+            return $inferredLength;
+        }
+
+        $defaultLength = 9;
+        $bestLength = $defaultLength;
+        $bestCount = -1;
+        foreach ([8, 9] as $candidateLength) {
+            $suffixLength = $candidateLength - strlen($canonicalPrefix);
+            $rangeStart = (int)($canonicalPrefix . str_repeat('0', $suffixLength));
+            $rangeEnd = (int)($canonicalPrefix . str_repeat('9', $suffixLength));
+            $count = 0;
+
+            foreach ($this->getCardDatabaseFiles() as $dbFile) {
+                try {
+                    $db = $this->getCardDatabase($dbFile);
+                    $stmt = $db->prepare('SELECT COUNT(*) FROM texts WHERE id BETWEEN :start AND :end');
+                    $stmt->bindValue(':start', $rangeStart, PDO::PARAM_INT);
+                    $stmt->bindValue(':end', $rangeEnd, PDO::PARAM_INT);
+                    $stmt->execute();
+                    $count += (int)$stmt->fetchColumn();
+                } catch (PDOException $e) {
+                    Utils::debug('推断作者卡号位数失败', [
+                        'card_prefix' => $cardPrefix,
+                        'database' => basename($dbFile),
+                        'error' => $e->getMessage()
+                    ]);
                 }
             }
+
+            if ($count > $bestCount || ($count === $bestCount && $candidateLength === $defaultLength)) {
+                $bestCount = $count;
+                $bestLength = $candidateLength;
+            }
         }
 
-        // 如果无法确定作者，返回"未知作者"
-        return "未知作者";
+        $this->authorPrefixLengthCache[$cardPrefix] = $bestLength;
+        return $bestLength;
     }
 
     /**
@@ -543,81 +647,16 @@ class CardParser {
      * @return array 作者信息数组
      */
     public function getAuthorsFromStringsConf() {
-        return $this->authors;
-    }
-
-    /**
-     * 规范化作者名称
-     *
-     * @param string $authorName 原始作者名称
-     * @return string 规范化后的作者名称
-     */
-    private function normalizeAuthorName($authorName) {
-        // 确保使用UTF-8编码处理
-        if (!mb_check_encoding($authorName, 'UTF-8')) {
-            // 尝试转换编码
-            $authorName = mb_convert_encoding($authorName, 'UTF-8', 'auto');
+        $authors = [];
+        foreach ($this->authors as $author) {
+            $authors[(string)$author['card_prefix']] = [
+                'name' => $author['author_name'],
+                'card_prefix' => (string)$author['card_prefix'],
+                'card_id_length' => isset($author['card_id_length']) ? (int)$author['card_id_length'] : null,
+                'setcode_ranges' => isset($author['setcode_ranges']) ? $author['setcode_ranges'] : []
+            ];
         }
-
-        // 去除两端空白
-        $authorName = trim($authorName);
-
-        // 如果作者名为空，返回"未知作者"
-        if (empty($authorName)) {
-            return "未知作者";
-        }
-
-        // 移除"图侵删歉"等常见附加文本
-        $commonSuffixes = ['图侵删歉', '图侵删', '侵删', '图源网络', '图源', '图片来源网络'];
-        foreach ($commonSuffixes as $suffix) {
-            if (mb_strpos($authorName, $suffix, 0, 'UTF-8') !== false) {
-                $authorName = trim(mb_substr($authorName, 0, mb_strpos($authorName, $suffix, 0, 'UTF-8'), 'UTF-8'));
-            }
-        }
-
-        // 提取方括号、尖括号或引号前的作者名
-        if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)/u', $authorName, $matches)) {
-            $authorName = trim($matches[1]);
-        }
-
-        // 处理作者名中的空格
-        // 1. 如果作者名中包含特殊字符（如日文假名、全角符号等），不进行截断
-        // 2. 如果作者名是纯英文，且看起来像"名字 系列名"的格式，则截断为第一个单词
-
-        // 检查作者名是否包含特殊字符（非英文字母、数字和基本标点）
-        if (preg_match('/[^\x00-\x7F]/u', $authorName)) {
-            // 包含特殊字符（如中文、日文等），不进行截断
-            // 但仍然需要处理可能的方括号等标记
-            if (preg_match('/^([^「」\[\]【】《》\(\)（）『』\<\>]+)(?:\s+[\[「『\(（<《])/u', $authorName, $matches)) {
-                $authorName = trim($matches[1]);
-            }
-        }
-        // 只对纯英文名称进行处理
-        else if (preg_match('/^[a-zA-Z0-9\s\.\-_]+$/u', $authorName)) {
-            // 检查是否有方括号等标记，如果有，则在这些标记前截断
-            if (preg_match('/^(\S+)(?:\s+[\[「『\(（<《])/u', $authorName, $matches)) {
-                $authorName = $matches[1];
-            }
-            // 否则，检查是否是"名字 系列名"的格式
-            else if (preg_match('/^(\S+)(?:\s+.+)/u', $authorName, $matches)) {
-                // 只有当第一个单词看起来像一个完整的名字时才截断
-                // 例如，"Justfish Shadow"应该截断为"Justfish"
-                // 但"Lin Yanjun"不应该截断
-                if (!preg_match('/^[A-Z][a-z]+\s+[A-Z][a-z]+$/u', $authorName)) {
-                    $authorName = $matches[1];
-                }
-            }
-        }
-
-        // 如果规范化后的作者名为空，返回"未知作者"
-        if (empty(trim($authorName))) {
-            return "未知作者";
-        }
-
-        // 过滤掉可能导致问题的控制字符
-        $authorName = preg_replace('/[\x00-\x1F\x7F]/u', '', $authorName);
-
-        return $authorName;
+        return $authors;
     }
 
     /**
@@ -672,24 +711,42 @@ class CardParser {
     public function getCardDatabaseFiles($excludeFiles = true) {
         $cardDataPath = CARD_DATA_PATH;
         $files = glob($cardDataPath . '/*.cdb');
+        if (!is_array($files)) {
+            $files = [];
+        }
 
         // 如果需要排除特定文件
         if ($excludeFiles && defined('EXCLUDED_CARD_DATABASES')) {
             $excludedFiles = json_decode(EXCLUDED_CARD_DATABASES, true);
 
             if (is_array($excludedFiles) && !empty($excludedFiles)) {
-                $filteredFiles = [];
-
-                foreach ($files as $file) {
-                    $fileName = basename($file);
-                    if (!in_array($fileName, $excludedFiles)) {
-                        $filteredFiles[] = $file;
-                    }
-                }
-
-                return $filteredFiles;
+                $files = array_values(array_filter($files, function($file) use ($excludedFiles) {
+                    return !in_array(basename($file), $excludedFiles, true);
+                }));
             }
         }
+
+        // glob顺序不是业务契约；显式排序后，重复ID的来源选择在所有环境都一致。
+        $priority = [];
+        if (defined('CARD_DATABASE_PRIORITY')) {
+            $configuredPriority = json_decode(CARD_DATABASE_PRIORITY, true);
+            if (is_array($configuredPriority)) {
+                foreach ($configuredPriority as $index => $fileName) {
+                    $priority[strtolower(basename((string)$fileName))] = (int)$index;
+                }
+            }
+        }
+
+        usort($files, function($left, $right) use ($priority) {
+            $leftName = strtolower(basename($left));
+            $rightName = strtolower(basename($right));
+            $leftPriority = isset($priority[$leftName]) ? $priority[$leftName] : PHP_INT_MAX;
+            $rightPriority = isset($priority[$rightName]) ? $priority[$rightName] : PHP_INT_MAX;
+            if ($leftPriority !== $rightPriority) {
+                return $leftPriority <=> $rightPriority;
+            }
+            return strnatcasecmp($leftName, $rightName);
+        });
 
         return $files;
     }
@@ -835,7 +892,7 @@ class CardParser {
         $sql = "
             SELECT
                 d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                t.name, t.desc
+                " . $this->getCardTextSelectColumns() . "
             FROM
                 datas d
             JOIN
@@ -864,12 +921,62 @@ class CardParser {
                 $card['level_text'] = $this->getLevelText($card['level']);
                 $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                 $card['database_file'] = basename($dbFile);
-                $card['author'] = $this->getCardAuthor($card);
+                $this->applyAuthorResolution($card);
             }
+            unset($card);
 
             return $cards;
         } catch (PDOException $e) {
             Utils::debug('获取卡片数据失败', ['错误' => $e->getMessage()]);
+            return [];
+        }
+    }
+
+    /**
+     * 分批读取作者榜所需的最小卡片投影
+     *
+     * 跳过图片路径、类型文本等作者统计不使用的水合步骤，避免强制重建排行榜时
+     * 对每张卡执行多次文件系统检查。
+     *
+     * @param string $dbFile CDB文件路径
+     * @param int $page 页码
+     * @param int $perPage 每批数量
+     * @return array 已带统一作者解析结果的卡片
+     */
+    public function getCardsForAuthorStats($dbFile, $page = 1, $perPage = 1000) {
+        $db = $this->getCardDatabase($dbFile);
+        $page = max(1, (int)$page);
+        $perPage = max(1, (int)$perPage);
+        $offset = ($page - 1) * $perPage;
+        $sql = "
+            SELECT
+                d.id, d.setcode,
+                " . $this->getCardTextSelectColumns() . "
+            FROM datas d
+            JOIN texts t ON d.id = t.id
+            ORDER BY d.id
+            LIMIT :limit OFFSET :offset
+        ";
+
+        try {
+            $stmt = $db->prepare($sql);
+            $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $cards = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($cards as &$card) {
+                $card['database_file'] = basename($dbFile);
+                $resolution = $this->getCardAuthorResolution($card);
+                $card['author'] = $resolution['author'];
+            }
+            unset($card);
+            return $cards;
+        } catch (PDOException $e) {
+            Utils::debug('读取作者榜卡片批次失败', [
+                'database' => basename($dbFile),
+                'page' => $page,
+                'error' => $e->getMessage()
+            ]);
             return [];
         }
     }
@@ -894,7 +1001,7 @@ class CardParser {
             $sql = "
                 SELECT
                     d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                    t.name, t.desc
+                    " . $this->getCardTextSelectColumns() . "
                 FROM
                     datas d
                 JOIN
@@ -933,7 +1040,7 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
-                    $card['author'] = $this->getCardAuthor($card);
+                    $this->applyAuthorResolution($card);
 
                     // 调试信息
                     Utils::debug('CardParser::getCardById 返回结果', [
@@ -971,7 +1078,7 @@ class CardParser {
                 $sql = "
                     SELECT
                         d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                        t.name, t.desc
+                        " . $this->getCardTextSelectColumns() . "
                     FROM
                         datas d
                     JOIN
@@ -1046,7 +1153,7 @@ class CardParser {
             $sql = "
                 SELECT
                     d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                    t.name, t.desc
+                    " . $this->getCardTextSelectColumns() . "
                 FROM
                     datas d
                 JOIN
@@ -1086,8 +1193,9 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
-                    $card['author'] = $this->getCardAuthor($card);
+                    $this->applyAuthorResolution($card);
                 }
+                unset($card);
 
                 $cards = array_merge($cards, $results);
 
@@ -1142,7 +1250,7 @@ class CardParser {
                 $db = $this->getCardDatabase($dbFile);
                 $sql = "
                     SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                           t.name, t.desc
+                           " . $this->getCardTextSelectColumns() . "
                     FROM datas d
                     JOIN texts t ON d.id = t.id
                     WHERE d.id = :keyword
@@ -1163,7 +1271,7 @@ class CardParser {
                         $card['level_text'] = $this->getLevelText($card['level']);
                         $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                         $card['database_file'] = basename($dbFile);
-                        $card['author'] = $this->getCardAuthor($card);
+                        $this->applyAuthorResolution($card);
                         return [
                             'cards' => [$card],
                             'total' => 1,
@@ -1231,7 +1339,7 @@ class CardParser {
             try {
                 $sql = "
                     SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                           t.name, t.desc
+                           " . $this->getCardTextSelectColumns() . "
                     FROM datas d
                     JOIN texts t ON d.id = t.id
                     WHERE t.name LIKE :keyword OR t.desc LIKE :keyword
@@ -1254,8 +1362,9 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
-                    $card['author'] = $this->getCardAuthor($card);
+                    $this->applyAuthorResolution($card);
                 }
+                unset($card);
 
                 $cards = array_merge($cards, $results);
                 $remaining -= count($results);
@@ -1302,7 +1411,7 @@ class CardParser {
                 $db = $this->getCardDatabase($dbFile);
                 $sql = "
                     SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                           t.name, t.desc
+                           " . $this->getCardTextSelectColumns() . "
                     FROM datas d
                     JOIN texts t ON d.id = t.id
                     WHERE d.id = :keyword
@@ -1323,7 +1432,7 @@ class CardParser {
                         $card['level_text'] = $this->getLevelText($card['level']);
                         $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                         $card['database_file'] = basename($dbFile);
-                        $card['author'] = $this->getCardAuthor($card);
+                        $this->applyAuthorResolution($card);
                         return [
                             'cards' => [$card],
                             'total' => 1,
@@ -1559,7 +1668,7 @@ class CardParser {
             try {
                 $sql = "
                     SELECT d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                           t.name, t.desc
+                           " . $this->getCardTextSelectColumns() . "
                     FROM datas d
                     JOIN texts t ON d.id = t.id
                     WHERE {$whereClause}
@@ -1584,8 +1693,9 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
-                    $card['author'] = $this->getCardAuthor($card);
+                    $this->applyAuthorResolution($card);
                 }
+                unset($card);
 
                 $cards = array_merge($cards, $results);
                 $remaining -= count($results);
@@ -1907,7 +2017,7 @@ class CardParser {
                 $sql1 = "
                     SELECT
                         d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                        t.name, t.desc
+                        " . $this->getCardTextSelectColumns() . "
                     FROM
                         datas d
                     JOIN
@@ -1930,7 +2040,7 @@ class CardParser {
                     $sql2 = "
                         SELECT
                             d.id, d.ot, d.alias, d.setcode, d.type, d.atk, d.def, d.level, d.race, d.attribute,
-                            t.name, t.desc
+                            " . $this->getCardTextSelectColumns() . "
                         FROM
                             datas d
                         JOIN
@@ -1980,8 +2090,9 @@ class CardParser {
                     $card['level_text'] = $this->getLevelText($card['level']);
                     $card['image_path'] = $this->getCardImagePath($card['id'], $isTcgCard);
                     $card['database_file'] = basename($dbFile);
-                    $card['author'] = $this->getCardAuthor($card);
+                    $this->applyAuthorResolution($card);
                 }
+                unset($card);
 
                 $cards = array_merge($cards, $results);
 
@@ -2017,6 +2128,420 @@ class CardParser {
             Utils::debug('随机获取卡片失败', ['错误' => $e->getMessage(), '数据库' => $dbFile]);
         }
         return null;
+    }
+
+    /**
+     * 按统一解析结果获取同一作者的卡片
+     *
+     * 先用人工区间、人工文本规则、strings.conf区间和作者署名中的名称生成候选，
+     * 再逐张交给统一解析器复核。这样不会退回到固定截取卡号前三位的旧逻辑，
+     * 同时避免在主页请求中完整解析全部CDB。
+     *
+     * @param string $authorName 规范作者名
+     * @param int|null $excludeId 需要排除的卡号
+     * @param int $limit 最多返回数量
+     * @return array 卡片列表
+     */
+    public function getCardsByAuthor($authorName, $excludeId = null, $limit = 10) {
+        $authorName = trim((string)$authorName);
+        $excludeId = $excludeId !== null ? (int)$excludeId : null;
+        $limit = max(0, (int)$limit);
+        if ($authorName === '' || $authorName === AuthorResolver::UNKNOWN_AUTHOR || $limit === 0) {
+            return [];
+        }
+
+        $this->loadRuntimeAuthorRules();
+        $structuredCandidateIds = [];
+        $searchTerms = [$authorName];
+        $rangeMappings = [];
+        $textRules = [];
+
+        foreach ($this->manualAuthorMappings as $mapping) {
+            if (!isset($mapping['author_name']) || trim((string)$mapping['author_name']) !== $authorName) {
+                continue;
+            }
+            $rangeMappings[] = $mapping;
+            if (!empty($mapping['alias'])) {
+                foreach (explode(',', $mapping['alias']) as $alias) {
+                    $alias = trim($alias);
+                    if ($alias !== '') {
+                        $searchTerms[] = $alias;
+                    }
+                }
+            }
+        }
+
+        foreach ($this->authors as $mapping) {
+            if (isset($mapping['author_name']) && trim((string)$mapping['author_name']) === $authorName) {
+                $rangeMappings[] = $mapping;
+            }
+        }
+
+        foreach ($this->authorTextRules as $rule) {
+            if ($this->getTextRuleTargetType($rule) === 'author' &&
+                $this->getTextRuleTargetValue($rule) === $authorName) {
+                $textRules[] = $rule;
+            }
+        }
+
+        $searchTerms = array_values(array_unique($searchTerms));
+        foreach ($this->getCardDatabaseFiles() as $dbFile) {
+            try {
+                $db = $this->getCardDatabase($dbFile);
+                foreach ($rangeMappings as $mapping) {
+                    $range = $this->getAuthorMappingNumericRange($mapping);
+                    if ($range !== null) {
+                        $this->collectCandidateIdsByRange($db, $range[0], $range[1], $structuredCandidateIds);
+                    }
+                }
+                foreach ($textRules as $rule) {
+                    if ($this->textRuleAppliesToDatabase($rule, $dbFile)) {
+                        $this->collectCandidateIdsByTextRule($db, $rule, $structuredCandidateIds);
+                    }
+                }
+            } catch (PDOException $e) {
+                Utils::debug('查找同作者卡片候选失败', [
+                    'author' => $authorName,
+                    'database' => basename($dbFile),
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        $cards = [];
+        $visitedIds = [];
+        $this->appendResolvedAuthorCards(
+            $structuredCandidateIds,
+            $authorName,
+            $excludeId,
+            $limit,
+            $cards,
+            $visitedIds
+        );
+        if (count($cards) >= $limit) {
+            return $cards;
+        }
+
+        // 仅当结构化人工来源不足时才扫描CDB署名；所有别名合并为每个CDB一次查询。
+        $signatureCandidateIds = [];
+        foreach ($this->getCardDatabaseFiles() as $dbFile) {
+            try {
+                $this->collectCandidateIdsBySignatureTerms(
+                    $this->getCardDatabase($dbFile),
+                    $searchTerms,
+                    $signatureCandidateIds
+                );
+            } catch (PDOException $e) {
+                Utils::debug('查找CDB署名候选失败', [
+                    'author' => $authorName,
+                    'database' => basename($dbFile),
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        $this->appendResolvedAuthorCards(
+            $signatureCandidateIds,
+            $authorName,
+            $excludeId,
+            $limit,
+            $cards,
+            $visitedIds
+        );
+
+        return $cards;
+    }
+
+    /**
+     * 复核候选卡片并追加统一解析后属于指定作者的卡片
+     *
+     * @param array $candidateIds 以卡号为键的候选集合
+     * @param string $authorName 规范作者名
+     * @param int|null $excludeId 排除卡号
+     * @param int $limit 最多返回数量
+     * @param array $cards 已确认卡片
+     * @param array $visitedIds 已复核卡号集合
+     * @return void
+     */
+    private function appendResolvedAuthorCards(
+        $candidateIds,
+        $authorName,
+        $excludeId,
+        $limit,
+        &$cards,
+        &$visitedIds
+    ) {
+        $ids = array_keys($candidateIds);
+        shuffle($ids);
+        foreach ($ids as $cardId) {
+            $cardId = (int)$cardId;
+            if (isset($visitedIds[$cardId]) || ($excludeId !== null && $cardId === $excludeId)) {
+                continue;
+            }
+            $visitedIds[$cardId] = true;
+            $card = $this->getCardById($cardId);
+            if ($card && isset($card['author']) && $card['author'] === $authorName) {
+                $cards[] = $card;
+                if (count($cards) >= $limit) {
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * 按人工文本系列分组获取其他卡片
+     *
+     * @param string $seriesName 人工系列分组名
+     * @param int|null $excludeId 需要排除的卡号
+     * @param int $limit 最多返回数量
+     * @return array 卡片列表
+     */
+    public function getCardsByManualSeries($seriesName, $excludeId = null, $limit = 10) {
+        $seriesName = trim((string)$seriesName);
+        $excludeId = $excludeId !== null ? (int)$excludeId : null;
+        $limit = max(0, (int)$limit);
+        if ($seriesName === '' || $limit === 0) {
+            return [];
+        }
+
+        $this->loadRuntimeAuthorRules();
+        $candidateIds = [];
+        foreach ($this->getCardDatabaseFiles() as $dbFile) {
+            try {
+                $db = $this->getCardDatabase($dbFile);
+                foreach ($this->authorTextRules as $rule) {
+                    if ($this->getTextRuleTargetType($rule) !== 'series' ||
+                        $this->getTextRuleTargetValue($rule) !== $seriesName ||
+                        !$this->textRuleAppliesToDatabase($rule, $dbFile)) {
+                        continue;
+                    }
+                    $this->collectCandidateIdsByTextRule($db, $rule, $candidateIds);
+                }
+            } catch (PDOException $e) {
+                Utils::debug('查找人工同系列卡片候选失败', [
+                    'series' => $seriesName,
+                    'database' => basename($dbFile),
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        $candidateIds = array_keys($candidateIds);
+        shuffle($candidateIds);
+        $cards = [];
+        foreach ($candidateIds as $cardId) {
+            if ($excludeId !== null && (int)$cardId === $excludeId) {
+                continue;
+            }
+            $card = $this->getCardById((int)$cardId);
+            if ($card && isset($card['manual_series_name']) && $card['manual_series_name'] === $seriesName) {
+                $cards[] = $card;
+                if (count($cards) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $cards;
+    }
+
+    /**
+     * 将作者区间转换为SQLite整数卡号区间
+     *
+     * @param array $mapping 作者映射
+     * @return array|null 起止卡号
+     */
+    private function getAuthorMappingNumericRange($mapping) {
+        if (isset($mapping['card_id_start'], $mapping['card_id_end']) &&
+            $mapping['card_id_start'] !== null && $mapping['card_id_start'] !== '' &&
+            $mapping['card_id_end'] !== null && $mapping['card_id_end'] !== '') {
+            return [(int)$mapping['card_id_start'], (int)$mapping['card_id_end']];
+        }
+        if (!isset($mapping['card_prefix']) || !preg_match('/^\d{1,16}$/', (string)$mapping['card_prefix'])) {
+            return null;
+        }
+
+        $prefix = trim((string)$mapping['card_prefix']);
+        $canonicalPrefix = str_pad($prefix, max(3, strlen($prefix)), '0', STR_PAD_LEFT);
+        $cardIdLength = isset($mapping['card_id_length']) && (int)$mapping['card_id_length'] > 0
+            ? (int)$mapping['card_id_length']
+            : $this->inferAuthorCardIdLength($prefix);
+        if ($cardIdLength < strlen($canonicalPrefix) || $cardIdLength > 16) {
+            return null;
+        }
+
+        $suffixLength = $cardIdLength - strlen($canonicalPrefix);
+        return [
+            (int)($canonicalPrefix . str_repeat('0', $suffixLength)),
+            (int)($canonicalPrefix . str_repeat('9', $suffixLength))
+        ];
+    }
+
+    /**
+     * 收集整数卡号区间内的候选卡号
+     *
+     * @param PDO $db CDB连接
+     * @param int $start 起始卡号
+     * @param int $end 结束卡号
+     * @param array $candidateIds 候选集合
+     * @return void
+     */
+    private function collectCandidateIdsByRange($db, $start, $end, &$candidateIds) {
+        $stmt = $db->prepare('SELECT id FROM texts WHERE id BETWEEN :start AND :end');
+        $stmt->bindValue(':start', (int)$start, PDO::PARAM_INT);
+        $stmt->bindValue(':end', (int)$end, PDO::PARAM_INT);
+        $stmt->execute();
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $cardId) {
+            $candidateIds[(int)$cardId] = true;
+        }
+    }
+
+    /**
+     * 一次扫描收集包含作者名/别名且具有署名标记的CDB候选
+     *
+     * @param PDO $db CDB连接
+     * @param array $terms 规范作者名与别名
+     * @param array $candidateIds 候选集合
+     * @return void
+     */
+    private function collectCandidateIdsBySignatureTerms($db, $terms, &$candidateIds) {
+        $terms = array_values(array_unique(array_filter(array_map('trim', $terms), function($term) {
+            return $term !== '';
+        })));
+        if (empty($terms)) {
+            return;
+        }
+
+        $params = [];
+        $conditions = [];
+        $signatureFields = array_values(array_filter($this->getCardTextFieldNames(), function($field) {
+            return $field !== 'name';
+        }));
+        foreach ($signatureFields as $field) {
+            $expression = "lower(COALESCE({$field}, ''))";
+            $termConditions = [];
+            foreach ($terms as $index => $term) {
+                $parameter = ':author_term_' . $index;
+                $termConditions[] = 'instr(' . $expression . ', lower(' . $parameter . ')) > 0';
+                $params[$parameter] = $term;
+            }
+            // 这里只做宽松超集预筛；最终格式仍由AuthorResolver逐行正则确认。
+            // token共现可覆盖普通空格、tab及Unicode空白，避免候选层比解析层更窄。
+            $markerCondition = "(instr({$expression}, 'do') > 0"
+                . " AND instr({$expression}, 'it') > 0"
+                . " AND (instr({$expression}, 'yourself') > 0 OR instr({$expression}, 'youself') > 0))"
+                . " OR (instr({$expression}, 'dolt') > 0 AND instr({$expression}, 'yourself') > 0)"
+                . " OR instr({$expression}, 'diy') > 0"
+                . " OR instr({$expression}, 'dly') > 0"
+                . " OR (instr({$expression}, 'card') > 0 AND instr({$expression}, 'design') > 0)";
+            $conditions[] = '((' . implode(' OR ', $termConditions) . ') AND (' . $markerCondition . '))';
+        }
+
+        $stmt = $db->prepare('SELECT id FROM texts WHERE ' . implode(' OR ', $conditions));
+        $stmt->execute($params);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $cardId) {
+            $candidateIds[(int)$cardId] = true;
+        }
+    }
+
+    /**
+     * 收集人工文本规则可能命中的候选卡号
+     *
+     * SQL只做包含式预筛，最终仍由AuthorResolver按完整运算符和大小写设置复核。
+     *
+     * @param PDO $db CDB连接
+     * @param array $rule 文本规则
+     * @param array $candidateIds 候选集合
+     * @return void
+     */
+    private function collectCandidateIdsByTextRule($db, $rule, &$candidateIds) {
+        if (!isset($rule['match_value']) || trim((string)$rule['match_value']) === '') {
+            return;
+        }
+        $field = isset($rule['match_field']) ? (string)$rule['match_field'] : 'desc';
+        $fields = $field === 'any' ? $this->getCardTextFieldNames() : [$field];
+        $validFields = $this->getCardTextFieldNames();
+        $conditions = [];
+        foreach ($fields as $candidateField) {
+            if (in_array($candidateField, $validFields, true)) {
+                $conditions[] = 'instr(lower(COALESCE(' . $candidateField . ', "")), lower(:needle)) > 0';
+            }
+        }
+        if (empty($conditions)) {
+            return;
+        }
+        $stmt = $db->prepare('SELECT id FROM texts WHERE ' . implode(' OR ', $conditions));
+        $stmt->execute([':needle' => trim((string)$rule['match_value'])]);
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $cardId) {
+            $candidateIds[(int)$cardId] = true;
+        }
+    }
+
+    /**
+     * 判断文本规则是否适用于指定CDB
+     *
+     * @param array $rule 文本规则
+     * @param string $dbFile CDB路径
+     * @return bool 是否适用
+     */
+    private function textRuleAppliesToDatabase($rule, $dbFile) {
+        $scope = isset($rule['database_file']) ? trim((string)$rule['database_file']) : '';
+        return $scope === '' || $scope === '*' || strcasecmp(basename($scope), basename($dbFile)) === 0;
+    }
+
+    /**
+     * 获取文本规则目标类型，并兼容迁移前规则
+     *
+     * @param array $rule 文本规则
+     * @return string author或series
+     */
+    private function getTextRuleTargetType($rule) {
+        return isset($rule['target_type']) && strtolower(trim((string)$rule['target_type'])) === 'series'
+            ? 'series'
+            : 'author';
+    }
+
+    /**
+     * 获取文本规则目标值，并兼容旧author_name列
+     *
+     * @param array $rule 文本规则
+     * @return string 目标名称
+     */
+    private function getTextRuleTargetValue($rule) {
+        if (isset($rule['target_value']) && trim((string)$rule['target_value']) !== '') {
+            return trim((string)$rule['target_value']);
+        }
+        return $this->getTextRuleTargetType($rule) === 'author' && isset($rule['author_name'])
+            ? trim((string)$rule['author_name'])
+            : '';
+    }
+
+    /**
+     * 获取CDB可匹配文本字段名
+     *
+     * @return array 字段名
+     */
+    private function getCardTextFieldNames() {
+        $fields = ['name', 'desc'];
+        for ($index = 1; $index <= 16; $index++) {
+            $fields[] = 'str' . $index;
+        }
+        return $fields;
+    }
+
+    /**
+     * 获取卡片查询中固定的文本字段投影
+     *
+     * 字段名仅来自CDB固定schema，不接受用户输入。
+     *
+     * @return string 以t为表别名的SQL字段列表
+     */
+    private function getCardTextSelectColumns() {
+        $columns = [];
+        foreach ($this->getCardTextFieldNames() as $field) {
+            $columns[] = 't.' . $field;
+        }
+        return implode(', ', $columns);
     }
 
     /**

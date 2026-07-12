@@ -20,7 +20,13 @@ class HomeController {
         $card = $this->cardModel->getRandomCard();
 
         $seriesCards = [];
-        if ($card && !empty($card['setcode'])) {
+        if ($card && !empty($card['manual_series_name'])) {
+            $seriesCards = $this->cardModel->getCardsByManualSeries(
+                $card['manual_series_name'],
+                $card['id'],
+                10
+            );
+        } elseif ($card && !empty($card['setcode'])) {
             $seriesCards = $this->cardModel->getCardsBySetcode($card['setcode']);
             // 排除当前卡并随机取10张
             $seriesCards = array_filter($seriesCards, function($c) use ($card) { return $c['id'] != $card['id']; });
@@ -29,12 +35,8 @@ class HomeController {
         }
 
         $authorCards = [];
-        if ($card) {
-            // 作者前缀：卡号前3位；若为7位卡号则取前2位
-            $prefix = intval($card['id'] / 100000);
-            $authorCards = $this->cardModel->getCardsByPrefix($prefix, $card['id']);
-            shuffle($authorCards);
-            $authorCards = array_slice($authorCards, 0, 10);
+        if ($card && !empty($card['author']) && $card['author'] !== '未知作者') {
+            $authorCards = $this->cardModel->getCardsByAuthor($card['author'], $card['id'], 10);
         }
 
         include __DIR__ . '/../Views/layout.php';

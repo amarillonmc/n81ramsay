@@ -30,6 +30,12 @@ class AdminController {
     private $authorMappingModel;
 
     /**
+     * 卡片文本匹配规则模型
+     * @var CardMatchRule
+     */
+    private $cardMatchRuleModel;
+
+    /**
      * 投票者封禁模型
      * @var VoterBan
      */
@@ -43,6 +49,7 @@ class AdminController {
         $this->voteModel = new Vote();
         $this->cardModel = new Card();
         $this->authorMappingModel = new AuthorMapping();
+        $this->cardMatchRuleModel = new CardMatchRule();
         $this->voterBanModel = new VoterBan();
     }
 
@@ -267,16 +274,14 @@ class AdminController {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
 
-        // 获取所有作者映射
-        $authorMappings = $this->authorMappingModel->getAllAuthorMappings();
+        $message = $this->getFormString($_GET, 'message');
+        $errors = [];
+        $error = $this->getFormString($_GET, 'error');
+        if ($error !== '') {
+            $errors[] = $error;
+        }
 
-        // 获取消息
-        $message = isset($_GET['message']) ? $_GET['message'] : '';
-
-        // 渲染视图
-        include __DIR__ . '/../Views/layout.php';
-        include __DIR__ . '/../Views/admin/authors.php';
-        include __DIR__ . '/../Views/footer.php';
+        $this->renderAuthorManagement($message, $errors);
     }
 
     /**
@@ -307,174 +312,133 @@ class AdminController {
 
     /**
      * 添加作者映射
+     *
+     * @return void
      */
     public function addAuthor() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
         $this->requirePostCsrf('admin_add_author');
 
-        // 检查是否是POST请求
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // 获取表单数据
-            $cardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
-            $authorName = isset($_POST['author_name']) ? trim($_POST['author_name']) : '';
-            $alias = isset($_POST['alias']) ? trim($_POST['alias']) : null;
-            $contact = isset($_POST['contact']) ? trim($_POST['contact']) : null;
-            $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
+        $authorForm = $this->getAuthorMappingFormData($_POST);
+        $errors = $this->validateAuthorMappingFormData($authorForm);
 
-            // 验证数据
-            $errors = [];
+        if (empty($errors)) {
+            $mappingId = $this->authorMappingModel->addAuthorMapping(
+                $authorForm['card_prefix'],
+                $authorForm['author_name'],
+                $authorForm['alias'],
+                $authorForm['contact'],
+                $authorForm['notes'],
+                $this->nullableInteger($authorForm['card_id_length']),
+                $this->nullableInteger($authorForm['card_id_start']),
+                $this->nullableInteger($authorForm['card_id_end']),
+                (int)$authorForm['priority']
+            );
 
-            if (empty($cardPrefix)) {
-                $errors[] = '请输入卡片前缀';
-            }
-
-            if (empty($authorName)) {
-                $errors[] = '请输入作者名称';
-            }
-
-            // 如果没有错误，则添加作者映射
-            if (empty($errors)) {
-                $this->authorMappingModel->addAuthorMapping($cardPrefix, $authorName, $alias, $contact, $notes);
-
-                // 设置消息
-                $message = '成功添加作者映射';
-
-                // 重定向到作者管理页面
-                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+            if ($mappingId !== false) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('成功添加作者映射'));
                 exit;
             }
-
-            // 如果有错误，则显示错误信息
-            if (!empty($errors)) {
-                // 获取所有作者映射
-                $authorMappings = $this->authorMappingModel->getAllAuthorMappings();
-
-                // 渲染视图
-                include __DIR__ . '/../Views/layout.php';
-                include __DIR__ . '/../Views/admin/authors.php';
-                include __DIR__ . '/../Views/footer.php';
-                return;
-            }
+            $errors[] = '添加作者映射失败';
         }
 
-        // 如果不是POST请求，则重定向到作者管理页面
-        header('Location: ' . BASE_URL . '?controller=admin&action=authors');
-        exit;
+        $this->renderAuthorManagement('', $errors, $authorForm);
     }
 
     /**
      * 删除作者映射
+     *
+     * @return void
      */
     public function deleteAuthor() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
         $this->requirePostCsrf('admin_delete_author');
 
-        // 检查是否是POST请求
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            // 获取表单数据
-            $cardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
+        $mappingId = $this->getPositiveIntegerFormValue($_POST, 'mapping_id');
+        $deleted = $mappingId > 0
+            ? $this->authorMappingModel->deleteAuthorMappingById($mappingId)
+            : false;
 
-            // 删除作者映射
-            $this->authorMappingModel->deleteAuthorMapping($cardPrefix);
-
-            // 设置消息
-            $message = '成功删除作者映射';
-
-            // 重定向到作者管理页面
-            header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
-            exit;
+        // 兼容升级前仍停留在浏览器中的旧表单；新页面始终提交稳定ID。
+        if (!$deleted && $mappingId <= 0) {
+            $legacyPrefix = $this->getFormString($_POST, 'card_prefix');
+            if ($legacyPrefix !== '') {
+                $deleted = $this->authorMappingModel->deleteAuthorMapping($legacyPrefix);
+            }
         }
 
-        // 如果不是POST请求，则重定向到作者管理页面
-        header('Location: ' . BASE_URL . '?controller=admin&action=authors');
+        $parameter = $deleted ? 'message' : 'error';
+        $message = $deleted ? '成功删除作者映射' : '删除作者映射失败';
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors&' . $parameter . '=' . urlencode($message));
         exit;
     }
 
     /**
      * 编辑作者映射页面
+     *
+     * @return void
      */
     public function editAuthor() {
         // 要求管理员权限（等级2以上）
         $this->userModel->requirePermission(2);
 
-        // 获取卡片前缀
-        $cardPrefix = isset($_GET['card_prefix']) ? trim($_GET['card_prefix']) : '';
-
-        if (empty($cardPrefix)) {
-            // 如果没有提供卡片前缀，则重定向到作者管理页面
-            header('Location: ' . BASE_URL . '?controller=admin&action=authors');
-            exit;
-        }
-
-        // 获取作者映射信息
-        $authorMapping = $this->authorMappingModel->getAuthorMappingByPrefix($cardPrefix);
-
-        if (!$authorMapping) {
-            // 如果找不到作者映射，则重定向到作者管理页面
-            header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('找不到指定的作者映射'));
-            exit;
-        }
-
-        // 检查是否是POST请求
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
+        if ($isPost) {
             $this->requirePostCsrf('admin_edit_author');
-            // 获取表单数据
-            $newCardPrefix = isset($_POST['card_prefix']) ? trim($_POST['card_prefix']) : '';
-            $authorName = isset($_POST['author_name']) ? trim($_POST['author_name']) : '';
-            $alias = isset($_POST['alias']) ? trim($_POST['alias']) : null;
-            $contact = isset($_POST['contact']) ? trim($_POST['contact']) : null;
-            $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
+            $mappingId = $this->getPositiveIntegerFormValue($_POST, 'mapping_id');
+        } else {
+            $mappingId = $this->getPositiveIntegerFormValue($_GET, 'id');
+        }
 
-            // 验证数据
-            $errors = [];
+        // 兼容旧版按card_prefix打开的编辑链接，并立即转换为稳定ID定位。
+        if ($mappingId <= 0) {
+            $legacyPrefix = $this->getFormString($_GET, 'card_prefix');
+            $legacyMapping = $legacyPrefix === ''
+                ? false
+                : $this->authorMappingModel->getAuthorMappingByPrefix($legacyPrefix);
+            $mappingId = $legacyMapping ? (int)$legacyMapping['id'] : 0;
+        }
 
-            if (empty($newCardPrefix)) {
-                $errors[] = '请输入卡片前缀';
-            }
+        $authorMapping = $mappingId > 0
+            ? $this->authorMappingModel->getAuthorMappingById($mappingId)
+            : false;
+        if (!$authorMapping) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('找不到指定的作者映射'));
+            exit;
+        }
 
-            if (empty($authorName)) {
-                $errors[] = '请输入作者名称';
-            }
+        if ($isPost) {
+            $authorForm = $this->getAuthorMappingFormData($_POST);
+            $errors = $this->validateAuthorMappingFormData($authorForm);
 
             // 如果没有错误，则更新作者映射
             if (empty($errors)) {
-                // 使用新方法更新作者映射（包括卡片前缀）
-                $result = $this->authorMappingModel->updateAuthorMappingWithPrefix(
-                    $cardPrefix,
-                    $newCardPrefix,
-                    $authorName,
-                    $alias,
-                    $contact,
-                    $notes
+                $result = $this->authorMappingModel->updateAuthorMappingById(
+                    $mappingId,
+                    $authorForm['card_prefix'],
+                    $authorForm['author_name'],
+                    $authorForm['alias'],
+                    $authorForm['contact'],
+                    $authorForm['notes'],
+                    $this->nullableInteger($authorForm['card_id_length']),
+                    $this->nullableInteger($authorForm['card_id_start']),
+                    $this->nullableInteger($authorForm['card_id_end']),
+                    (int)$authorForm['priority']
                 );
 
                 if ($result) {
-                    // 设置成功消息
-                    $message = '成功更新作者映射';
-                } else {
-                    // 设置错误消息
-                    if ($cardPrefix !== $newCardPrefix) {
-                        $message = '更新失败：新卡片前缀已存在';
-                    } else {
-                        $message = '更新失败：未知错误';
-                    }
+                    header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('成功更新作者映射'));
+                    exit;
                 }
 
-                // 重定向到作者管理页面
-                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
-                exit;
+                $errors[] = '更新作者映射失败';
             }
 
             // 如果有错误，则显示错误信息
             if (!empty($errors)) {
-                // 更新作者映射信息，以便在表单中显示用户输入的值
-                $authorMapping['card_prefix'] = $newCardPrefix;
-                $authorMapping['author_name'] = $authorName;
-                $authorMapping['alias'] = $alias;
-                $authorMapping['contact'] = $contact;
-                $authorMapping['notes'] = $notes;
+                $authorMapping = array_merge($authorMapping, $authorForm);
 
                 // 渲染视图
                 include __DIR__ . '/../Views/layout.php';
@@ -488,6 +452,130 @@ class AdminController {
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/admin/edit_author.php';
         include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 添加作者文本匹配规则
+     *
+     * @return void
+     */
+    public function addAuthorRule() {
+        $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_add_author_rule');
+
+        $ruleForm = $this->getAuthorRuleFormData($_POST);
+        $errors = $this->validateAuthorRuleFormData($ruleForm);
+
+        if (empty($errors)) {
+            $ruleId = $this->cardMatchRuleModel->addRule($this->normalizeAuthorRuleData($ruleForm));
+            if ($ruleId !== false) {
+                header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('成功添加文本匹配规则'));
+                exit;
+            }
+            $errors[] = '添加文本匹配规则失败';
+        }
+
+        $this->renderAuthorManagement('', $errors, [], $ruleForm);
+    }
+
+    /**
+     * 编辑作者文本匹配规则
+     *
+     * @return void
+     */
+    public function editAuthorRule() {
+        $this->userModel->requirePermission(2);
+
+        $isPost = $_SERVER['REQUEST_METHOD'] === 'POST';
+        if ($isPost) {
+            $this->requirePostCsrf('admin_edit_author_rule');
+            $ruleId = $this->getPositiveIntegerFormValue($_POST, 'rule_id');
+        } else {
+            $ruleId = $this->getPositiveIntegerFormValue($_GET, 'id');
+        }
+
+        if ($ruleId <= 0) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('无效的文本匹配规则ID'));
+            exit;
+        }
+
+        $rule = $this->cardMatchRuleModel->getRuleById($ruleId);
+        if (!$rule) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('找不到指定的文本匹配规则'));
+            exit;
+        }
+
+        $errors = [];
+        if ($isPost) {
+            $ruleForm = $this->getAuthorRuleFormData($_POST);
+            $errors = $this->validateAuthorRuleFormData($ruleForm);
+
+            if (empty($errors)) {
+                $result = $this->cardMatchRuleModel->updateRule(
+                    $ruleId,
+                    $this->normalizeAuthorRuleData($ruleForm)
+                );
+                if ($result) {
+                    header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('成功更新文本匹配规则'));
+                    exit;
+                }
+                $errors[] = '更新文本匹配规则失败';
+            }
+
+            $rule = array_merge($rule, $ruleForm);
+        }
+
+        $matchFieldLabels = $this->getAuthorRuleFieldLabels();
+        $matchOperatorLabels = $this->getAuthorRuleOperatorLabels();
+        $targetTypeLabels = $this->getAuthorRuleTargetTypeLabels();
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/edit_author_rule.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 删除作者文本匹配规则
+     *
+     * @return void
+     */
+    public function deleteAuthorRule() {
+        $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_delete_author_rule');
+
+        $ruleId = $this->getPositiveIntegerFormValue($_POST, 'rule_id');
+        if ($ruleId <= 0 || !$this->cardMatchRuleModel->deleteRule($ruleId)) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('删除文本匹配规则失败'));
+            exit;
+        }
+
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode('成功删除文本匹配规则'));
+        exit;
+    }
+
+    /**
+     * 启用或停用作者文本匹配规则
+     *
+     * @return void
+     */
+    public function toggleAuthorRule() {
+        $this->userModel->requirePermission(2);
+        $this->requirePostCsrf('admin_toggle_author_rule');
+
+        $ruleId = $this->getPositiveIntegerFormValue($_POST, 'rule_id');
+        $enabledValue = $this->getFormString($_POST, 'is_enabled');
+        if ($ruleId <= 0 || !in_array($enabledValue, ['0', '1'], true)) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('无效的文本匹配规则状态'));
+            exit;
+        }
+
+        if (!$this->cardMatchRuleModel->toggleRule($ruleId, (int)$enabledValue)) {
+            header('Location: ' . BASE_URL . '?controller=admin&action=authors&error=' . urlencode('更新文本匹配规则状态失败'));
+            exit;
+        }
+
+        $message = $enabledValue === '1' ? '已启用文本匹配规则' : '已停用文本匹配规则';
+        header('Location: ' . BASE_URL . '?controller=admin&action=authors&message=' . urlencode($message));
+        exit;
     }
 
     /**
@@ -914,6 +1002,307 @@ class AdminController {
         include __DIR__ . '/../Views/layout.php';
         include __DIR__ . '/../Views/admin/config.php';
         include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 渲染作者映射与文本规则管理页面
+     *
+     * @param string $message 成功消息
+     * @param array $errors 错误消息
+     * @param array $authorForm 作者映射表单数据
+     * @param array $ruleForm 文本规则表单数据
+     * @return void
+     */
+    private function renderAuthorManagement($message = '', $errors = [], $authorForm = [], $ruleForm = []) {
+        $authorMappings = $this->authorMappingModel->getAllAuthorMappings();
+        $authorRules = $this->cardMatchRuleModel->getAllRules();
+        $matchFieldLabels = $this->getAuthorRuleFieldLabels();
+        $matchOperatorLabels = $this->getAuthorRuleOperatorLabels();
+        $targetTypeLabels = $this->getAuthorRuleTargetTypeLabels();
+        $authorForm = array_merge([
+            'card_prefix' => '',
+            'author_name' => '',
+            'card_id_length' => '',
+            'card_id_start' => '',
+            'card_id_end' => '',
+            'priority' => '100',
+            'alias' => '',
+            'contact' => '',
+            'notes' => ''
+        ], $authorForm);
+        $ruleForm = array_merge([
+            'database_file' => '',
+            'match_field' => 'desc',
+            'match_operator' => 'contains',
+            'match_value' => '',
+            'target_type' => 'author',
+            'target_value' => '',
+            'priority' => '100',
+            'is_case_sensitive' => 0,
+            'is_enabled' => 1,
+            'notes' => ''
+        ], $ruleForm);
+
+        include __DIR__ . '/../Views/layout.php';
+        include __DIR__ . '/../Views/admin/authors.php';
+        include __DIR__ . '/../Views/footer.php';
+    }
+
+    /**
+     * 读取作者映射表单
+     *
+     * @param array $source 表单来源
+     * @return array
+     */
+    private function getAuthorMappingFormData($source) {
+        return [
+            'card_prefix' => $this->getFormString($source, 'card_prefix'),
+            'author_name' => $this->getFormString($source, 'author_name'),
+            'card_id_length' => $this->getFormString($source, 'card_id_length'),
+            'card_id_start' => $this->getFormString($source, 'card_id_start'),
+            'card_id_end' => $this->getFormString($source, 'card_id_end'),
+            'priority' => $this->getFormString($source, 'priority', '100'),
+            'alias' => $this->getFormString($source, 'alias'),
+            'contact' => $this->getFormString($source, 'contact'),
+            'notes' => $this->getFormString($source, 'notes')
+        ];
+    }
+
+    /**
+     * 验证作者映射表单
+     *
+     * @param array $data 表单数据
+     * @return array 错误消息
+     */
+    private function validateAuthorMappingFormData($data) {
+        $errors = [];
+
+        if ($data['card_prefix'] === '') {
+            $errors[] = '请输入卡片前缀';
+        } elseif (!preg_match('/^\d{1,16}$/', $data['card_prefix'])) {
+            $errors[] = '卡片前缀必须为1至16位数字，并请保留有意义的前导零';
+        }
+
+        if ($data['author_name'] === '') {
+            $errors[] = '请输入作者名称';
+        }
+
+        if ($data['card_id_length'] !== '') {
+            if (!preg_match('/^\d{1,2}$/', $data['card_id_length']) ||
+                (int)$data['card_id_length'] < 1 || (int)$data['card_id_length'] > 16) {
+                $errors[] = '卡号总位数必须是1至16之间的整数';
+            } elseif ($data['card_prefix'] !== '' && preg_match('/^\d{1,16}$/', $data['card_prefix']) &&
+                (int)$data['card_id_length'] < max(3, strlen($data['card_prefix']))) {
+                $errors[] = '卡号总位数不能短于规范化后的卡片前缀';
+            }
+        }
+
+        $hasStart = $data['card_id_start'] !== '';
+        $hasEnd = $data['card_id_end'] !== '';
+        if ($hasStart xor $hasEnd) {
+            $errors[] = '显式卡号区间的起始值和结束值必须同时填写';
+        } elseif ($hasStart && $hasEnd) {
+            if (!$this->isUnsignedIntegerString($data['card_id_start']) ||
+                !$this->isUnsignedIntegerString($data['card_id_end'])) {
+                $errors[] = '显式卡号区间必须为不超过16位的非负整数';
+            } elseif ((int)$data['card_id_start'] > (int)$data['card_id_end']) {
+                $errors[] = '显式卡号区间的起始值不能大于结束值';
+            }
+        }
+
+        if (!$this->isIntegerString($data['priority'])) {
+            $errors[] = '优先级必须是有效整数';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * 读取作者文本规则表单
+     *
+     * @param array $source 表单来源
+     * @return array
+     */
+    private function getAuthorRuleFormData($source) {
+        return [
+            'database_file' => $this->getFormString($source, 'database_file'),
+            'match_field' => $this->getFormString($source, 'match_field', 'desc'),
+            'match_operator' => $this->getFormString($source, 'match_operator', 'contains'),
+            'match_value' => $this->getFormString($source, 'match_value'),
+            'target_type' => $this->getFormString($source, 'target_type', 'author'),
+            'target_value' => $this->getFormString(
+                $source,
+                'target_value',
+                $this->getFormString($source, 'author_name')
+            ),
+            'priority' => $this->getFormString($source, 'priority', '100'),
+            'is_case_sensitive' => isset($source['is_case_sensitive']) &&
+                is_scalar($source['is_case_sensitive']) && (string)$source['is_case_sensitive'] === '1' ? 1 : 0,
+            'is_enabled' => isset($source['is_enabled']) &&
+                is_scalar($source['is_enabled']) && (string)$source['is_enabled'] === '1' ? 1 : 0,
+            'notes' => $this->getFormString($source, 'notes')
+        ];
+    }
+
+    /**
+     * 验证作者文本规则表单
+     *
+     * @param array $data 表单数据
+     * @return array 错误消息
+     */
+    private function validateAuthorRuleFormData($data) {
+        $errors = [];
+        $validFields = array_keys($this->getAuthorRuleFieldLabels());
+        $validOperators = array_keys($this->getAuthorRuleOperatorLabels());
+        $validTargetTypes = array_keys($this->getAuthorRuleTargetTypeLabels());
+
+        if (strlen($data['database_file']) > 255 ||
+            strpos($data['database_file'], '/') !== false || strpos($data['database_file'], '\\') !== false) {
+            $errors[] = 'CDB来源只能填写文件名，不能包含路径';
+        } elseif ($data['database_file'] !== '' && !preg_match('/^[^\/]+\.cdb$/iu', $data['database_file'])) {
+            $errors[] = 'CDB来源必须是以.cdb结尾的文件名';
+        }
+        if (!in_array($data['match_field'], $validFields, true)) {
+            $errors[] = '请选择有效的CDB文本字段';
+        }
+        if (!in_array($data['match_operator'], $validOperators, true)) {
+            $errors[] = '请选择有效的匹配方式';
+        }
+        if ($data['match_value'] === '') {
+            $errors[] = '请输入匹配值';
+        }
+        if (!in_array($data['target_type'], $validTargetTypes, true)) {
+            $errors[] = '请选择有效的规则目标类型';
+        }
+        if ($data['target_value'] === '') {
+            $errors[] = '请输入规则对应的作者或系列分组名称';
+        }
+        if (!$this->isIntegerString($data['priority'])) {
+            $errors[] = '优先级必须是有效整数';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * 获取文本规则字段选项
+     *
+     * @return array 字段值与界面标签
+     */
+    private function getAuthorRuleFieldLabels() {
+        $labels = [
+            'name' => '卡名（name）',
+            'desc' => '描述（desc）',
+            'any' => '任意文本字段'
+        ];
+        for ($index = 1; $index <= 16; $index++) {
+            $labels['str' . $index] = '附加文本 str' . $index;
+        }
+        return $labels;
+    }
+
+    /**
+     * 获取文本规则匹配方式选项
+     *
+     * @return array 运算符值与界面标签
+     */
+    private function getAuthorRuleOperatorLabels() {
+        return [
+            'contains' => '包含',
+            'equals' => '整个字段相等',
+            'line_equals' => '其中一行相等'
+        ];
+    }
+
+    /**
+     * 获取文本规则目标类型选项
+     *
+     * @return array 类型值与界面标签
+     */
+    private function getAuthorRuleTargetTypeLabels() {
+        return [
+            'author' => '作者归属',
+            'series' => '人工系列分组'
+        ];
+    }
+
+    /**
+     * 规范化文本规则数据以供模型保存
+     *
+     * @param array $data 表单数据
+     * @return array
+     */
+    private function normalizeAuthorRuleData($data) {
+        $data['database_file'] = $data['database_file'] === '' ? null : $data['database_file'];
+        $data['priority'] = (int)$data['priority'];
+        $data['is_case_sensitive'] = (int)$data['is_case_sensitive'];
+        $data['is_enabled'] = (int)$data['is_enabled'];
+        return $data;
+    }
+
+    /**
+     * 安全读取标量表单字符串
+     *
+     * @param array $source 表单来源
+     * @param string $key 字段名
+     * @param string $default 默认值
+     * @return string
+     */
+    private function getFormString($source, $key, $default = '') {
+        if (!isset($source[$key]) || !is_scalar($source[$key])) {
+            return $default;
+        }
+        return trim((string)$source[$key]);
+    }
+
+    /**
+     * 严格读取正整数表单值
+     *
+     * @param array $source 表单来源
+     * @param string $key 字段名
+     * @return int 无效时返回0
+     */
+    private function getPositiveIntegerFormValue($source, $key) {
+        $value = $this->getFormString($source, $key);
+        if (preg_match('/^[1-9]\d*$/', $value) !== 1) {
+            return 0;
+        }
+
+        $integer = filter_var($value, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1]
+        ]);
+        return $integer === false ? 0 : (int)$integer;
+    }
+
+    /**
+     * 判断是否为PHP可表示的整数文本
+     *
+     * @param string $value 待检查文本
+     * @return bool
+     */
+    private function isIntegerString($value) {
+        return preg_match('/^-?\d+$/', $value) === 1 &&
+            filter_var($value, FILTER_VALIDATE_INT) !== false;
+    }
+
+    /**
+     * 判断是否为安全的非负卡号整数文本
+     *
+     * @param string $value 待检查文本
+     * @return bool
+     */
+    private function isUnsignedIntegerString($value) {
+        return preg_match('/^\d{1,16}$/', $value) === 1;
+    }
+
+    /**
+     * 将可选整数表单值转为整数或null
+     *
+     * @param string $value 表单值
+     * @return int|null
+     */
+    private function nullableInteger($value) {
+        return $value === '' ? null : (int)$value;
     }
 
     /**

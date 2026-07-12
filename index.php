@@ -40,7 +40,7 @@ $routeMap = [
     'card' => ['class' => 'CardController', 'actions' => ['index', 'detail', 'search', 'searchJson']],
     'vote' => ['class' => 'VoteController', 'actions' => ['index', 'create', 'vote', 'createSeries', 'createAdvanced', 'submitAdvanced', 'deleteRecord']],
     'home' => ['class' => 'HomeController', 'actions' => ['index']],
-    'admin' => ['class' => 'AdminController', 'actions' => ['login', 'logout', 'votes', 'closeVote', 'banlist', 'generate', 'reset', 'update', 'authors', 'identifyAuthors', 'addAuthor', 'deleteAuthor', 'editAuthor', 'tips', 'addTip', 'editTip', 'deleteTip', 'voterBans', 'addVoterBan', 'removeVoterBan', 'config']],
+    'admin' => ['class' => 'AdminController', 'actions' => ['login', 'logout', 'votes', 'closeVote', 'banlist', 'generate', 'reset', 'update', 'authors', 'identifyAuthors', 'addAuthor', 'deleteAuthor', 'editAuthor', 'addAuthorRule', 'editAuthorRule', 'deleteAuthorRule', 'toggleAuthorRule', 'tips', 'addTip', 'editTip', 'deleteTip', 'voterBans', 'addVoterBan', 'removeVoterBan', 'config']],
     'banlist' => ['class' => 'BanlistController', 'actions' => ['index', 'generate', 'update', 'reset', 'reopenVote', 'deleteVote']],
     'author' => ['class' => 'AuthorController', 'actions' => ['index', 'detail', 'update', 'clearCache', 'debug']],
     'card_ranking' => ['class' => 'CardRankingController', 'actions' => ['index', 'update', 'clearCache']],

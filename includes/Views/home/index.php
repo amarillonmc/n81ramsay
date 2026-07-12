@@ -17,6 +17,9 @@
             <?php endif; ?>
             <tr><th>卡片描述</th><td><?php echo nl2br(Utils::escapeHtml($card['desc'])); ?></td></tr>
             <tr><th>卡片作者</th><td><?php echo !empty($card['author']) ? Utils::escapeHtml($card['author']) : '未知'; ?></td></tr>
+            <?php if (!empty($card['manual_series_name'])): ?>
+                <tr><th>人工系列分组</th><td><?php echo Utils::escapeHtml($card['manual_series_name']); ?></td></tr>
+            <?php endif; ?>
         </table>
     </div>
 </div>

@@ -354,6 +354,10 @@ if (!defined('AUTHOR_HALL_OF_FAME_CACHE_DAYS')) {
 if (!defined('EXCLUDED_CARD_DATABASES')) {
     define('EXCLUDED_CARD_DATABASES', json_encode(['Pre_Nerf_cards.cdb', 'SoundStageLib.cdb'])); // 需要排除的卡片数据库文件
 }
+if (!defined('CARD_DATABASE_PRIORITY')) {
+    // 同一卡号出现在多个CDB时，排在前面的数据库作为卡片详情与作者统计的权威来源。
+    define('CARD_DATABASE_PRIORITY', json_encode(['no81.cdb', 'no42.cdb']));
+}
 
 // 卡片排行榜配置
 if (!defined('CARD_RANKING_ENABLED')) {

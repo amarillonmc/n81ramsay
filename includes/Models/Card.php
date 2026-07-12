@@ -143,6 +143,32 @@ class Card {
     }
 
     /**
+     * 按统一作者归属结果获取作者的其他卡片
+     *
+     * 使用统一解析器的候选查询，确保首页、详情和排行榜使用同一套规则。
+     *
+     * @param string $authorName 规范作者名
+     * @param int|null $excludeId 排除的卡号
+     * @param int $limit 最多返回数量
+     * @return array 卡片列表
+     */
+    public function getCardsByAuthor($authorName, $excludeId = null, $limit = 10) {
+        return $this->cardParser->getCardsByAuthor($authorName, $excludeId, $limit);
+    }
+
+    /**
+     * 按人工文本系列分组获取卡片
+     *
+     * @param string $seriesName 人工系列分组名
+     * @param int|null $excludeId 排除的卡号
+     * @param int $limit 最多返回数量
+     * @return array 卡片列表
+     */
+    public function getCardsByManualSeries($seriesName, $excludeId = null, $limit = 10) {
+        return $this->cardParser->getCardsByManualSeries($seriesName, $excludeId, $limit);
+    }
+
+    /**
      * 根据ID列表批量获取卡片
      *
      * @param array $cardIds 卡片ID列表

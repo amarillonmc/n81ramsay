@@ -14,6 +14,7 @@
 
 // 示例：修改TCG卡片数据位置
 // define('TCG_CARD_DATA_PATH', __DIR__ . '/custom/tcg_cards.cdb');
+// define('CARD_DATABASE_PRIORITY', json_encode(['no81.cdb', 'no42.cdb']));
 
 // 示例：允许对TCG卡发起禁卡投票
 // define('ALLOW_TCG_CARD_VOTING', true);

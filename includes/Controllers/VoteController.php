@@ -24,12 +24,19 @@ class VoteController {
     private $voterBanModel;
 
     /**
+     * 作者映射与身份服务
+     * @var AuthorMapping
+     */
+    private $authorMappingModel;
+
+    /**
      * 构造函数
      */
     public function __construct() {
         $this->voteModel = new Vote();
         $this->cardModel = new Card();
         $this->voterBanModel = new VoterBan();
+        $this->authorMappingModel = new AuthorMapping();
     }
 
     /**
@@ -1007,33 +1014,7 @@ class VoteController {
      * @return bool 是否有权限
      */
     private function checkInitiatorAuthorization($initiatorId) {
-        $db = Database::getInstance();
-
-        // 检查发起人ID是否在作者映射表中（作为作者名称）
-        $authorMapping = $db->getRow(
-            'SELECT * FROM author_mappings WHERE author_name = :author_name',
-            [':author_name' => $initiatorId]
-        );
-
-        if ($authorMapping) {
-            return true;
-        }
-
-        // 检查是否在别名中（精确匹配逗号分隔的别名）
-        $allMappings = $db->getRows('SELECT * FROM author_mappings WHERE alias IS NOT NULL AND alias != ""');
-        foreach ($allMappings as $mapping) {
-            if (!empty($mapping['alias'])) {
-                $aliases = explode(',', $mapping['alias']);
-                foreach ($aliases as $alias) {
-                    $alias = trim($alias);
-                    if ($alias === $initiatorId) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+        return in_array(trim((string)$initiatorId), $this->getAuthorIdentifierWhitelist(), true);
     }
 
     /**
@@ -1042,27 +1023,7 @@ class VoteController {
      * @return array
      */
     private function getAuthorIdentifierWhitelist() {
-        $db = Database::getInstance();
-        $allMappings = $db->getRows('SELECT author_name, alias FROM author_mappings');
-        $whitelist = array();
-
-        foreach ($allMappings as $mapping) {
-            if (!empty($mapping['author_name'])) {
-                $whitelist[] = trim($mapping['author_name']);
-            }
-
-            if (!empty($mapping['alias'])) {
-                $aliases = explode(',', $mapping['alias']);
-                foreach ($aliases as $alias) {
-                    $alias = trim($alias);
-                    if ($alias !== '') {
-                        $whitelist[] = $alias;
-                    }
-                }
-            }
-        }
-
-        return array_values(array_unique($whitelist));
+        return $this->authorMappingModel->getAuthorIdentifierWhitelist();
     }
 
     /**
@@ -1073,40 +1034,15 @@ class VoteController {
      * @return bool 是否有权限
      */
     private function checkCardAuthorAuthorization($cardAuthorId, $card) {
-        // 获取卡片作者信息
-        $cardAuthor = $card['author'];
+        // 卡片数组已由CardParser统一解析；缺失时再走同一解析入口。
+        $cardAuthor = isset($card['author']) ? $card['author'] : CardParser::getInstance()->getCardAuthor($card);
 
         // 如果卡片没有作者信息，则不允许
         if (empty($cardAuthor) || $cardAuthor === '未知作者') {
             return false;
         }
 
-        // 检查填写的作者ID是否与作者名称或别名匹配
-        $db = Database::getInstance();
-        $cardPrefix = substr((string)$card['id'], 0, 3);
-
-        // 查询数据库中的作者映射
-        $authorMapping = $db->getRow(
-            'SELECT * FROM author_mappings WHERE card_prefix = :card_prefix',
-            [':card_prefix' => $cardPrefix]
-        );
-
-        if ($authorMapping) {
-            // 检查是否匹配作者名称或别名
-            $authorName = $authorMapping['author_name'];
-            $alias = $authorMapping['alias'];
-
-            if ($cardAuthorId === $authorName || (!empty($alias) && $cardAuthorId === $alias)) {
-                return true;
-            }
-        }
-
-        // 如果数据库中没有记录，检查是否与卡片作者信息匹配
-        if ($cardAuthorId === $cardAuthor) {
-            return true;
-        }
-
-        return false;
+        return $this->authorMappingModel->matchesAuthorIdentifier($cardAuthorId, $cardAuthor);
     }
 
     /**

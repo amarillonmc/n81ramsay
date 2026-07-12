@@ -19,10 +19,13 @@ class AuthorStats {
 
     /**
      * 构造函数
+     *
+     * @param string|null $cacheDir 可选缓存目录，测试可注入隔离目录
+     * @return void
      */
-    public function __construct() {
+    public function __construct($cacheDir = null) {
         $this->cardParser = CardParser::getInstance();
-        $this->cacheDir = __DIR__ . '/../../data/cache';
+        $this->cacheDir = $cacheDir !== null ? $cacheDir : __DIR__ . '/../../data/cache';
 
         // 确保缓存目录存在
         if (!file_exists($this->cacheDir)) {
@@ -39,11 +42,12 @@ class AuthorStats {
     public function getAuthorStats($forceUpdate = false) {
         // 检查缓存
         $cacheFile = $this->getCacheFilePath();
+        $sourceFingerprint = $this->getSourceFingerprint();
 
         // 如果缓存存在且未过期，且不强制更新，则直接返回缓存数据
-        if (!$forceUpdate && file_exists($cacheFile) && $this->isCacheValid($cacheFile)) {
-            $cachedData = json_decode(file_get_contents($cacheFile), true);
-            if ($cachedData) {
+        if (!$forceUpdate) {
+            $cachedData = $this->readCachedAuthorStats($cacheFile, $sourceFingerprint);
+            if ($cachedData !== null) {
                 return $cachedData;
             }
         }
@@ -63,26 +67,13 @@ class AuthorStats {
         // 获取系列信息
         $setcodes = $this->getSetcodes();
 
-        // 如果是简略识别模式，预先加载所有作者映射
-        $authorMappings = [];
-        if (defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') && AUTHOR_HALL_OF_FAME_SIMPLE_MODE) {
-            $db = Database::getInstance();
-            $mappings = $db->getRows('SELECT * FROM author_mappings');
-            foreach ($mappings as $mapping) {
-                $authorMappings[$mapping['card_prefix']] = $mapping['author_name'];
-            }
-        }
-
         // 处理每个数据库文件
         foreach ($dbFiles as $dbFile) {
             $dbName = basename($dbFile);
             $isNo42 = (strpos($dbName, 'no42') !== false);
 
-            // 获取数据库中的所有卡片
-            $cards = $this->getAllCardsFromDatabase($dbFile);
-
-            // 统计每个作者的卡片数量
-            foreach ($cards as $card) {
+            // 分批读取并统计，避免desc + str1..str16全量驻留导致128MiB环境内存紧张。
+            foreach ($this->iterateCardsFromDatabase($dbFile) as $card) {
                 // 检查卡片ID是否已经处理过，防止重复统计
                 $cardId = (int)$card['id'];
                 if (isset($processedCardIds[$cardId])) {
@@ -92,12 +83,12 @@ class AuthorStats {
 
                 // 根据配置决定使用哪种方式获取作者
                 if (defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') && AUTHOR_HALL_OF_FAME_SIMPLE_MODE) {
-                    // 简略识别模式：仅使用管理员配置的作者列表
-                    $author = $this->getAuthorFromMappings($card, $authorMappings);
+                    // 简略识别模式仍复用统一解析器，但只启用管理员文本规则和卡号区间。
+                    $resolution = $this->cardParser->getCardAuthorResolution($card, true);
+                    $author = $resolution['author'];
                 } else {
-                    // 完整识别模式：使用 CardParser 的 getCardAuthor 方法
-                    // 该方法已经实现了优先级：数据库记录 > 卡片描述文本 > strings.conf
-                    $author = $this->cardParser->getCardAuthor($card);
+                    // getAllCards已完成统一解析，避免再次逐卡执行判定。
+                    $author = isset($card['author']) ? $card['author'] : $this->cardParser->getCardAuthor($card);
                 }
 
                 // 确保作者名使用UTF-8编码
@@ -109,14 +100,9 @@ class AuthorStats {
                 // 过滤掉可能导致问题的控制字符
                 $author = preg_replace('/[\x00-\x1F\x7F]/u', '', $author);
 
-                // 如果作者名为空，使用卡片ID前三位作为作者名
-                if (empty(trim($author)) && $author !== "未知作者") {
-                    $cardIdStr = (string)$card['id'];
-                    if (strlen($cardIdStr) >= 3) {
-                        $author = "ID前缀: " . substr($cardIdStr, 0, 3);
-                    } else {
-                        $author = "未知作者";
-                    }
+                // 解析结果被清理为空时统一归入未知作者，禁止重新引入固定前三位推断。
+                if (empty(trim($author))) {
+                    $author = "未知作者";
                 }
 
                 // 初始化作者统计数据
@@ -127,7 +113,7 @@ class AuthorStats {
                         'banned_cards' => 0,
                         'banned_series' => 0,
                         'banned_percentage' => 0,
-                        'is_unknown' => ($author === "未知作者" || mb_strpos($author, "ID前缀: ", 0, 'UTF-8') === 0),
+                        'is_unknown' => ($author === "未知作者"),
                         'cards' => [],
                         'banned_cards_list' => [],
                         'banned_series_list' => []
@@ -166,6 +152,7 @@ class AuthorStats {
             // 计算被禁系列
             $stats['banned_series'] = $this->countBannedSeries($stats['cards'], $standardBanlist, $setcodes);
         }
+        unset($stats);
 
         // 将作者分为已知作者和未知作者两组
         $knownAuthors = [];
@@ -203,12 +190,13 @@ class AuthorStats {
         foreach ($sortedAuthorStats as &$stats) {
             $stats['rank'] = $rank++;
         }
+        unset($stats);
 
         // 添加生成时间
         $sortedAuthorStats['generated_time'] = date('Y-m-d H:i:s');
 
         // 缓存数据
-        $this->cacheAuthorStats($sortedAuthorStats);
+        $this->cacheAuthorStats($sortedAuthorStats, $sourceFingerprint);
 
         return $sortedAuthorStats;
     }
@@ -311,15 +299,25 @@ class AuthorStats {
     }
 
     /**
-     * 获取数据库中的所有卡片
+     * 分批遍历数据库中的全部卡片
      *
      * @param string $dbFile 数据库文件路径
-     * @return array 卡片列表
+     * @return Generator 卡片迭代器
      */
-    private function getAllCardsFromDatabase($dbFile) {
-        // 4294967296 是 32 位无符号整数的最大值，确保能获取到所有卡片，杜绝单作者出现多个中间差值较大的区间时丢卡的情况。
-        $result = $this->cardParser->getAllCards($dbFile, 1, 4294967296, false);
-        return $result['cards'] ?? [];
+    private function iterateCardsFromDatabase($dbFile) {
+        $page = 1;
+        $batchSize = 1000;
+
+        do {
+            $cards = $this->cardParser->getCardsForAuthorStats($dbFile, $page, $batchSize);
+            $cardCount = count($cards);
+            foreach ($cards as $card) {
+                yield $card;
+            }
+
+            unset($cards);
+            $page++;
+        } while ($cardCount === $batchSize);
     }
 
     /**
@@ -395,29 +393,6 @@ class AuthorStats {
     }
 
     /**
-     * 从预加载的作者映射中获取作者信息
-     *
-     * @param array $card 卡片信息
-     * @param array $authorMappings 预加载的作者映射
-     * @return string 作者名称
-     */
-    private function getAuthorFromMappings($card, $authorMappings) {
-        $cardId = (string)$card['id'];
-
-        // 尝试使用卡片ID前缀查找作者映射
-        if (strlen($cardId) >= 3) {
-            $cardPrefix = substr($cardId, 0, 3);
-
-            if (isset($authorMappings[$cardPrefix])) {
-                return $authorMappings[$cardPrefix];
-            }
-        }
-
-        // 如果找不到作者信息，返回"未知作者"
-        return "未知作者";
-    }
-
-    /**
      * 获取缓存文件路径
      *
      * @return string 缓存文件路径
@@ -427,26 +402,157 @@ class AuthorStats {
     }
 
     /**
-     * 检查缓存是否有效
+     * 获取缓存锁文件路径
+     *
+     * @return string 锁文件路径
+     */
+    private function getCacheLockFilePath() {
+        return $this->cacheDir . '/author_hall_of_fame.lock';
+    }
+
+    /**
+     * 在共享锁内读取并校验作者榜缓存。
      *
      * @param string $cacheFile 缓存文件路径
-     * @return bool 缓存是否有效
+     * @param string $sourceFingerprint 当前数据源指纹
+     * @return array|null 有效的作者统计数据，缓存无效时返回null
      */
-    private function isCacheValid($cacheFile) {
-        $cacheTime = filemtime($cacheFile);
-        $cacheDays = defined('AUTHOR_HALL_OF_FAME_CACHE_DAYS') ? AUTHOR_HALL_OF_FAME_CACHE_DAYS : 7;
+    private function readCachedAuthorStats($cacheFile, $sourceFingerprint) {
+        $lockHandle = fopen($this->getCacheLockFilePath(), 'c+');
+        if ($lockHandle === false) {
+            return null;
+        }
 
-        return (time() - $cacheTime) < ($cacheDays * 86400);
+        if (!flock($lockHandle, LOCK_SH)) {
+            fclose($lockHandle);
+            return null;
+        }
+
+        $authorStats = null;
+        clearstatcache(true, $cacheFile);
+        if (is_file($cacheFile)) {
+            $cacheTime = filemtime($cacheFile);
+            $cacheDays = defined('AUTHOR_HALL_OF_FAME_CACHE_DAYS') ? AUTHOR_HALL_OF_FAME_CACHE_DAYS : 7;
+            $isFresh = $cacheTime !== false && (time() - $cacheTime) < ($cacheDays * 86400);
+
+            if ($isFresh) {
+                $contents = file_get_contents($cacheFile);
+                $envelope = $contents !== false ? json_decode($contents, true) : null;
+                if (is_array($envelope)
+                    && isset(
+                        $envelope['cache_version'],
+                        $envelope['source_fingerprint'],
+                        $envelope['generated_at'],
+                        $envelope['author_stats']
+                    )
+                    && (int)$envelope['cache_version'] === 2
+                    && is_array($envelope['author_stats'])
+                    && hash_equals((string)$envelope['source_fingerprint'], $sourceFingerprint)
+                ) {
+                    $authorStats = $envelope['author_stats'];
+                }
+            }
+        }
+
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        return $authorStats;
     }
 
     /**
      * 缓存作者统计数据
      *
      * @param array $authorStats 作者统计数据
+     * @param string $sourceFingerprint 数据源指纹
+     * @return bool 是否写入成功
      */
-    private function cacheAuthorStats($authorStats) {
+    private function cacheAuthorStats($authorStats, $sourceFingerprint) {
         $cacheFile = $this->getCacheFilePath();
-        file_put_contents($cacheFile, json_encode($authorStats, JSON_UNESCAPED_UNICODE));
+        $payload = json_encode([
+            'cache_version' => 2,
+            'source_fingerprint' => $sourceFingerprint,
+            'generated_at' => date('c'),
+            'author_stats' => $authorStats
+        ], JSON_UNESCAPED_UNICODE);
+        if ($payload === false) {
+            return false;
+        }
+
+        $lockHandle = fopen($this->getCacheLockFilePath(), 'c+');
+        if ($lockHandle === false) {
+            return false;
+        }
+
+        if (!flock($lockHandle, LOCK_EX)) {
+            fclose($lockHandle);
+            return false;
+        }
+
+        $tempFile = tempnam($this->cacheDir, 'author_hall_of_fame.');
+        $success = $tempFile !== false
+            && file_put_contents($tempFile, $payload, LOCK_EX) !== false;
+
+        if ($success && file_exists($cacheFile) && !unlink($cacheFile)) {
+            $success = false;
+        }
+        if ($success && !rename($tempFile, $cacheFile)) {
+            $success = false;
+        }
+        if ($tempFile !== false && file_exists($tempFile)) {
+            unlink($tempFile);
+        }
+
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        return $success;
+    }
+
+    /**
+     * 计算影响榜单结果的全部数据源指纹
+     *
+     * @return string SHA-256指纹
+     */
+    private function getSourceFingerprint() {
+        $files = [];
+        foreach ($this->cardParser->getCardDatabaseFiles() as $file) {
+            $files[] = [
+                'name' => basename($file),
+                'size' => file_exists($file) ? filesize($file) : null,
+                'mtime' => file_exists($file) ? filemtime($file) : null
+            ];
+        }
+
+        foreach (['strings.conf', 'lflist.conf'] as $fileName) {
+            $path = CARD_DATA_PATH . '/' . $fileName;
+            $files[] = [
+                'name' => $fileName,
+                'size' => file_exists($path) ? filesize($path) : null,
+                'mtime' => file_exists($path) ? filemtime($path) : null
+            ];
+        }
+
+        $db = Database::getInstance();
+        $mappings = $db->getRows(
+            'SELECT id, card_prefix, author_name, card_id_length, card_id_start, card_id_end, priority, alias, updated_at '
+            . 'FROM author_mappings ORDER BY id ASC'
+        );
+        $rules = $db->getRows(
+            'SELECT id, database_file, match_field, match_operator, match_value, target_type, target_value, '
+            . 'author_name, priority, '
+            . 'is_case_sensitive, is_enabled, updated_at FROM card_match_rules ORDER BY id ASC'
+        );
+
+        $payload = [
+            'resolver_version' => 3,
+            'files' => $files,
+            'mappings' => $mappings,
+            'rules' => $rules,
+            'simple_mode' => defined('AUTHOR_HALL_OF_FAME_SIMPLE_MODE') ? AUTHOR_HALL_OF_FAME_SIMPLE_MODE : false,
+            'excluded_databases' => defined('EXCLUDED_CARD_DATABASES') ? EXCLUDED_CARD_DATABASES : '',
+            'database_priority' => defined('CARD_DATABASE_PRIORITY') ? CARD_DATABASE_PRIORITY : ''
+        ];
+
+        return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE));
     }
 
     /**
@@ -455,11 +561,42 @@ class AuthorStats {
      * @return bool 是否成功
      */
     public function clearCache() {
-        $cacheFile = $this->getCacheFilePath();
-        if (file_exists($cacheFile)) {
-            return unlink($cacheFile);
+        return self::invalidateCacheFiles($this->cacheDir);
+    }
+
+    /**
+     * 清除作者榜单及其指纹元数据
+     *
+     * @param string|null $cacheDir 可选缓存目录，测试可注入隔离目录
+     * @return bool 是否全部清除成功
+     */
+    public static function invalidateCacheFiles($cacheDir = null) {
+        $cacheDir = $cacheDir !== null ? $cacheDir : __DIR__ . '/../../data/cache';
+        if (!is_dir($cacheDir)) {
+            return true;
         }
-        return true;
+
+        $lockFile = $cacheDir . '/author_hall_of_fame.lock';
+        $lockHandle = fopen($lockFile, 'c+');
+        if ($lockHandle === false) {
+            return false;
+        }
+        if (!flock($lockHandle, LOCK_EX)) {
+            fclose($lockHandle);
+            return false;
+        }
+
+        $success = true;
+        foreach (['author_hall_of_fame.json', 'author_hall_of_fame.meta.json'] as $fileName) {
+            $path = $cacheDir . '/' . $fileName;
+            if (file_exists($path) && !unlink($path)) {
+                $success = false;
+            }
+        }
+
+        flock($lockHandle, LOCK_UN);
+        fclose($lockHandle);
+        return $success;
     }
 
     /**
@@ -487,7 +624,8 @@ class AuthorStats {
         $authorStats = $this->getAuthorStats();
 
         // 检查作者是否存在
-        if (!isset($authorStats[$authorName])) {
+        if (!isset($authorStats[$authorName]) || !is_array($authorStats[$authorName]) ||
+            !isset($authorStats[$authorName]['cards'])) {
             return [
                 'cards' => [],
                 'total' => 0,
@@ -542,7 +680,8 @@ class AuthorStats {
         $authorStats = $this->getAuthorStats();
 
         // 检查作者是否存在
-        if (!isset($authorStats[$authorName])) {
+        if (!isset($authorStats[$authorName]) || !is_array($authorStats[$authorName]) ||
+            !isset($authorStats[$authorName]['banned_cards_list'])) {
             return [
                 'cards' => [],
                 'total' => 0,

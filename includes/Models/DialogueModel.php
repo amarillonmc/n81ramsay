@@ -12,10 +12,17 @@ class DialogueModel {
     private $db;
 
     /**
+     * 作者映射与身份服务
+     * @var AuthorMapping
+     */
+    private $authorMappingModel;
+
+    /**
      * 构造函数
      */
     public function __construct() {
         $this->db = Database::getInstance();
+        $this->authorMappingModel = new AuthorMapping();
     }
 
     /**
@@ -262,24 +269,8 @@ class DialogueModel {
      * @return array 验证结果 ['valid' => bool, 'message' => string, 'warning' => bool]
      */
     public function validateAuthor($authorId, $cardId, $strictness) {
-        // 获取作者映射
-        $authorMapping = new AuthorMapping();
-        $allMappings = $authorMapping->getAllAuthorMappings();
-
-        // 构建作者名称和别名的映射
-        $authorMap = [];
-        foreach ($allMappings as $mapping) {
-            $authorMap[$mapping['author_name']] = $mapping['card_prefix'];
-            if (!empty($mapping['alias'])) {
-                $aliases = explode(',', $mapping['alias']);
-                foreach ($aliases as $alias) {
-                    $alias = trim($alias);
-                    if (!empty($alias)) {
-                        $authorMap[$alias] = $mapping['card_prefix'];
-                    }
-                }
-            }
-        }
+        $authorId = trim((string)$authorId);
+        $cardId = trim((string)$cardId);
 
         // 严格度为0，直接通过
         if ($strictness == 0) {
@@ -287,7 +278,8 @@ class DialogueModel {
         }
 
         // 检查作者是否存在
-        if (!isset($authorMap[$authorId])) {
+        $whitelist = $this->getAuthorIdentifierWhitelist();
+        if (!in_array($authorId, $whitelist, true)) {
             return [
                 'valid' => false,
                 'message' => '输入的作者ID无法在作者管理处找到',
@@ -295,36 +287,31 @@ class DialogueModel {
             ];
         }
 
-        // 严格度为1，只检查作者存在
-        if ($strictness == 1) {
-            // 检查卡片前缀是否匹配（用于警告）
-            $cardPrefix = substr($cardId, 0, 3);
-            $expectedPrefix = $authorMap[$authorId];
-
-            if ($cardPrefix !== $expectedPrefix) {
-                return [
-                    'valid' => true,
-                    'message' => '',
-                    'warning' => true
-                ];
-            }
-
-            return ['valid' => true, 'message' => '', 'warning' => false];
+        $card = CardParser::getInstance()->getCardById((int)$cardId);
+        if (!$card) {
+            return [
+                'valid' => false,
+                'message' => '找不到指定卡片，无法验证作者归属',
+                'warning' => false
+            ];
         }
 
-        // 严格度为2，检查作者存在且卡片前缀匹配
-        if ($strictness == 2) {
-            $cardPrefix = substr($cardId, 0, 3);
-            $expectedPrefix = $authorMap[$authorId];
+        $matchesCardAuthor = $this->matchesResolvedAuthor($authorId, $card['author']);
 
-            if ($cardPrefix !== $expectedPrefix) {
+        // 严格度为1只要求作者存在，归属不一致时给出警告。
+        if ($strictness == 1) {
+            return ['valid' => true, 'message' => '', 'warning' => !$matchesCardAuthor];
+        }
+
+        // 严格度为2使用统一解析结果验证作者，而不是再次截取三位前缀。
+        if ($strictness == 2) {
+            if (!$matchesCardAuthor) {
                 return [
                     'valid' => false,
-                    'message' => "卡片ID前缀({$cardPrefix})与作者({$authorId})的卡片前缀({$expectedPrefix})不匹配",
+                    'message' => '卡片的当前判定作者为“' . $card['author'] . '”，与输入作者不匹配',
                     'warning' => false
                 ];
             }
-
             return ['valid' => true, 'message' => '', 'warning' => false];
         }
 
@@ -337,25 +324,17 @@ class DialogueModel {
      * @return array
      */
     public function getAuthorIdentifierWhitelist() {
-        $authorMapping = new AuthorMapping();
-        $allMappings = $authorMapping->getAllAuthorMappings();
-        $whitelist = [];
+        return $this->authorMappingModel->getAuthorIdentifierWhitelist();
+    }
 
-        foreach ($allMappings as $mapping) {
-            if (!empty($mapping['author_name'])) {
-                $whitelist[] = trim($mapping['author_name']);
-            }
-            if (!empty($mapping['alias'])) {
-                $aliases = explode(',', $mapping['alias']);
-                foreach ($aliases as $alias) {
-                    $alias = trim($alias);
-                    if ($alias !== '') {
-                        $whitelist[] = $alias;
-                    }
-                }
-            }
-        }
-
-        return array_values(array_unique($whitelist));
+    /**
+     * 检查输入作者名或别名是否对应统一解析得到的权威作者
+     *
+     * @param string $authorId 输入作者标识
+     * @param string $resolvedAuthor 权威作者名
+     * @return bool 是否匹配
+     */
+    private function matchesResolvedAuthor($authorId, $resolvedAuthor) {
+        return $this->authorMappingModel->matchesAuthorIdentifier($authorId, $resolvedAuthor);
     }
 }

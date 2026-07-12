@@ -50,6 +50,7 @@ class AuthorController {
 
         // 获取生成时间
         $generatedTime = isset($authorStats['generated_time']) ? $authorStats['generated_time'] : date('Y-m-d H:i:s');
+        unset($authorStats['generated_time']);
 
         // 渲染视图
         include __DIR__ . '/../Views/layout.php';
@@ -140,7 +141,8 @@ class AuthorController {
         $authorStats = $this->authorStatsModel->getAuthorStats();
 
         // 检查作者是否存在
-        if (!isset($authorStats[$authorName])) {
+        if (!isset($authorStats[$authorName]) || !is_array($authorStats[$authorName]) ||
+            !isset($authorStats[$authorName]['name'])) {
             header('Location: ' . BASE_URL . '?controller=author');
             exit;
         }
@@ -239,6 +241,9 @@ class AuthorController {
         // 为每个作者生成调试文件
         $fileCount = 0;
         foreach ($authorStats as $author) {
+            if (!is_array($author) || !isset($author['name'])) {
+                continue;
+            }
             $authorName = $author['name'];
 
             // 生成安全的文件名

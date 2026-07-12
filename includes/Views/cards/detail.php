@@ -42,6 +42,21 @@
                         <th>系列</th>
                         <td><?php echo Utils::escapeHtml($card['setcode_text']); ?></td>
                     </tr>
+                    <?php if (!empty($card['manual_series_name'])): ?>
+                        <tr>
+                            <th>人工系列分组</th>
+                            <td>
+                                <?php echo Utils::escapeHtml($card['manual_series_name']); ?>
+                                <small class="text-muted">
+                                    （判定来源：<?php echo Utils::escapeHtml($card['manual_series_source_label']); ?><?php
+                                    if (!empty($card['manual_series_rule_id'])) {
+                                        echo ' #' . (int)$card['manual_series_rule_id'];
+                                    }
+                                    ?>）
+                                </small>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
                     <tr>
                         <th>类别</th>
                         <td><?php echo Utils::escapeHtml($card['type_text']); ?></td>
@@ -79,6 +94,15 @@
                                 TCG/OCG卡片
                             <?php elseif (!empty($card['author'])): ?>
                                 <?php echo Utils::escapeHtml($card['author']); ?>
+                                <?php if (!empty($card['author_source_label'])): ?>
+                                    <small class="text-muted">
+                                        （判定来源：<?php echo Utils::escapeHtml($card['author_source_label']); ?><?php
+                                        if (!empty($card['author_rule_id'])) {
+                                            echo ' #' . (int)$card['author_rule_id'];
+                                        }
+                                        ?>）
+                                    </small>
+                                <?php endif; ?>
                             <?php else: ?>
                                 未知
                             <?php endif; ?>
