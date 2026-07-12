@@ -50,6 +50,14 @@ $routeMap = [
     'replay' => ['class' => 'ReplayController', 'actions' => ['index', 'play', 'list', 'file', 'databases', 'database', 'script', 'cardimage']]
 ];
 
+// 功能关闭时同时移除全部直达路由，不能只隐藏导航菜单。
+if (!defined('REPLAY_ENABLED') || !REPLAY_ENABLED) {
+    unset($routeMap['replay']);
+}
+if (!defined('CARD_RANKING_ENABLED') || !CARD_RANKING_ENABLED) {
+    unset($routeMap['card_ranking']);
+}
+
 $controllerName = Utils::getSafeParam($_GET, 'controller', 'slug', $defaultController, ROUTE_PARAM_MAX_LENGTH);
 $methodName = Utils::getSafeParam($_GET, 'action', 'slug', 'index', ROUTE_PARAM_MAX_LENGTH);
 

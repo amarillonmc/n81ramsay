@@ -4,6 +4,10 @@
  */
 
 function formatFileSize($bytes) {
+    if ($bytes === null) {
+        return '动态生成';
+    }
+
     if ($bytes >= 1073741824) {
         return number_format($bytes / 1073741824, 2) . ' GB';
     } elseif ($bytes >= 1048576) {
@@ -18,15 +22,31 @@ function formatFileSize($bytes) {
 
 <div class="replay-list-container">
     <h2>录像回放</h2>
+
+    <?php if (!empty($replayError)): ?>
+        <div class="alert alert-danger">
+            <?php echo Utils::escapeHtml($replayError); ?>
+        </div>
+    <?php endif; ?>
     
     <?php if (empty($result['replays'])): ?>
         <div class="no-replays">
-            <p>暂无录像文件</p>
-            <p class="hint">录像文件目录：<?php echo htmlspecialchars(defined('REPLAY_PATH') ? REPLAY_PATH : '未配置'); ?></p>
+            <p>暂无可公开的录像</p>
+            <p class="hint">
+                <?php if (isset($result['source']) && $result['source'] === 'srvpro2'): ?>
+                    请确认 srvpro2 云录像、PostgreSQL 只读连接及动态录像 API 已正确配置。
+                <?php else: ?>
+                    当前使用旧 srvpro 本地录像目录模式。
+                <?php endif; ?>
+            </p>
         </div>
     <?php else: ?>
         <div class="replay-stats">
-            <span>共 <?php echo $result['total']; ?> 个录像</span>
+            <?php if ($result['total'] !== null): ?>
+                <span>共 <?php echo (int)$result['total']; ?> 个可公开录像</span>
+            <?php else: ?>
+                <span>可公开录像 · 第 <?php echo (int)$result['page']; ?> 页</span>
+            <?php endif; ?>
         </div>
         
         <table class="replay-table">
@@ -46,7 +66,10 @@ function formatFileSize($bytes) {
                         <td class="player-names">
                             <?php 
                             $players = $replay['player_names'];
-                            echo htmlspecialchars(implode(' vs ', array_slice($players, 0, 2)));
+                            $versusText = isset($replay['versus_text'])
+                                ? $replay['versus_text']
+                                : implode(' vs ', array_slice($players, 0, 2));
+                            echo Utils::escapeHtml($versusText);
                             if (count($players) > 2) {
                                 echo ' <span class="tag-players">(' . count($players) . 'P)</span>';
                             }
@@ -58,7 +81,7 @@ function formatFileSize($bytes) {
                                 <?php echo $replay['is_yrp2'] ? 'YRP2' : 'YRP'; ?>
                             </span>
                         </td>
-                        <td><?php echo formatFileSize($replay['file_size']); ?></td>
+                        <td><?php echo Utils::escapeHtml(formatFileSize($replay['file_size'])); ?></td>
                         <td><?php echo htmlspecialchars($replay['modified_time']); ?></td>
                         <td class="actions">
                             <a href="?controller=replay&action=play&file=<?php echo urlencode($replay['filename']); ?>" 
@@ -75,7 +98,12 @@ function formatFileSize($bytes) {
             </tbody>
         </table>
         
-        <?php if ($result['total_pages'] > 1): ?>
+        <?php
+        $hasNext = isset($result['has_next'])
+            ? (bool)$result['has_next']
+            : ($result['total_pages'] !== null && $result['page'] < $result['total_pages']);
+        ?>
+        <?php if ($result['page'] > 1 || $hasNext): ?>
             <div class="pagination">
                 <?php if ($result['page'] > 1): ?>
                     <a href="?controller=replay&page=1" class="btn btn-sm">首页</a>
@@ -83,12 +111,24 @@ function formatFileSize($bytes) {
                 <?php endif; ?>
                 
                 <span class="page-info">
-                    第 <?php echo $result['page']; ?> / <?php echo $result['total_pages']; ?> 页
+                    <?php if ($result['total_pages'] !== null): ?>
+                        第 <?php echo (int)$result['page']; ?> / <?php echo (int)$result['total_pages']; ?> 页
+                    <?php else: ?>
+                        第 <?php echo (int)$result['page']; ?> 页
+                    <?php endif; ?>
                 </span>
                 
-                <?php if ($result['page'] < $result['total_pages']): ?>
-                    <a href="?controller=replay&page=<?php echo $result['page'] + 1; ?>" class="btn btn-sm">下一页</a>
-                    <a href="?controller=replay&page=<?php echo $result['total_pages']; ?>" class="btn btn-sm">末页</a>
+                <?php if ($hasNext): ?>
+                    <?php
+                    $nextUrl = '?controller=replay&page=' . ((int)$result['page'] + 1);
+                    if (!empty($result['next_cursor'])) {
+                        $nextUrl .= '&cursor=' . rawurlencode($result['next_cursor']);
+                    }
+                    ?>
+                    <a href="<?php echo Utils::escapeHtml($nextUrl); ?>" class="btn btn-sm">下一页</a>
+                    <?php if ($result['total_pages'] !== null): ?>
+                        <a href="?controller=replay&page=<?php echo (int)$result['total_pages']; ?>" class="btn btn-sm">末页</a>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         <?php endif; ?>

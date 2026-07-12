@@ -1,9 +1,15 @@
 <h2>卡片排行榜</h2>
 
+<?php if (!empty($rankingError)): ?>
+    <div class="alert alert-danger"><?php echo Utils::escapeHtml($rankingError); ?></div>
+<?php else: ?>
 <div class="card">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
-            <span>卡片排行榜 - 生成时间：<?php echo $rankingData['generated_time']; ?></span>
+            <span>
+                卡片排行榜 - 生成时间：<?php echo Utils::escapeHtml($rankingData['generated_time']); ?>
+                （数据源：<?php echo isset($rankingData['data_source']) && $rankingData['data_source'] === 'srvpro2_pgsql' ? 'srvpro2 PostgreSQL' : '旧 srvpro 卡组文件'; ?>）
+            </span>
 
             <?php if ($this->userModel->hasPermission(1)): ?>
                 <div>
@@ -14,6 +20,15 @@
         </div>
     </div>
     <div class="card-body">
+        <?php if (
+            isset($rankingData['data_source']) &&
+            $rankingData['data_source'] === 'srvpro2_pgsql' &&
+            empty($rankingData['windbot_filter_enabled'])
+        ): ?>
+            <div class="alert alert-warning">
+                尚未配置 srvpro2 Windbot 名单过滤，机器人房卡组会计入当前排行榜。
+            </div>
+        <?php endif; ?>
         <div class="filter-options">
             <form action="<?php echo BASE_URL; ?>" method="get" class="form-inline">
                 <input type="hidden" name="controller" value="card_ranking">
@@ -83,6 +98,11 @@
         <div class="table-responsive mt-4">
             <h3>详细统计</h3>
             <p>总计分析卡组数量: <?php echo $rankingData['total_decks']; ?></p>
+            <?php if (!empty($rankingData['skipped_decks'])): ?>
+                <p class="text-warning">
+                    另有 <?php echo (int)$rankingData['skipped_decks']; ?> 份异常卡组快照已跳过，请检查调试日志。
+                </p>
+            <?php endif; ?>
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span>显示: <?php echo $detailLimitOptions[$detailLimit]; ?></span>
                 <span>总计卡片数量: <?php echo count($rankingData['all_cards']); ?></span>
@@ -130,3 +150,4 @@
         </div>
     </div>
 </div>
+<?php endif; ?>

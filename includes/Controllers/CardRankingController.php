@@ -61,13 +61,31 @@ class CardRankingController {
             $detailLimit = 10; // 默认值
         }
 
-        // 获取卡片排行榜数据
-        $rankingData = $this->cardRankingModel->getCardRanking($timeRange, $limit, false, $diyOnly);
+        $rankingError = null;
+        try {
+            // 获取卡片排行榜数据
+            $rankingData = $this->cardRankingModel->getCardRanking($timeRange, $limit, false, $diyOnly);
 
-        // 处理详细统计数据
-        $detailCards = $rankingData['all_cards'];
-        if ($detailLimit > 0) {
-            $detailCards = array_slice($detailCards, 0, $detailLimit);
+            // 处理详细统计数据
+            $detailCards = $rankingData['all_cards'];
+            if ($detailLimit > 0) {
+                $detailCards = array_slice($detailCards, 0, $detailLimit);
+            }
+        } catch (Exception $e) {
+            Utils::debug('生成卡片排行榜失败', ['错误' => $e->getMessage()]);
+            $rankingError = '无法读取 srvpro2 卡组数据，请管理员检查 PostgreSQL 配置与 pdo_pgsql 扩展。';
+            $rankingData = [
+                'top_cards' => [],
+                'all_cards' => [],
+                'total_decks' => 0,
+                'skipped_decks' => 0,
+                'generated_time' => '-',
+                'data_source' => defined('SRVPRO2_INTEGRATION_ENABLED') && SRVPRO2_INTEGRATION_ENABLED
+                    ? 'srvpro2_pgsql'
+                    : 'legacy_deck_log',
+                'windbot_filter_enabled' => false
+            ];
+            $detailCards = [];
         }
 
         // 获取时间范围选项
@@ -101,11 +119,14 @@ class CardRankingController {
         // 验证参数
         $timeRange = $this->cardRankingModel->validateTimeRange($timeRange);
 
-        // 强制更新卡片排行榜数据
-        $this->cardRankingModel->getCardRanking($timeRange, 10, true);
-
-        // 设置成功消息
-        $_SESSION['success_message'] = '卡片排行榜已更新';
+        try {
+            // 强制更新卡片排行榜数据
+            $this->cardRankingModel->getCardRanking($timeRange, 10, true);
+            $_SESSION['success_message'] = '卡片排行榜已更新';
+        } catch (Exception $e) {
+            Utils::debug('更新卡片排行榜失败', ['错误' => $e->getMessage()]);
+            $_SESSION['error_message'] = '卡片排行榜更新失败，请检查 srvpro2 PostgreSQL 配置';
+        }
 
         // 重定向回卡片排行榜页面
         header('Location: ' . BASE_URL . '?controller=card_ranking&time_range=' . $timeRange);
